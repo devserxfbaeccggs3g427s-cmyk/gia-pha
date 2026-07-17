@@ -74,8 +74,8 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
 - [x] 3. Checkpoint - Ensure auth and data layer tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. Implement Member CRUD and Change Log services
-  - [ ] 4.1 Create MemberService with CRUD operations
+- [x] 4. Implement Member CRUD and Change Log services
+  - [x] 4.1 Create MemberService with CRUD operations
     - Implement `src/lib/services/member-service.ts` with: createMember, updateMember, deleteMember, getMemberWithRelations
     - Create API routes: `src/app/api/trees/[treeId]/members/route.ts` (GET/POST), `src/app/api/members/[memberId]/route.ts` (GET/PUT/DELETE)
     - Validate input with Zod schemas, generate IDs with nanoid
@@ -86,7 +86,7 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - **Property 3: Member Data Preservation Round-Trip**
     - **Validates: Requirements 2.1**
 
-  - [ ] 4.3 Implement Change Log service
+  - [x] 4.3 Implement Change Log service
     - Create `src/lib/services/changelog-service.ts`
     - Record all CREATE/UPDATE/DELETE operations on members with: userId, timestamp, previousData, newData, fieldChanged
     - Store change logs in `change-logs.json` blob per tree
@@ -96,7 +96,7 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - **Property 4: Change Log Completeness**
     - **Validates: Requirements 2.2**
 
-  - [ ] 4.5 Implement lifespan calculation and member status
+  - [x] 4.5 Implement lifespan calculation and member status
     - Calculate age/lifespan from dateOfBirth and dateOfDeath (accounting for birthday in death year)
     - Display deceased status and computed lifespan
     - _Requirements: 2.5_
@@ -105,7 +105,7 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - **Property 5: Lifespan Calculation Correctness**
     - **Validates: Requirements 2.5**
 
-  - [ ] 4.7 Implement duplicate member detection and merge
+  - [x] 4.7 Implement duplicate member detection and merge
     - Create `findDuplicates` method comparing name, birth date, place of birth
     - Implement `mergeMember` with configurable merge strategy
     - _Requirements: 2.6_

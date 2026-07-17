@@ -11,14 +11,29 @@ export const changeEntityTypeSchema = z.enum(['MEMBER', 'RELATIONSHIP', 'EVENT',
 
 const optionalIsoDateTime = z.string().datetime().optional();
 
+// Birth/death are calendar dates in the domain model.  Accepting a date-only
+// ISO value avoids timezone shifts in forms, while still accepting the full
+// ISO timestamp produced by existing clients.
+const optionalIsoDate = z
+  .string()
+  .refine(
+    (value) => {
+      if (!/^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value)) return false;
+      const parsed = new Date(value);
+      return !Number.isNaN(parsed.getTime());
+    },
+    'Must be a valid ISO date or date-time'
+  )
+  .optional();
+
 export const createMemberSchema = z.object({
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
   fullName: z.string().min(1).max(200),
   nickname: z.string().max(100).optional(),
   gender: genderSchema,
-  dateOfBirth: optionalIsoDateTime,
-  dateOfDeath: optionalIsoDateTime,
+  dateOfBirth: optionalIsoDate,
+  dateOfDeath: optionalIsoDate,
   placeOfBirth: z.string().max(200).optional(),
   currentAddress: z.string().max(500).optional(),
   phone: z.string().max(20).optional(),

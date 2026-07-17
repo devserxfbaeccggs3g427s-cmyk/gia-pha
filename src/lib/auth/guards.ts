@@ -14,3 +14,14 @@ export async function requireAuthenticatedUserId(): Promise<string> {
   return session.user.id;
 }
 
+// Keep authentication and authorization guards discoverable from one module
+// for API handlers.  The implementations remain in rbac.ts to avoid a
+// circular dependency with the tree data readers.
+export {
+  AuthorizationError,
+  canAccessTree,
+  getUserTreeRole,
+  hasPermission,
+  requireTreePermission
+} from './rbac';
+export type { TreePermission } from './rbac';
