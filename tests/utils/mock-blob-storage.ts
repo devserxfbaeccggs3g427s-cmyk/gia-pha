@@ -1,7 +1,7 @@
 export interface MockBlobRecord {
   pathname: string;
   url: string;
-  body: string;
+  body: string | Uint8Array;
   contentType: string;
   uploadedAt: Date;
 }
@@ -13,7 +13,7 @@ class MockBlobStorage {
     return Array.from(this.records.values()).filter((blob) => !prefix || blob.pathname.startsWith(prefix));
   }
 
-  put(pathname: string, body: string, contentType = 'application/json; charset=utf-8') {
+  put(pathname: string, body: string | Uint8Array, contentType = 'application/json; charset=utf-8') {
     const record: MockBlobRecord = {
       pathname,
       url: this.createUrl(pathname),
@@ -54,7 +54,8 @@ class MockBlobStorage {
   }
 
   delete(pathname: string): void {
-    this.records.delete(pathname);
+    const record = this.records.get(pathname) ?? this.getByUrl(pathname);
+    if (record) this.records.delete(record.pathname);
   }
 
   clear(): void {

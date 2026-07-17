@@ -17,14 +17,23 @@ vi.mock('@vercel/blob', () => ({
   put: vi.fn(
     async (
       pathname: string,
-      body: string,
+      body: string | Buffer | ArrayBuffer | Blob,
       options?: {
         contentType?: string;
       }
-    ) => mockBlobStorage.put(pathname, body, options?.contentType)
+    ) => {
+      const normalized = typeof body === 'string'
+        ? body
+        : body instanceof Blob
+          ? new Uint8Array(await body.arrayBuffer())
+          : body instanceof ArrayBuffer
+            ? new Uint8Array(body)
+            : new Uint8Array(body);
+      return mockBlobStorage.put(pathname, normalized, options?.contentType);
+    }
   ),
   get: vi.fn(async (pathname: string) => {
-    const blob = mockBlobStorage.get(pathname);
+    const blob = mockBlobStorage.get(pathname) ?? mockBlobStorage.getByUrl(pathname);
 
     if (!blob) {
       return null;
@@ -32,7 +41,7 @@ vi.mock('@vercel/blob', () => ({
 
     return {
       statusCode: 200,
-      stream: new Response(blob.body).body,
+      stream: new Response(blob.body as unknown as BodyInit).body,
       headers: new Headers({ 'content-type': blob.contentType }),
       blob: {
         url: blob.url,
@@ -63,7 +72,7 @@ vi.stubGlobal(
       return new Response(null, { status: 404 });
     }
 
-    return new Response(blob.body, {
+    return new Response(blob.body as unknown as BodyInit, {
       status: 200,
       headers: {
         'content-type': blob.contentType

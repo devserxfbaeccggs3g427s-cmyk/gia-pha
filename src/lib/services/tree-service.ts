@@ -5,7 +5,7 @@ import type { FamilyTree, Member, Relationship } from '@/data/types';
 import { getAncestryPath as findAncestryPath } from '@/lib/algorithms/ancestry';
 import { calculateGenerations as calculateGenerationMap, type GenerationMap } from '@/lib/algorithms/generation';
 import { BLOB_PATHS, deleteBlobs } from '@/lib/blob/client';
-import { getMembers, getRelationships, getTrees } from '@/lib/blob/readers';
+import { getMediaMetadata, getMembers, getRelationships, getTrees } from '@/lib/blob/readers';
 import { putTrees } from '@/lib/blob/writers';
 
 export interface FamilyTreeFull extends FamilyTree {
@@ -84,6 +84,7 @@ export class TreeService {
     if (!trees.some((candidate) => candidate.id === treeId)) {
       throw new TreeServiceError('NOT_FOUND', 'Family tree not found');
     }
+    const media = await getMediaMetadata(treeId);
 
     // Remove the discoverable tree first. If cleanup is interrupted, only
     // unreachable orphan blobs remain; a tree never points to partial data.
@@ -93,7 +94,9 @@ export class TreeService {
       BLOB_PATHS.relationships(treeId),
       BLOB_PATHS.events(treeId),
       BLOB_PATHS.mediaMetadata(treeId),
-      BLOB_PATHS.changeLogs(treeId)
+      BLOB_PATHS.albums(treeId),
+      BLOB_PATHS.changeLogs(treeId),
+      ...media.flatMap((item) => [item.blobUrl, ...(item.thumbnailUrl ? [item.thumbnailUrl] : [])])
     ]);
   }
 

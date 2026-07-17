@@ -186,8 +186,8 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - **Property 11: Filter Returns Only Matching Members**
     - **Validates: Requirements 6.3**
 
-- [ ] 9. Implement Event and Media services
-  - [ ] 9.1 Create EventService with CRUD operations
+- [x] 9. Implement Event and Media services
+  - [x] 9.1 Create EventService with CRUD operations
     - Implement `src/lib/services/event-service.ts` with: createEvent, updateEvent, deleteEvent, getEventsForTree
     - Create API routes: `src/app/api/trees/[treeId]/events/route.ts` (GET/POST), `src/app/api/events/[eventId]/route.ts` (GET/PUT/DELETE)
     - Support event types: BIRTHDAY, WEDDING, FUNERAL, REUNION, ANNIVERSARY, CUSTOM
@@ -195,7 +195,7 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Implement upcoming event detection (within 7 days) for dashboard reminders
     - _Requirements: 8.1, 8.2, 8.4, 8.5, 8.6_
 
-  - [ ] 9.2 Create MediaService with upload/download operations
+  - [x] 9.2 Create MediaService with upload/download operations
     - Implement `src/lib/services/media-service.ts` with: uploadMedia, deleteMedia, getMediaForMember, getMediaForEvent
     - Create API routes: `src/app/api/media/upload/route.ts` (POST), `src/app/api/trees/[treeId]/media/route.ts` (GET)
     - Upload files directly to Vercel Blob (binary), store metadata in media-metadata.json

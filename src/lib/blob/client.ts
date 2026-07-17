@@ -30,9 +30,17 @@ export const BLOB_PATHS = {
   relationships: (treeId: string) => `data/trees/${treeId}/relationships.json`,
   events: (treeId: string) => `data/trees/${treeId}/events.json`,
   mediaMetadata: (treeId: string) => `data/trees/${treeId}/media-metadata.json`,
+  albums: (treeId: string) => `data/trees/${treeId}/albums.json`,
+  mediaOriginal: (treeId: string, filename: string) => `media/${treeId}/originals/${filename}`,
+  mediaThumbnail: (treeId: string, filename: string) => `media/${treeId}/thumbnails/${filename}`,
   changeLogs: (treeId: string) => `data/trees/${treeId}/change-logs.json`,
   backup: (treeId: string, timestamp: string) => `backups/${treeId}/${timestamp}.json`
 } as const;
+
+export interface StoredBinaryBlob {
+  url: string;
+  pathname: string;
+}
 
 export async function withBlobErrorHandling<T>(
   operation: () => Promise<T>,
@@ -81,6 +89,24 @@ export async function writeBlob<T>(path: string, data: T): Promise<void> {
       contentType: 'application/json; charset=utf-8'
     });
   }, `Write blob "${path}"`);
+}
+
+export async function writeBinaryBlob(
+  path: string,
+  body: Blob | Buffer | ArrayBuffer,
+  contentType: string
+): Promise<StoredBinaryBlob> {
+  return withBlobErrorHandling(async () => {
+    assertBlobCredentials();
+    const result = await put(path, body, {
+      access: DATA_BLOB_ACCESS,
+      addRandomSuffix: false,
+      allowOverwrite: false,
+      cacheControlMaxAge: 31_536_000,
+      contentType
+    });
+    return { url: result.url, pathname: result.pathname };
+  }, `Write binary blob "${path}"`);
 }
 
 export async function deleteBlob(path: string): Promise<void> {

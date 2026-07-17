@@ -110,8 +110,12 @@ export interface Event {
 export interface MediaMetadata {
   id: string;
   treeId: string;
+  /** @deprecated Read compatibility for metadata written before multi-link support. */
   memberId?: string;
+  /** @deprecated Read compatibility for metadata written before multi-link support. */
   eventId?: string;
+  memberIds?: string[];
+  eventIds?: string[];
   albumId?: string;
   filename: string;
   originalName: string;
@@ -119,6 +123,9 @@ export interface MediaMetadata {
   fileSize: number;
   blobUrl: string;
   thumbnailUrl?: string;
+  /** Authenticated application URLs for private Vercel Blob content. */
+  contentUrl?: string;
+  thumbnailContentUrl?: string;
   caption?: string;
   takenAt?: string;
   uploadedAt: string;
@@ -130,6 +137,7 @@ export interface Album {
   title: string;
   description?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface ChangeLog {

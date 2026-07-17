@@ -8,6 +8,7 @@ import type {
   Relationship
 } from '@/data/types';
 import { getEvents, getMediaMetadata, getMembers, getRelationships } from '@/lib/blob/readers';
+import { deleteBlobs } from '@/lib/blob/client';
 import {
   putEvents,
   putMediaMetadata,
@@ -190,7 +191,12 @@ export class MemberService {
         relationship.sourceMemberId === memberId || relationship.targetMemberId === memberId
     );
     const affectedEvents = events.filter((event) => event.memberIds.includes(memberId));
-    const deletedMedia = media.filter((item) => item.memberId === memberId);
+    const memberMedia = media.filter((item) => mediaMemberIds(item).includes(memberId));
+    const deletedMedia = memberMedia.filter((item) => {
+      const remainingMembers = mediaMemberIds(item).filter((id) => id !== memberId);
+      const hasOtherLinks = remainingMembers.length > 0 || mediaEventIds(item).length > 0 || Boolean(item.albumId);
+      return !hasOtherLinks;
+    });
 
     await putMembers(
       treeId,
@@ -213,8 +219,28 @@ export class MemberService {
       );
       await putEvents(treeId, updatedEvents);
     }
-    if (deletedMedia.length > 0) {
-      await putMediaMetadata(treeId, media.filter((item) => item.memberId !== memberId));
+    if (memberMedia.length > 0) {
+      const deletedIds = new Set(deletedMedia.map((item) => item.id));
+      await putMediaMetadata(treeId, media
+        .filter((item) => !deletedIds.has(item.id))
+        .map((item) => mediaMemberIds(item).includes(memberId)
+          ? {
+              ...item,
+              memberIds: mediaMemberIds(item).filter((id) => id !== memberId),
+              ...(item.memberId === memberId ? { memberId: undefined } : {})
+            }
+          : item
+        ));
+      if (deletedMedia.length > 0) {
+        try {
+          await deleteBlobs(deletedMedia.flatMap((item) => [
+            item.blobUrl,
+            ...(item.thumbnailUrl ? [item.thumbnailUrl] : [])
+          ]));
+        } catch (error) {
+          console.error(`[members] failed to clean up media for ${memberId}`, error);
+        }
+      }
     }
 
     await changeLogService.recordChange({
@@ -259,7 +285,7 @@ export class MemberService {
       relationships: memberRelationships,
       relatedMembers: members.filter((candidate) => relatedIds.has(candidate.id)),
       events: events.filter((event) => event.memberIds.includes(memberId)),
-      media: media.filter((item) => item.memberId === memberId),
+      media: media.filter((item) => mediaMemberIds(item).includes(memberId)),
       ...getMemberStatus(member)
     };
   }
@@ -334,9 +360,14 @@ export class MemberService {
       ...event,
       memberIds: unique(event.memberIds.map((id) => (id === sourceId ? targetId : id)))
     }));
-    const updatedMedia = media.map((item) =>
-      item.memberId === sourceId ? { ...item, memberId: targetId } : item
-    );
+    const updatedMedia = media.map((item) => {
+      if (!mediaMemberIds(item).includes(sourceId)) return item;
+      return {
+        ...item,
+        memberIds: unique(mediaMemberIds(item).map((id) => id === sourceId ? targetId : id)),
+        ...(item.memberId === sourceId ? { memberId: targetId } : {})
+      };
+    });
 
     const remaining = members.filter((member) => member.id !== sourceId && member.id !== targetId);
     await putMembers(treeId, [...remaining, merged]);
@@ -507,6 +538,14 @@ function resolveMergePreference(strategy: MergeStrategy): 'preferSource' | 'pref
 
 function unique(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+function mediaMemberIds(item: MediaMetadata): string[] {
+  return unique([...(item.memberIds ?? []), ...(item.memberId ? [item.memberId] : [])]);
+}
+
+function mediaEventIds(item: MediaMetadata): string[] {
+  return unique([...(item.eventIds ?? []), ...(item.eventId ? [item.eventId] : [])]);
 }
 
 function dedupeRelationships(relationships: Relationship[]): Relationship[] {

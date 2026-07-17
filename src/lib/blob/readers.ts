@@ -1,4 +1,4 @@
-import type { ChangeLog, Event, FamilyTree, MediaMetadata, Member, Relationship, User } from '@/data/types';
+import type { Album, ChangeLog, Event, FamilyTree, MediaMetadata, Member, Relationship, User } from '@/data/types';
 import { BLOB_PATHS, readBlob } from './client';
 
 export async function getUsers(): Promise<User[]> {
@@ -23,6 +23,10 @@ export async function getEvents(treeId: string): Promise<Event[]> {
 
 export async function getMediaMetadata(treeId: string): Promise<MediaMetadata[]> {
   return (await readBlob<MediaMetadata[]>(BLOB_PATHS.mediaMetadata(treeId))) ?? [];
+}
+
+export async function getAlbums(treeId: string): Promise<Album[]> {
+  return (await readBlob<Album[]>(BLOB_PATHS.albums(treeId))) ?? [];
 }
 
 export async function getChangeLogs(treeId: string): Promise<ChangeLog[]> {

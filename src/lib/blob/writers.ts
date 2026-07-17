@@ -1,4 +1,4 @@
-import type { ChangeLog, Event, FamilyTree, MediaMetadata, Member, Relationship, User } from '@/data/types';
+import type { Album, ChangeLog, Event, FamilyTree, MediaMetadata, Member, Relationship, User } from '@/data/types';
 import { BLOB_PATHS, writeBlob } from './client';
 
 export async function putUsers(users: User[]): Promise<void> {
@@ -23,6 +23,10 @@ export async function putEvents(treeId: string, events: Event[]): Promise<void> 
 
 export async function putMediaMetadata(treeId: string, metadata: MediaMetadata[]): Promise<void> {
   await writeBlob(BLOB_PATHS.mediaMetadata(treeId), metadata);
+}
+
+export async function putAlbums(treeId: string, albums: Album[]): Promise<void> {
+  await writeBlob(BLOB_PATHS.albums(treeId), albums);
 }
 
 export async function putChangeLogs(treeId: string, changeLogs: ChangeLog[]): Promise<void> {
