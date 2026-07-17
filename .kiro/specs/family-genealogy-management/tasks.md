@@ -204,8 +204,8 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Support album creation and management
     - _Requirements: 7.1, 7.2, 7.3, 7.5, 7.6, 7.7_
 
-- [ ] 10. Implement Import and Export services
-  - [ ] 10.1 Create ImportService with GEDCOM, JSON, and CSV parsers
+- [x] 10. Implement Import and Export services
+- [x] 10.1 Create ImportService with GEDCOM, JSON, and CSV parsers
     - Implement `src/lib/services/import-service.ts` with: parseGEDCOM, parseJSON, parseCSV, preview, execute
     - Create GEDCOM parser in `src/lib/algorithms/gedcom-parser.ts`
     - Create API routes: `src/app/api/import/preview/route.ts`, `src/app/api/import/execute/route.ts`
@@ -213,11 +213,11 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Validate imported data and report errors per-line for invalid files
     - _Requirements: 9.1, 9.2, 9.6_
 
-  - [ ]* 10.2 Write property test for invalid import error reporting
+  - [x]* 10.2 Write property test for invalid import error reporting
     - **Property 13: Invalid Import Error Reporting**
     - **Validates: Requirements 9.6**
 
-  - [ ] 10.3 Create ExportService with GEDCOM, JSON, PDF, image export
+  - [x] 10.3 Create ExportService with GEDCOM, JSON, PDF, image export
     - Implement `src/lib/services/export-service.ts` with: exportGEDCOM, exportJSON, exportPDF, exportImage, exportSVG
     - Create API route: `src/app/api/export/[treeId]/[format]/route.ts`
     - JSON export: full tree data (members, relationships, events, media metadata)
@@ -227,11 +227,11 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Auto-paginate large trees across multiple pages with join guides
     - _Requirements: 9.3, 9.4, 9.5, 12.1, 12.2, 12.3, 12.4, 12.5_
 
-  - [ ]* 10.4 Write property test for JSON export/import round-trip
+  - [x]* 10.4 Write property test for JSON export/import round-trip
     - **Property 12: JSON Export/Import Round-Trip**
     - **Validates: Requirements 9.5**
 
-- [ ] 11. Checkpoint - Ensure service layer tests pass
+- [x] 11. Checkpoint - Ensure service layer tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 12. Implement Backup/Restore and Share Link features
