@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import type { ChangeAction, ChangeLog } from '@/data/types';
+import type { ChangeAction, ChangeEntityType, ChangeLog } from '@/data/types';
 import { getChangeLogs as readChangeLogs } from '@/lib/blob/readers';
 import { putChangeLogs } from '@/lib/blob/writers';
 
@@ -7,6 +7,7 @@ export interface RecordChangeInput {
   treeId: string;
   userId?: string;
   action: ChangeAction;
+  entityType?: ChangeEntityType;
   memberId?: string;
   previousData?: Record<string, unknown>;
   newData?: Record<string, unknown>;
@@ -32,7 +33,7 @@ export class ChangeLogService {
       treeId: input.treeId,
       userId: input.userId?.trim() || 'system',
       action: input.action,
-      entityType: 'MEMBER',
+      entityType: input.entityType ?? 'MEMBER',
       ...(input.memberId ? { memberId: input.memberId } : {}),
       ...(input.previousData ? { previousData: clone(input.previousData) } : {}),
       ...(input.newData ? { newData: clone(input.newData) } : {}),

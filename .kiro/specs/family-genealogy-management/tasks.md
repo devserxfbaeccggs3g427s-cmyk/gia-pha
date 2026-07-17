@@ -110,8 +110,8 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Implement `mergeMember` with configurable merge strategy
     - _Requirements: 2.6_
 
-- [ ] 5. Implement Relationship service with validation algorithms
-  - [ ] 5.1 Create RelationshipService with CRUD and inverse relationship logic
+- [x] 5. Implement Relationship service with validation algorithms
+  - [x] 5.1 Create RelationshipService with CRUD and inverse relationship logic
     - Implement `src/lib/services/relationship-service.ts` with: createRelationship, deleteRelationship, getRelationshipsForMember
     - Auto-create inverse relationship (parent→child creates child→parent)
     - On delete: remove both sides of the relationship
@@ -124,7 +124,7 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - **Property 6: Inverse Relationship Symmetry**
     - **Validates: Requirements 3.2**
 
-  - [ ] 5.3 Implement cycle detection algorithm
+  - [x] 5.3 Implement cycle detection algorithm
     - Create `src/lib/algorithms/cycle-detection.ts` with `detectCycles` function
     - Prevent self-references and parent-child loops
     - Create validation API route: `src/app/api/relationships/validate/route.ts`
@@ -135,7 +135,7 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - **Property 7: Cycle Detection Correctness**
     - **Validates: Requirements 3.3**
 
-  - [ ] 5.5 Implement generation calculation algorithm
+  - [x] 5.5 Implement generation calculation algorithm
     - Create `src/lib/algorithms/generation.ts` with `calculateGenerations` function
     - BFS from root members (no parents = generation 0)
     - Children = parent.generation + 1, spouses = same generation
@@ -145,7 +145,7 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - **Property 8: Generation Calculation Invariants**
     - **Validates: Requirements 3.5**
 
-- [ ] 6. Checkpoint - Ensure member and relationship tests pass
+- [x] 6. Checkpoint - Ensure member and relationship tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 7. Implement Tree service and ancestry path
