@@ -87,9 +87,28 @@ export const createTreeSchema = z.object({
   description: z.string().max(2000).optional()
 });
 
+export const registerSchema = z.object({
+  name: z.string().trim().min(2).max(100),
+  email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
+  password: z
+    .string()
+    .min(12)
+    .max(72)
+    .regex(/[a-z]/, 'Password must contain a lowercase letter')
+    .regex(/[A-Z]/, 'Password must contain an uppercase letter')
+    .regex(/[0-9]/, 'Password must contain a number')
+    .regex(/[^A-Za-z0-9]/, 'Password must contain a special character')
+});
+
+export const roleAssignmentSchema = z.object({
+  role: treeRoleSchema
+});
+
 export type CreateMemberInput = z.infer<typeof createMemberSchema>;
 export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
 export type CreateRelationshipInput = z.infer<typeof createRelationshipSchema>;
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type MediaUploadInput = z.infer<typeof mediaUploadSchema>;
 export type CreateTreeInput = z.infer<typeof createTreeSchema>;
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type RoleAssignmentInput = z.infer<typeof roleAssignmentSchema>;

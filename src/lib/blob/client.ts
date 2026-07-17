@@ -1,6 +1,15 @@
-import { list, put } from '@vercel/blob';
+import { get, put } from '@vercel/blob';
 
-export type BlobStorageErrorCode = 'NETWORK' | 'RATE_LIMIT' | 'STORAGE_FULL' | 'NOT_FOUND';
+export type BlobStorageErrorCode =
+  | 'CONFIGURATION'
+  | 'NETWORK'
+  | 'RATE_LIMIT'
+  | 'STORAGE_FULL'
+  | 'NOT_FOUND'
+  | 'FORBIDDEN'
+  | 'CONFLICT';
+
+const DATA_BLOB_ACCESS = 'private' as const;
 
 export class BlobStorageError extends Error {
   readonly code: BlobStorageErrorCode;
@@ -42,38 +51,52 @@ export async function withBlobErrorHandling<T>(
 
 export async function readBlob<T>(path: string): Promise<T | null> {
   return withBlobErrorHandling(async () => {
-    const { blobs } = await list({ prefix: path });
-    const blob = blobs.find((candidate) => candidate.pathname === path);
+    assertBlobCredentials();
+    const result = await get(path, {
+      access: DATA_BLOB_ACCESS,
+      // Authentication and authorization data must never be served from a stale CDN entry.
+      useCache: false
+    });
 
-    if (!blob) {
+    if (!result) {
       return null;
     }
 
-    const response = await fetch(blob.url);
-
-    if (response.status === 404) {
-      return null;
+    if (result.statusCode !== 200 || !result.stream) {
+      throw new BlobStorageError('NETWORK', `Unexpected response while reading blob "${path}"`);
     }
 
-    if (!response.ok) {
-      throw new BlobStorageError(
-        statusToErrorCode(response.status),
-        `Failed to read blob "${path}" with status ${response.status}`
-      );
-    }
-
-    return (await response.json()) as T;
+    return (await new Response(result.stream).json()) as T;
   }, `Read blob "${path}"`);
 }
 
 export async function writeBlob<T>(path: string, data: T): Promise<void> {
   await withBlobErrorHandling(async () => {
+    assertBlobCredentials();
     await put(path, JSON.stringify(data, null, 2), {
-      access: 'public',
+      access: DATA_BLOB_ACCESS,
       addRandomSuffix: false,
+      allowOverwrite: true,
+      cacheControlMaxAge: 60,
       contentType: 'application/json; charset=utf-8'
     });
   }, `Write blob "${path}"`);
+}
+
+export function hasBlobCredentials(): boolean {
+  return Boolean(
+    process.env.BLOB_READ_WRITE_TOKEN ||
+      (process.env.VERCEL_OIDC_TOKEN && process.env.BLOB_STORE_ID)
+  );
+}
+
+function assertBlobCredentials(): void {
+  if (!hasBlobCredentials()) {
+    throw new BlobStorageError(
+      'CONFIGURATION',
+      'Vercel Blob is not configured. Set BLOB_READ_WRITE_TOKEN, or VERCEL_OIDC_TOKEN together with BLOB_STORE_ID.'
+    );
+  }
 }
 
 function normalizeBlobError(error: unknown, context: string): BlobStorageError {
@@ -111,6 +134,14 @@ function statusToErrorCode(status: number): BlobStorageErrorCode {
     return 'RATE_LIMIT';
   }
 
+  if (status === 401 || status === 403) {
+    return 'FORBIDDEN';
+  }
+
+  if (status === 409 || status === 412) {
+    return 'CONFLICT';
+  }
+
   if (status === 507) {
     return 'STORAGE_FULL';
   }
@@ -123,6 +154,22 @@ function messageToErrorCode(message: string): BlobStorageErrorCode {
 
   if (normalized.includes('not found') || normalized.includes('404')) {
     return 'NOT_FOUND';
+  }
+
+  if (
+    normalized.includes('no blob credentials') ||
+    normalized.includes('no read-write token') ||
+    normalized.includes('blob_read_write_token')
+  ) {
+    return 'CONFIGURATION';
+  }
+
+  if (normalized.includes('forbidden') || normalized.includes('unauthorized') || normalized.includes('403')) {
+    return 'FORBIDDEN';
+  }
+
+  if (normalized.includes('conflict') || normalized.includes('409') || normalized.includes('412')) {
+    return 'CONFLICT';
   }
 
   if (normalized.includes('rate') || normalized.includes('429')) {

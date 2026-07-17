@@ -8,6 +8,12 @@ export type ChangeAction = 'CREATE' | 'UPDATE' | 'DELETE';
 export type ChangeEntityType = 'MEMBER' | 'RELATIONSHIP' | 'EVENT' | 'MEDIA';
 export type SharePermission = 'VIEW';
 
+export interface OAuthAccount {
+  provider: 'google' | 'facebook';
+  providerAccountId: string;
+  type: 'oauth';
+}
+
 export interface User {
   id: string;
   email: string;
@@ -15,6 +21,10 @@ export interface User {
   passwordHash: string;
   image?: string;
   provider: Provider;
+  emailVerified?: string | null;
+  emailVerificationTokenHash?: string;
+  emailVerificationExpiresAt?: string;
+  oauthAccounts?: OAuthAccount[];
   failedLoginAttempts: number;
   lockedUntil?: string;
   createdAt: string;

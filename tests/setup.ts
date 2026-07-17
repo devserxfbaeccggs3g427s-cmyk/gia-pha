@@ -1,6 +1,8 @@
 import { beforeEach, vi } from 'vitest';
 import { mockBlobStorage } from './utils/mock-blob-storage';
 
+vi.stubEnv('BLOB_READ_WRITE_TOKEN', 'test-blob-token');
+
 vi.mock('@vercel/blob', () => ({
   list: vi.fn(async ({ prefix }: { prefix?: string } = {}) => ({
     blobs: mockBlobStorage.list(prefix).map((blob) => ({
@@ -21,6 +23,28 @@ vi.mock('@vercel/blob', () => ({
       }
     ) => mockBlobStorage.put(pathname, body, options?.contentType)
   ),
+  get: vi.fn(async (pathname: string) => {
+    const blob = mockBlobStorage.get(pathname);
+
+    if (!blob) {
+      return null;
+    }
+
+    return {
+      statusCode: 200,
+      stream: new Response(blob.body).body,
+      headers: new Headers({ 'content-type': blob.contentType }),
+      blob: {
+        url: blob.url,
+        downloadUrl: blob.url,
+        pathname: blob.pathname,
+        contentType: blob.contentType,
+        size: blob.body.length,
+        uploadedAt: blob.uploadedAt,
+        etag: 'mock-etag'
+      }
+    };
+  }),
   del: vi.fn(async (pathname: string) => {
     mockBlobStorage.delete(pathname);
   }),

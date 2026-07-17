@@ -36,42 +36,42 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Create `tests/` directory structure: unit/, property/, integration/
     - _Requirements: 16.1_
 
-- [ ] 2. Implement Authentication and Authorization system
-  - [ ] 2.1 Configure NextAuth.js with credentials and OAuth providers
+- [x] 2. Implement Authentication and Authorization system
+  - [x] 2.1 Configure NextAuth.js with credentials and OAuth providers
     - Create `src/app/api/auth/[...nextauth]/route.ts` with NextAuth.js config
     - Implement credentials provider with bcrypt password verification (cost factor 12)
     - Configure Google and Facebook OAuth providers
     - Implement custom adapter for Vercel Blob user storage (users.json)
     - _Requirements: 1.1, 1.2, 1.3, 14.2_
 
-  - [ ] 2.2 Implement account lockout mechanism
+  - [x] 2.2 Implement account lockout mechanism
     - Track `failedLoginAttempts` and `lockedUntil` fields in User record
     - Lock account after 5 consecutive failed attempts for 15 minutes
     - Reset counter on successful login
     - _Requirements: 1.4_
 
-  - [ ]* 2.3 Write property test for account lockout threshold
+  - [x]* 2.3 Write property test for account lockout threshold
     - **Property 1: Account Lockout Threshold**
     - **Validates: Requirements 1.4**
 
-  - [ ] 2.4 Implement role-based access control (RBAC)
+  - [x] 2.4 Implement role-based access control (RBAC)
     - Create middleware for route protection in `src/middleware.ts`
     - Implement TreeMembership roles: ADMIN (all ops), EDITOR (read+write), VIEWER (read only)
     - Create permission checking utility functions
     - Implement role assignment API (Admin assigns roles, instant update without re-login)
     - _Requirements: 1.5, 1.6_
 
-  - [ ]* 2.5 Write property test for role-based permission enforcement
+  - [x]* 2.5 Write property test for role-based permission enforcement
     - **Property 2: Role-Based Permission Enforcement**
     - **Validates: Requirements 1.5**
 
-  - [ ] 2.6 Implement session management and security features
+  - [x] 2.6 Implement session management and security features
     - Configure session expiry (auto-logout after 30 minutes inactivity)
     - Ensure HTTPS/TLS enforcement
     - Create login/register pages at `src/app/[locale]/(auth)/login/` and `register/`
     - _Requirements: 14.1, 14.5_
 
-- [ ] 3. Checkpoint - Ensure auth and data layer tests pass
+- [x] 3. Checkpoint - Ensure auth and data layer tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 4. Implement Member CRUD and Change Log services

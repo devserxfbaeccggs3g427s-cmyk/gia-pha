@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { get, put } from '@vercel/blob';
+import { describe, expect, it, vi } from 'vitest';
 import { BLOB_PATHS, readBlob, writeBlob } from '@/lib/blob/client';
 import { getMembers } from '@/lib/blob/readers';
 import { putMembers } from '@/lib/blob/writers';
@@ -16,6 +17,15 @@ describe('blob data layer', () => {
     await writeBlob(path, data);
 
     await expect(readBlob(path)).resolves.toEqual(data);
+    expect(vi.mocked(put)).toHaveBeenCalledWith(
+      path,
+      expect.any(String),
+      expect.objectContaining({ access: 'private', allowOverwrite: true })
+    );
+    expect(vi.mocked(get)).toHaveBeenCalledWith(
+      path,
+      expect.objectContaining({ access: 'private', useCache: false })
+    );
   });
 
   it('uses typed member helpers with empty fallback', async () => {
