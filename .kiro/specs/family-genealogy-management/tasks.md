@@ -164,8 +164,8 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - **Property 9: Ancestry Path Validity**
     - **Validates: Requirements 4.6**
 
-- [ ] 8. Implement Search and Filter service
-  - [ ] 8.1 Create SearchService with Vietnamese fuzzy matching
+- [x] 8. Implement Search and Filter service
+  - [x] 8.1 Create SearchService with Vietnamese fuzzy matching
     - Implement `src/lib/services/search-service.ts` with: search, autocomplete, filterMembers
     - Create `src/lib/utils/vietnamese.ts` with `normalizeVietnamese` function (NFD normalization, diacritics removal, đ→d)
     - In-memory search on parsed members.json: search by fullName, nickname, occupation, placeOfBirth
@@ -173,16 +173,16 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Return results within 500ms for typical datasets
     - _Requirements: 6.1, 6.2, 6.4_
 
-  - [ ]* 8.2 Write property test for search correctness with Vietnamese normalization
+  - [x]* 8.2 Write property test for search correctness with Vietnamese normalization
     - **Property 10: Search Correctness with Vietnamese Normalization**
     - **Validates: Requirements 6.1, 6.2**
 
-  - [ ] 8.3 Implement member filtering by criteria
+  - [x] 8.3 Implement member filtering by criteria
     - Filter by: gender, generation, birth year range, alive status, location
     - Combine multiple filter conditions with AND logic
     - _Requirements: 6.3_
 
-  - [ ]* 8.4 Write property test for filter returns only matching members
+  - [x]* 8.4 Write property test for filter returns only matching members
     - **Property 11: Filter Returns Only Matching Members**
     - **Validates: Requirements 6.3**
 
