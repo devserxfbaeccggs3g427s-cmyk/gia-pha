@@ -1,4 +1,5 @@
 import type { Member, Relationship } from '@/data/types';
+import { getCanonicalParentChildEdges } from './ancestry';
 
 export type GenerationMap = Map<string, number>;
 
@@ -16,16 +17,18 @@ export function calculateGenerations(
   const childIds = new Set<string>();
   const spouseByMember = new Map<string, Set<string>>();
 
+  for (const { parentId, childId } of getCanonicalParentChildEdges(members, relationships)) {
+    const children = parentToChildren.get(parentId) ?? new Set<string>();
+    children.add(childId);
+    parentToChildren.set(parentId, children);
+    childIds.add(childId);
+  }
+
   for (const relationship of relationships) {
     if (!memberIds.has(relationship.sourceMemberId) || !memberIds.has(relationship.targetMemberId)) {
       continue;
     }
-    if (relationship.type === 'PARENT_CHILD') {
-      const children = parentToChildren.get(relationship.sourceMemberId) ?? new Set<string>();
-      children.add(relationship.targetMemberId);
-      parentToChildren.set(relationship.sourceMemberId, children);
-      childIds.add(relationship.targetMemberId);
-    } else if (relationship.type === 'SPOUSE') {
+    if (relationship.type === 'SPOUSE') {
       const sourceSpouses = spouseByMember.get(relationship.sourceMemberId) ?? new Set<string>();
       sourceSpouses.add(relationship.targetMemberId);
       spouseByMember.set(relationship.sourceMemberId, sourceSpouses);

@@ -148,19 +148,19 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
 - [x] 6. Checkpoint - Ensure member and relationship tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 7. Implement Tree service and ancestry path
-  - [ ] 7.1 Create TreeService with CRUD operations
+- [x] 7. Implement Tree service and ancestry path
+  - [x] 7.1 Create TreeService with CRUD operations
     - Implement `src/lib/services/tree-service.ts` with: createTree, getTree, deleteTree, getTreeWithMembers
     - Create API routes: `src/app/api/trees/route.ts` (GET/POST), `src/app/api/trees/[treeId]/route.ts` (GET/PUT/DELETE)
     - Manage TreeMembership within tree data
     - _Requirements: 16.1, 16.2, 16.3_
 
-  - [ ] 7.2 Implement ancestry path algorithm
+  - [x] 7.2 Implement ancestry path algorithm
     - Create `src/lib/algorithms/ancestry.ts` with `getAncestryPath` function
     - Trace valid path from root ancestor (generation 0) to target member via parent-child relationships
     - _Requirements: 4.6_
 
-  - [ ]* 7.3 Write property test for ancestry path validity
+  - [x]* 7.3 Write property test for ancestry path validity
     - **Property 9: Ancestry Path Validity**
     - **Validates: Requirements 4.6**
 

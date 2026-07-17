@@ -1,4 +1,4 @@
-import { get, put } from '@vercel/blob';
+import { del, get, put } from '@vercel/blob';
 
 export type BlobStorageErrorCode =
   | 'CONFIGURATION'
@@ -81,6 +81,21 @@ export async function writeBlob<T>(path: string, data: T): Promise<void> {
       contentType: 'application/json; charset=utf-8'
     });
   }, `Write blob "${path}"`);
+}
+
+export async function deleteBlob(path: string): Promise<void> {
+  await withBlobErrorHandling(async () => {
+    assertBlobCredentials();
+    await del(path);
+  }, `Delete blob "${path}"`);
+}
+
+export async function deleteBlobs(paths: readonly string[]): Promise<void> {
+  if (paths.length === 0) return;
+  await withBlobErrorHandling(async () => {
+    assertBlobCredentials();
+    await del([...paths]);
+  }, `Delete ${paths.length} blobs`);
 }
 
 export function hasBlobCredentials(): boolean {

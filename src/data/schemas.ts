@@ -102,6 +102,11 @@ export const createTreeSchema = z.object({
   description: z.string().max(2000).optional()
 });
 
+export const updateTreeSchema = createTreeSchema.partial().refine(
+  (value) => Object.keys(value).length > 0,
+  'At least one tree field must be provided'
+);
+
 export const registerSchema = z.object({
   name: z.string().trim().min(2).max(100),
   email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
@@ -125,5 +130,6 @@ export type CreateRelationshipInput = z.infer<typeof createRelationshipSchema>;
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 export type MediaUploadInput = z.infer<typeof mediaUploadSchema>;
 export type CreateTreeInput = z.infer<typeof createTreeSchema>;
+export type UpdateTreeInput = z.infer<typeof updateTreeSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type RoleAssignmentInput = z.infer<typeof roleAssignmentSchema>;

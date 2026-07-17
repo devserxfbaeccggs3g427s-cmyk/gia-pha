@@ -45,8 +45,10 @@ vi.mock('@vercel/blob', () => ({
       }
     };
   }),
-  del: vi.fn(async (pathname: string) => {
-    mockBlobStorage.delete(pathname);
+  del: vi.fn(async (pathname: string | string[]) => {
+    for (const item of Array.isArray(pathname) ? pathname : [pathname]) {
+      mockBlobStorage.delete(item);
+    }
   }),
   head: vi.fn(async (pathname: string) => mockBlobStorage.head(pathname))
 }));
