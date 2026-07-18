@@ -8,6 +8,8 @@ import { DashboardUpcomingEvents } from '@/components/genealogy/dashboard-upcomi
 
 interface DashboardPageProps { params: { locale: string }; }
 
+export const dynamic = 'force-dynamic';
+
 export async function generateMetadata({ params }: DashboardPageProps): Promise<Metadata> {
   const t = await getTranslations({ locale: params.locale, namespace: 'dashboard' });
   return { title: t('metaTitle') };

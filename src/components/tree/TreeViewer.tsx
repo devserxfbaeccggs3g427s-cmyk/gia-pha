@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import Image from 'next/image';
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -46,6 +47,7 @@ import { useTreeUiStore } from '@/store/tree-ui-store';
 import { apiRequest } from '@/lib/api/mutations';
 import { queryKeys } from '@/lib/query/keys';
 import styles from './tree-viewer.module.css';
+import 'reactflow/dist/style.css';
 
 export interface TreeViewerProps {
   treeId: string;
@@ -373,8 +375,7 @@ function MemberSummaryPanel({
       <div className={styles.summaryIdentity}>
         <span className={styles.summaryAvatar} style={{ background: `hsl(${color.accent} / .12)`, color: `hsl(${color.accent})` }}>
           {member.avatarUrl
-            // eslint-disable-next-line @next/next/no-img-element
-            ? <img src={member.avatarUrl} alt="" />
+            ? <Image src={member.avatarUrl} alt="" width={55} height={55} sizes="55px" />
             : <UserRound aria-hidden="true" />}
         </span>
         <span>

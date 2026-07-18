@@ -397,8 +397,8 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Sync pending changes when connection restored
     - _Requirements: 5.5, 5.6_
 
-- [ ] 22. Implement performance optimizations
-  - [ ] 22.1 Apply Next.js performance best practices
+- [x] 22. Implement performance optimizations
+  - [x] 22.1 Apply Next.js performance best practices
     - Configure SSR for initial page load, CSR for subsequent interactions
     - Implement code splitting and lazy loading for non-critical modules
     - Configure prefetching for navigation (< 200ms perceived load)

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import {
   CheckCircle2,
   ChevronDown,
@@ -311,7 +312,7 @@ function SearchSelect({ label, value, onChange, options }: { label: string; valu
 }
 
 function SearchAvatar({ member }: { member: DisplayResult['member'] }) {
-  if (member.avatarUrl) return <img className="size-11 shrink-0 rounded-xl object-cover" src={member.avatarUrl} alt="" />;
+  if (member.avatarUrl) return <Image className="size-11 shrink-0 rounded-xl object-cover" src={member.avatarUrl} alt="" width={44} height={44} sizes="44px" />;
   const initials = member.fullName.split(/\s+/).filter(Boolean).slice(-2).map((part) => part[0]).join('').toUpperCase();
   const tone = member.gender === 'FEMALE' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-200' : member.gender === 'MALE' ? 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-200' : 'bg-primary/10 text-primary';
   return <span className={`grid size-11 shrink-0 place-items-center rounded-xl text-xs font-bold ${tone}`} aria-hidden="true">{initials || '?'}</span>;

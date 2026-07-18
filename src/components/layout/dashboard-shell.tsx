@@ -18,18 +18,26 @@ import {
 } from 'lucide-react';
 import { signOut, useSession } from 'next-auth/react';
 import { useLocale, useTranslations } from 'next-intl';
+import dynamic from 'next/dynamic';
 import { usePathname, Link } from '@/i18n/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { LanguageSwitcher } from '@/components/i18n/language-switcher';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { Breadcrumbs } from '@/components/layout/breadcrumbs';
-import { MemberSearch } from '@/components/genealogy/member-search';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
 import { useUiStore } from '@/store/ui-store';
 import styles from './dashboard-shell.module.css';
+
+const MemberSearch = dynamic(
+  () => import('@/components/genealogy/member-search').then((module) => module.MemberSearch),
+  {
+    ssr: false,
+    loading: () => <div className="min-h-72 animate-pulse bg-muted/35" aria-hidden="true" />
+  }
+);
 
 interface DashboardShellProps { children: React.ReactNode; }
 interface NavItem { key: 'overview' | 'trees' | 'members' | 'events' | 'media' | 'reports' | 'settings'; icon: LucideIcon; href: string; requiresTree?: boolean; }
@@ -102,7 +110,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-primary focus:px-4 focus:py-3 focus:text-sm focus:font-semibold focus:text-primary-foreground">Skip to content</a>
       <button className={styles.mobileOverlay} data-open={mobileOpen} aria-label={t('close')} onClick={() => setMobileOpen(false)} />
       <aside id="dashboard-sidebar" className={styles.sidebar} data-collapsed={collapsed} data-mobile-open={mobileOpen} aria-label={nav('workspace')}>
-        <Link href="/" className={styles.brand} onClick={() => setMobileOpen(false)}>
+        <Link href="/" prefetch className={styles.brand} onClick={() => setMobileOpen(false)}>
           <span className={styles.brandMark} aria-hidden="true"><BookOpen className="size-5" /></span>
           <span><span className={styles.brandName}>Gia Phả</span><span className={styles.brandTagline}>FAMILY LEGACY</span></span>
         </Link>
@@ -155,7 +163,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
                       <DialogDescription>{t('commandPaletteHint')}</DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-1 p-3">
-                      {allItems.map((item) => <Link key={item.key} href={item.href as never} onClick={() => setPaletteOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><item.icon className="size-4 text-muted-foreground" />{nav(item.key)}</Link>)}
+                      {allItems.map((item) => <Link key={item.key} href={item.href as never} prefetch onClick={() => setPaletteOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><item.icon className="size-4 text-muted-foreground" />{nav(item.key)}</Link>)}
                     </div>
                   </>
                 )}
@@ -186,7 +194,7 @@ function SidebarLink({ item, label, pathname, onNavigate, collapsed, disabled = 
   const Icon = item.icon;
   return (
     <li>
-      <Link href={item.href as never} className={styles.navLink} data-active={active} data-disabled={disabled} aria-current={active ? 'page' : undefined} aria-disabled={disabled || undefined} title={collapsed || disabled ? (disabled ? disabledLabel : label) : undefined} onClick={onNavigate}>
+      <Link href={item.href as never} prefetch={!disabled} className={styles.navLink} data-active={active} data-disabled={disabled} aria-current={active ? 'page' : undefined} aria-disabled={disabled || undefined} title={collapsed || disabled ? (disabled ? disabledLabel : label) : undefined} onClick={onNavigate}>
         <span className={styles.navIcon}><Icon className="size-[18px]" aria-hidden="true" /></span><span className={styles.navText}>{label}</span>{disabled && !collapsed && <span className={styles.navHint}>•</span>}
       </Link>
     </li>

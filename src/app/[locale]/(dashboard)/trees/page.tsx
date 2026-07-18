@@ -4,6 +4,8 @@ import { TreesPage } from '@/components/genealogy/trees-page';
 
 interface TreesPageProps { params: { locale: string }; }
 
+export const dynamic = 'force-dynamic';
+
 export async function generateMetadata({ params }: TreesPageProps): Promise<Metadata> {
   const t = await getTranslations({ locale: params.locale, namespace: 'trees' });
   return { title: t('metaTitle') };

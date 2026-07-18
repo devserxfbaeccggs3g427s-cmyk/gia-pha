@@ -1,6 +1,7 @@
 'use client';
 
 import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react';
+import Image from 'next/image';
 import { Handle, Position, type NodeProps } from 'reactflow';
 import { CalendarDays, Leaf, Sparkles } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -95,9 +96,14 @@ export function MemberCard({
         <span className={styles.generationBar} aria-hidden="true" />
         <span className={styles.avatarWrap}>
           {member.avatarUrl ? (
-            // Avatar URLs may point to authenticated application endpoints.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img className={styles.avatar} src={member.avatarUrl} alt="" loading="lazy" draggable={false} />
+            <Image
+              className={styles.avatar}
+              src={member.avatarUrl}
+              alt=""
+              fill
+              sizes="(max-width: 767px) 42px, 52px"
+              draggable={false}
+            />
           ) : (
             <span className={styles.initials} aria-hidden="true">{initials}</span>
           )}

@@ -5,6 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 interface SettingsPageProps { params: { locale: string }; }
 
+export const dynamic = 'force-dynamic';
+
 export async function generateMetadata({ params }: SettingsPageProps): Promise<Metadata> {
   const t = await getTranslations({ locale: params.locale, namespace: 'navigation' });
   return { title: t('settings') };

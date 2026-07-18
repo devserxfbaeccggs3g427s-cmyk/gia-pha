@@ -33,6 +33,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       headers.set('x-share-permission', 'VIEW');
       const shareResponse = NextResponse.next({ request: { headers } });
       setSecurityHeaders(shareResponse);
+      setCacheHeaders(request, shareResponse);
       shareResponse.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
       return shareResponse;
     } catch (error) {
@@ -101,6 +102,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   }
 
   setSecurityHeaders(response);
+  setCacheHeaders(request, response);
   return response;
 }
 
@@ -125,6 +127,46 @@ function setSecurityHeaders(response: NextResponse): void {
   }
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+}
+
+export function setCacheHeaders(request: NextRequest, response: NextResponse): void {
+  const pathname = request.nextUrl.pathname;
+  const isApi = pathname === '/api' || pathname.startsWith('/api/');
+
+  if (isApi) {
+    // Mutations, auth, exports and signed shares must never be replayed from an
+    // HTTP cache. Read-only genealogy JSON gets a short browser-private cache;
+    // the service worker separately provides the explicit offline cache.
+    const cacheableRead = request.method === 'GET'
+      && !pathname.startsWith('/api/auth')
+      && !pathname.startsWith('/api/share')
+      && !pathname.startsWith('/api/export')
+      && !pathname.startsWith('/api/backup');
+    const cacheControl = request.method === 'GET' && pathname.endsWith('/content')
+      ? 'private, max-age=3600'
+      : cacheableRead
+        ? 'private, max-age=15, stale-while-revalidate=45'
+        : 'private, no-store';
+    response.headers.set(
+      'Cache-Control',
+      cacheControl
+    );
+    appendVary(response.headers, 'Cookie');
+    appendVary(response.headers, 'Authorization');
+    return;
+  }
+
+  // Authenticated HTML/RSC must be revalidated per user. Next's immutable
+  // static chunks and optimized images are excluded by the middleware matcher.
+  response.headers.set('Cache-Control', 'private, no-cache, must-revalidate');
+  appendVary(response.headers, 'Cookie');
+}
+
+function appendVary(headers: Headers, value: string): void {
+  const current = headers.get('Vary');
+  const values = new Set((current ?? '').split(',').map((item) => item.trim()).filter(Boolean));
+  values.add(value);
+  headers.set('Vary', [...values].join(', '));
 }
 
 export const config = {
