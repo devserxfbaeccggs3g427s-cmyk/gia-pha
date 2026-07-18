@@ -358,14 +358,14 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Link media to members and events
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6_
 
-- [ ] 19. Implement Search UI and Report/Statistics pages
-  - [ ] 19.1 Create Search UI with autocomplete and filters
+- [x] 19. Implement Search UI and Report/Statistics pages
+  - [x] 19.1 Create Search UI with autocomplete and filters
     - Implement search bar with autocomplete (triggers at 2+ characters)
     - Implement filter panel with: gender, generation, birth year range, alive status, location
     - On result selection: navigate to member on TreeViewer and highlight position
     - _Requirements: 6.1, 6.3, 6.4, 6.5_
 
-  - [ ] 19.2 Create Reports and Statistics dashboard
+  - [x] 19.2 Create Reports and Statistics dashboard
     - Implement statistics dashboard page at `src/app/[locale]/(dashboard)/trees/[treeId]/reports/page.tsx`
     - Display charts: gender distribution, age distribution, geographic distribution, occupation/education
     - Implement growth timeline chart

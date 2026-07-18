@@ -40,7 +40,10 @@ export async function GET(
       });
     }
     if (query.view === 'timeline') {
-      return NextResponse.json(await reportService.getGrowthTimeline(params.treeId), {
+      const timeline = query.branchRootMemberId
+        ? await reportService.getGrowthTimeline(params.treeId, query.branchRootMemberId)
+        : await reportService.getGrowthTimeline(params.treeId);
+      return NextResponse.json(timeline, {
         headers: { 'Cache-Control': 'private, no-store' }
       });
     }
@@ -56,4 +59,3 @@ export async function GET(
 function safeFilename(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 100) || 'family-tree';
 }
-

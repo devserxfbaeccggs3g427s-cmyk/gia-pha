@@ -75,9 +75,19 @@ export class ReportService {
     };
   }
 
-  async getGrowthTimeline(treeId: string): Promise<GrowthTimelinePoint[]> {
+  async getGrowthTimeline(treeId: string, branchRootMemberId?: string): Promise<GrowthTimelinePoint[]> {
     assertIdentifier(treeId, 'treeId');
-    return buildGrowthTimeline(await this.loadMembers(treeId));
+    if (!branchRootMemberId) return buildGrowthTimeline(await this.loadMembers(treeId));
+    assertIdentifier(branchRootMemberId, 'branchRootMemberId');
+    const [members, relationships] = await Promise.all([
+      this.loadMembers(treeId),
+      this.loadRelationships(treeId)
+    ]);
+    if (!members.some((member) => member.id === branchRootMemberId)) {
+      throw new ReportServiceError('MEMBER_NOT_FOUND', 'Branch root member not found');
+    }
+    const branchMemberIds = collectBranchMemberIds(members, relationships, branchRootMemberId);
+    return buildGrowthTimeline(members.filter((member) => branchMemberIds.has(member.id)));
   }
 
   async exportPDF(treeId: string, branchRootMemberId?: string): Promise<Buffer> {

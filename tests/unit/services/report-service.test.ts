@@ -79,6 +79,10 @@ describe('ReportService', () => {
     expect(branch.generationsCount).toBe(3);
     expect(branch.geographicDistribution).not.toHaveProperty('Huế');
     expect(collectBranchMemberIds(members, relationships, 'unrelated')).toEqual(new Set(['unrelated']));
+    await expect(service.getGrowthTimeline('tree-report', 'root')).resolves.toEqual([
+      { period: '2024-01', newMembers: 2, totalMembers: 2 },
+      { period: '2024-02', newMembers: 2, totalMembers: 4 }
+    ]);
   });
 
   it('groups additions by month and returns a cumulative growth timeline', () => {

@@ -60,6 +60,14 @@ describe('GET /api/reports/[treeId]/statistics', () => {
     expect(timelineResponse.status).toBe(200);
     expect(getGrowthTimeline).toHaveBeenCalledWith('tree-1');
 
+    getGrowthTimeline.mockClear();
+    const branchTimelineResponse = await GET(
+      new Request('http://localhost/api/reports/tree-1/statistics?view=timeline&branchRootMemberId=root'),
+      { params: { treeId: 'tree-1' } }
+    );
+    expect(branchTimelineResponse.status).toBe(200);
+    expect(getGrowthTimeline).toHaveBeenCalledWith('tree-1', 'root');
+
     const exportPDF = vi.spyOn(reportService, 'exportPDF').mockResolvedValue(Buffer.from('%PDF-test'));
     const pdfResponse = await GET(
       new Request('http://localhost/api/reports/tree-1/statistics?format=pdf&branchRootMemberId=root'),
@@ -87,4 +95,3 @@ describe('GET /api/reports/[treeId]/statistics', () => {
     await expect(unauthenticatedResponse.json()).resolves.toMatchObject({ ok: false, error: { code: 'UNAUTHENTICATED' } });
   });
 });
-

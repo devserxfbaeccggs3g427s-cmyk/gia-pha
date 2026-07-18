@@ -4,6 +4,7 @@ import { TreeViewer } from '@/components/tree/TreeViewer';
 
 interface TreePageProps {
   params: { locale: string; treeId: string };
+  searchParams?: { member?: string };
 }
 
 export async function generateMetadata({ params }: TreePageProps): Promise<Metadata> {
@@ -11,6 +12,6 @@ export async function generateMetadata({ params }: TreePageProps): Promise<Metad
   return { title: t('metaTitle') };
 }
 
-export default function TreePage({ params }: TreePageProps) {
-  return <TreeViewer treeId={params.treeId} mode="vertical" />;
+export default function TreePage({ params, searchParams }: TreePageProps) {
+  return <TreeViewer treeId={params.treeId} mode="vertical" selectedMemberId={searchParams?.member} />;
 }

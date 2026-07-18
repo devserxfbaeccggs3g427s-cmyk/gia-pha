@@ -24,6 +24,7 @@ import type { LucideIcon } from 'lucide-react';
 import { LanguageSwitcher } from '@/components/i18n/language-switcher';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { Breadcrumbs } from '@/components/layout/breadcrumbs';
+import { MemberSearch } from '@/components/genealogy/member-search';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
@@ -146,14 +147,20 @@ export function DashboardShell({ children }: DashboardShellProps) {
               <DialogTrigger asChild>
                 <button className={styles.searchButton} aria-label={t('search')}><Search className="size-4 shrink-0" aria-hidden="true" /><span className={styles.searchText}>{t('searchHint')}</span><kbd className={styles.shortcut}>⌘ K</kbd></button>
               </DialogTrigger>
-              <DialogContent className="max-w-xl p-0">
-                <DialogHeader className="border-b border-border px-5 py-4">
-                  <DialogTitle className="flex items-center gap-2 text-base"><Search className="size-4 text-muted-foreground" />{t('commandPalette')}</DialogTitle>
-                  <DialogDescription>{t('commandPaletteHint')}</DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-1 p-3">
-                  {allItems.map((item) => <Link key={item.key} href={item.href as never} onClick={() => setPaletteOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><item.icon className="size-4 text-muted-foreground" />{nav(item.key)}</Link>)}
-                </div>
+              <DialogContent className={treeId ? 'max-w-3xl p-0 [&>button]:hidden' : 'max-w-xl p-0'}>
+                {treeId ? (
+                  <MemberSearch treeId={treeId} onClose={() => setPaletteOpen(false)} />
+                ) : (
+                  <>
+                    <DialogHeader className="border-b border-border px-5 py-4">
+                      <DialogTitle className="flex items-center gap-2 text-base"><Search className="size-4 text-muted-foreground" />{t('commandPalette')}</DialogTitle>
+                      <DialogDescription>{t('commandPaletteHint')}</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-1 p-3">
+                      {allItems.map((item) => <Link key={item.key} href={item.href as never} onClick={() => setPaletteOpen(false)} className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><item.icon className="size-4 text-muted-foreground" />{nav(item.key)}</Link>)}
+                    </div>
+                  </>
+                )}
               </DialogContent>
             </Dialog>
             <ThemeToggle labels={{ system: t('themeSystem'), light: t('themeLight'), dark: t('themeDark'), change: t('changeTheme') }} />
