@@ -39,7 +39,7 @@ import {
 import { useLocale, useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
 import type { FamilyTree, Member, Relationship } from '@/data/types';
-import { getAncestryPath, getCanonicalParentChildEdges } from '@/lib/algorithms/ancestry';
+import { getAncestrySubgraph, getCanonicalParentChildEdges, type AncestrySubgraph } from '@/lib/algorithms/ancestry';
 import { calculateGenerations } from '@/lib/algorithms/generation';
 import { MemberNode, getMemberColorScheme, formatLifeYears, type MemberNodeData, type MemberSummary } from './MemberCard';
 import { buildTreeLayout, type TreeDisplayMode, type TreeLayoutMode } from './tree-layout';
@@ -58,6 +58,13 @@ export interface TreeViewerProps {
   onMemberDoubleClick?: (memberId: string) => void;
   highlightPath?: string[];
 }
+
+const EMPTY_ANCESTRY_SUBGRAPH: AncestrySubgraph = {
+  targetMemberId: '',
+  memberIds: [],
+  parentChildEdges: [],
+  spouseEdges: []
+};
 
 interface TreeViewerData extends FamilyTree {
   members: Member[];
@@ -118,12 +125,12 @@ export function TreeViewer({
   );
   const positionById = useMemo(() => new Map(positions.map((item) => [item.id, item])), [positions]);
 
-  const lineageIds = useMemo(() => {
-    if (highlightPath) return highlightPath;
-    if (!lineageEnabled || !selectedId) return [];
-    return getAncestryPath(members, relationships, selectedId).map((member) => member.id);
+  const lineage = useMemo<AncestrySubgraph>(() => {
+    if (highlightPath) return ancestrySubgraphFromPath(members, relationships, highlightPath);
+    if (!lineageEnabled || !selectedId) return EMPTY_ANCESTRY_SUBGRAPH;
+    return getAncestrySubgraph(members, relationships, selectedId, { includeSpouses: true });
   }, [highlightPath, lineageEnabled, members, relationships, selectedId]);
-  const lineageSet = useMemo(() => new Set(lineageIds), [lineageIds]);
+  const lineageSet = useMemo(() => new Set(lineage.memberIds), [lineage.memberIds]);
 
   const selectMember = useCallback((memberId: string) => {
     setInternalSelectedId(memberId);
@@ -170,8 +177,8 @@ export function TreeViewer({
   }), [displayMode, generationMap, layoutMode, lineageSet, members, openMember, positionById, selectMember, selectedId, t]);
 
   const edges = useMemo(
-    () => buildRelationshipEdges(members, relationships, lineageIds),
-    [lineageIds, members, relationships]
+    () => buildRelationshipEdges(members, relationships, lineage, positions, layoutMode),
+    [layoutMode, lineage, members, positions, relationships]
   );
 
   useEffect(() => {
@@ -436,10 +443,18 @@ function TreeViewerError({ message, retry }: { message: string; retry: () => voi
 function buildRelationshipEdges(
   members: readonly Member[],
   relationships: readonly Relationship[],
-  lineageIds: readonly string[]
+  lineage: AncestrySubgraph,
+  positions: readonly { id: string; position: { x: number; y: number } }[],
+  layoutMode: TreeLayoutMode
 ): Edge[] {
   const memberIds = new Set(members.map((member) => member.id));
-  const pathEdges = new Set(lineageIds.slice(1).map((id, index) => edgeKey(lineageIds[index], id)));
+  const positionById = new Map(positions.map((position) => [position.id, position.position]));
+  const parentChildLineageEdges = new Set(
+    lineage.parentChildEdges.map((edge) => edgeKey(edge.parentId, edge.childId))
+  );
+  const spouseLineageEdges = new Set(
+    lineage.spouseEdges.map((edge) => edgeKey(edge.sourceMemberId, edge.targetMemberId))
+  );
   const edges: Edge[] = [];
   const accepted = new Set<string>();
 
@@ -447,11 +462,13 @@ function buildRelationshipEdges(
     const key = `parent:${edgeKey(parentId, childId)}`;
     if (accepted.has(key)) continue;
     accepted.add(key);
-    const highlighted = pathEdges.has(edgeKey(parentId, childId));
+    const highlighted = parentChildLineageEdges.has(edgeKey(parentId, childId));
     edges.push({
       id: key,
       source: parentId,
       target: childId,
+      sourceHandle: 'source-child',
+      targetHandle: 'target-parent',
       type: 'smoothstep',
       animated: highlighted,
       zIndex: highlighted ? 9 : 0,
@@ -476,20 +493,82 @@ function buildRelationshipEdges(
     if (accepted.has(key)) continue;
     accepted.add(key);
     const spouse = relationship.type === 'SPOUSE';
+    const highlighted = spouse && spouseLineageEdges.has(edgeKey(relationship.sourceMemberId, relationship.targetMemberId));
+    const spouseHandles = spouse
+      ? getSpouseHandles(
+        relationship.sourceMemberId,
+        relationship.targetMemberId,
+        positionById,
+        layoutMode
+      )
+      : undefined;
     edges.push({
       id: key,
       source: relationship.sourceMemberId,
       target: relationship.targetMemberId,
+      ...(spouseHandles ? {
+        sourceHandle: spouseHandles.source,
+        targetHandle: spouseHandles.target
+      } : {}),
       type: spouse ? 'straight' : 'smoothstep',
       style: {
-        stroke: spouse ? 'hsl(38 58% 52%)' : 'hsl(267 28% 59%)',
-        strokeWidth: spouse ? 2.2 : 1.5,
+        stroke: highlighted ? 'hsl(38 65% 48%)' : spouse ? 'hsl(38 58% 52%)' : 'hsl(267 28% 59%)',
+        strokeWidth: highlighted ? 3.2 : spouse ? 2.2 : 1.5,
         strokeDasharray: spouse ? '7 4' : '3 4'
-      }
+      },
+      animated: highlighted,
+      zIndex: highlighted ? 9 : 0
     });
   }
 
   return edges;
+}
+
+function getSpouseHandles(
+  sourceMemberId: string,
+  targetMemberId: string,
+  positionById: ReadonlyMap<string, { x: number; y: number }>,
+  layoutMode: TreeLayoutMode
+): { source: string; target: string } {
+  const sourcePosition = positionById.get(sourceMemberId);
+  const targetPosition = positionById.get(targetMemberId);
+  const horizontal = layoutMode === 'horizontal';
+  const sourceComesFirst = sourcePosition && targetPosition
+    ? horizontal
+      ? sourcePosition.y <= targetPosition.y
+      : sourcePosition.x <= targetPosition.x
+    : sourceMemberId <= targetMemberId;
+  const sourceSide = sourceComesFirst ? 'end' : 'start';
+  const targetSide = sourceComesFirst ? 'start' : 'end';
+  return {
+    source: `source-spouse-${sourceSide}`,
+    target: `target-spouse-${targetSide}`
+  };
+}
+
+function ancestrySubgraphFromPath(
+  members: readonly Member[],
+  relationships: readonly Relationship[],
+  path: readonly string[]
+): AncestrySubgraph {
+  const memberIds = new Set(path);
+  if (path.length === 0) return EMPTY_ANCESTRY_SUBGRAPH;
+  const pathPairs = new Set(path.slice(1).map((id, index) => edgeKey(path[index], id)));
+  const parentChildEdges = getCanonicalParentChildEdges(members, relationships)
+    .filter((edge) => pathPairs.has(edgeKey(edge.parentId, edge.childId)));
+  const spouseEdges = relationships
+    .filter((relationship) => relationship.type === 'SPOUSE')
+    .filter((relationship) => memberIds.has(relationship.sourceMemberId) && memberIds.has(relationship.targetMemberId))
+    .map((relationship) => ({
+      sourceMemberId: relationship.sourceMemberId,
+      targetMemberId: relationship.targetMemberId
+    }));
+  return {
+    targetMemberId: path[path.length - 1],
+    memberIds: [...memberIds],
+    parentChildEdges,
+    spouseEdges
+  };
 }
 
 function getRelationshipCounts(

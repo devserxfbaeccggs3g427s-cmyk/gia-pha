@@ -80,6 +80,7 @@ export function MemberCard({
     >
       <Handle
         className={styles.handle}
+        id="target-parent"
         type="target"
         position={horizontal ? Position.Left : Position.Top}
         isConnectable={false}
@@ -130,8 +131,37 @@ export function MemberCard({
       </button>
       <Handle
         className={styles.handle}
+        id="source-child"
         type="source"
         position={horizontal ? Position.Right : Position.Bottom}
+        isConnectable={false}
+      />
+      <Handle
+        className={`${styles.handle} ${styles.sideHandle}`}
+        id="target-spouse-start"
+        type="target"
+        position={horizontal ? Position.Top : Position.Left}
+        isConnectable={false}
+      />
+      <Handle
+        className={`${styles.handle} ${styles.sideHandle}`}
+        id="target-spouse-end"
+        type="target"
+        position={horizontal ? Position.Bottom : Position.Right}
+        isConnectable={false}
+      />
+      <Handle
+        className={`${styles.handle} ${styles.sideHandle}`}
+        id="source-spouse-start"
+        type="source"
+        position={horizontal ? Position.Top : Position.Left}
+        isConnectable={false}
+      />
+      <Handle
+        className={`${styles.handle} ${styles.sideHandle}`}
+        id="source-spouse-end"
+        type="source"
+        position={horizontal ? Position.Bottom : Position.Right}
         isConnectable={false}
       />
     </div>

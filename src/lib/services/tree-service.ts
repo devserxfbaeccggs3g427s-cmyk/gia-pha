@@ -2,7 +2,11 @@ import { nanoid } from 'nanoid';
 import { createTreeSchema, updateTreeSchema } from '@/data/schemas';
 import { createInitialTree } from '@/data/seed';
 import type { FamilyTree, Member, Relationship } from '@/data/types';
-import { getAncestryPath as findAncestryPath } from '@/lib/algorithms/ancestry';
+import {
+  getAncestryPath as findAncestryPath,
+  getAncestrySubgraph as findAncestrySubgraph,
+  type AncestrySubgraph
+} from '@/lib/algorithms/ancestry';
 import { calculateGenerations as calculateGenerationMap, type GenerationMap } from '@/lib/algorithms/generation';
 import { BLOB_PATHS, deleteBlobs } from '@/lib/blob/client';
 import { getMediaMetadata, getMembers, getRelationships, getTrees } from '@/lib/blob/readers';
@@ -130,6 +134,23 @@ export class TreeService {
     }
     return findAncestryPath(members, relationships, memberId);
   }
+
+  async getAncestrySubgraph(
+    memberId: string,
+    treeId: string,
+    options: { includeSpouses?: boolean } = {}
+  ): Promise<AncestrySubgraph> {
+    assertIdentifier(memberId, 'memberId');
+    await this.getTree(treeId);
+    const [members, relationships] = await Promise.all([
+      getMembers(treeId),
+      getRelationships(treeId)
+    ]);
+    if (!members.some((member) => member.id === memberId)) {
+      throw new TreeServiceError('NOT_FOUND', 'Member not found');
+    }
+    return findAncestrySubgraph(members, relationships, memberId, options);
+  }
 }
 
 function assertIdentifier(value: string, field: string): void {
@@ -147,3 +168,4 @@ export const deleteTree = treeService.deleteTree.bind(treeService);
 export const getTreeWithMembers = treeService.getTreeWithMembers.bind(treeService);
 export const calculateGenerations = treeService.calculateGenerations.bind(treeService);
 export const getAncestryPath = treeService.getAncestryPath.bind(treeService);
+export const getAncestrySubgraph = treeService.getAncestrySubgraph.bind(treeService);

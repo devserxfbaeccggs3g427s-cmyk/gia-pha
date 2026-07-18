@@ -100,15 +100,61 @@ function buildOrderedLayers(
   const previousIndexes = new Map<string, number>();
 
   for (const [, layer] of ordered) {
-    layer.sort((left, right) => {
-      const leftScore = familyOrderScore(left.id, parentsByChild, spousesByMember, previousIndexes, memberOrder);
-      const rightScore = familyOrderScore(right.id, parentsByChild, spousesByMember, previousIndexes, memberOrder);
-      return leftScore - rightScore || (memberOrder.get(left.id) ?? 0) - (memberOrder.get(right.id) ?? 0);
-    });
+    const spouseGroups = buildSpouseGroups(layer, spousesByMember, memberOrder);
+    layer.splice(0, layer.length, ...spouseGroups
+      .sort((left, right) => {
+        const leftScore = Math.min(...left.map((member) => familyOrderScore(
+          member.id, parentsByChild, spousesByMember, previousIndexes, memberOrder
+        )));
+        const rightScore = Math.min(...right.map((member) => familyOrderScore(
+          member.id, parentsByChild, spousesByMember, previousIndexes, memberOrder
+        )));
+        return leftScore - rightScore
+          || (memberOrder.get(left[0].id) ?? 0) - (memberOrder.get(right[0].id) ?? 0);
+      })
+      .flat());
     layer.forEach((member, index) => previousIndexes.set(member.id, index));
   }
 
   return ordered;
+}
+
+/**
+ * Treat each spouse-connected set in a generation as one layout block. This
+ * guarantees that a spouse edge is not crossed by an unrelated node in the
+ * same generation, while preserving deterministic member ordering.
+ */
+function buildSpouseGroups(
+  layer: readonly Member[],
+  spousesByMember: ReadonlyMap<string, Set<string>>,
+  memberOrder: ReadonlyMap<string, number>
+): Member[][] {
+  const memberById = new Map(layer.map((member) => [member.id, member]));
+  const unvisited = new Set(memberById.keys());
+  const groups: Member[][] = [];
+
+  while (unvisited.size > 0) {
+    const start = unvisited.values().next().value as string;
+    const queue = [start];
+    const group: Member[] = [];
+    unvisited.delete(start);
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const member = memberById.get(current);
+      if (member) group.push(member);
+      for (const spouseId of spousesByMember.get(current) ?? []) {
+        if (!unvisited.has(spouseId)) continue;
+        unvisited.delete(spouseId);
+        queue.push(spouseId);
+      }
+    }
+
+    group.sort((left, right) => (memberOrder.get(left.id) ?? 0) - (memberOrder.get(right.id) ?? 0));
+    groups.push(group);
+  }
+
+  return groups;
 }
 
 function buildFanLayout(

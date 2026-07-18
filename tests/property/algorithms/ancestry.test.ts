@@ -1,9 +1,9 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import type { Member, Relationship } from '@/data/types';
-import { getAncestryPath } from '@/lib/algorithms/ancestry';
+import { getAncestryPath, getAncestrySubgraph } from '@/lib/algorithms/ancestry';
 
-describe('Feature: family-genealogy-management, Property 9: Ancestry Path Validity', () => {
+describe('Feature: family-genealogy-management, Property 9: Ancestry Subgraph Completeness', () => {
   it('always returns a root-to-target sequence of parent-child edges', () => {
     fc.assert(
       fc.property(
@@ -37,6 +37,29 @@ describe('Feature: family-genealogy-management, Property 9: Ancestry Path Validi
       { numRuns: 100 }
     );
   });
+
+  it('includes every direct parent branch and spouse context', () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 2, max: 20 }), (parentCount) => {
+        const target = member(0);
+        const parents = Array.from({ length: parentCount }, (_, index) => member(index + 1));
+        const spouse = member(parentCount + 1);
+        const members = [target, ...parents, spouse];
+        const relationships = [
+          ...parents.map((parent) => relationshipByIds(parent.id, target.id, `parent-${parent.id}`)),
+          relationshipByIds(parents[0].id, spouse.id, 'spouse', 'SPOUSE')
+        ];
+        const subgraph = getAncestrySubgraph(members, relationships, target.id);
+
+        expect(new Set(subgraph.memberIds)).toEqual(new Set(members.map((item) => item.id)));
+        expect(subgraph.parentChildEdges).toHaveLength(parentCount);
+        expect(subgraph.spouseEdges).toEqual([
+          { sourceMemberId: parents[0].id, targetMemberId: spouse.id }
+        ]);
+      }),
+      { numRuns: 50 }
+    );
+  });
 });
 
 function member(index: number): Member {
@@ -54,12 +77,21 @@ function member(index: number): Member {
 }
 
 function relationship(source: number, target: number, id: string): Relationship {
+  return relationshipByIds(`m${source}`, `m${target}`, id);
+}
+
+function relationshipByIds(
+  sourceMemberId: string,
+  targetMemberId: string,
+  id: string,
+  type: Relationship['type'] = 'PARENT_CHILD'
+): Relationship {
   return {
     id,
     treeId: 'tree-property',
-    sourceMemberId: `m${source}`,
-    targetMemberId: `m${target}`,
-    type: 'PARENT_CHILD',
+    sourceMemberId,
+    targetMemberId,
+    type,
     createdAt: '2026-01-01T00:00:00.000Z'
   };
 }

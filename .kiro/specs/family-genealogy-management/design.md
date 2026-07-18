@@ -280,6 +280,7 @@ interface TreeService {
   getTreeWithMembers(treeId: string): Promise<FamilyTreeFull>;
   calculateGenerations(treeId: string): Promise<GenerationMap>;
   getAncestryPath(memberId: string, treeId: string): Promise<Member[]>;
+  getAncestrySubgraph(memberId: string, treeId: string, options?: { includeSpouses?: boolean }): Promise<AncestrySubgraph>;
 }
 ```
 
@@ -386,9 +387,20 @@ interface TreeViewerProps {
   selectedMemberId?: string;
   onMemberSelect: (memberId: string) => void;
   onMemberDoubleClick: (memberId: string) => void;
-  highlightPath?: string[];  // ancestry path highlighting
+  highlightPath?: string[];  // legacy linear highlight input; TreeViewer derives a full subgraph by default
 }
 ```
+
+Layout rules for relationship edges:
+
+- `buildOrderedLayers` treats each spouse-connected component in a generation
+  as one contiguous block; members inside the block remain deterministic by
+  member order.
+- Parent-child edges use explicit top/bottom handles in vertical mode and
+  left/right handles in horizontal mode.
+- Spouse edges use dedicated side handles that face each other. The source and
+  target handles are selected from the rendered positions, so reversing the
+  canonical spouse endpoint order does not reverse the visual connection.
 
 #### MemberCard Component
 Hiển thị thông tin tóm tắt member trên tree node.
@@ -824,7 +836,22 @@ Việc hai cha/mẹ cùng trỏ tới một người con tạo hình hội tụ 
 phải chu trình. Cycle detection chỉ duyệt theo chiều parent→child chuẩn và không
 được diễn giải quan hệ vợ-chồng hoặc cách nhìn ngược child→parent như cạnh tổ tiên.
 
-#### 3. Vietnamese Fuzzy Search (In-Memory)
+#### 3. Ancestry Subgraph Algorithm
+
+`getAncestrySubgraph(members, relationships, targetMemberId)` starts at the
+selected member and traverses canonical `PARENT_CHILD` edges backwards. Unlike
+the legacy `getAncestryPath` helper, it retains every parent edge at every
+level, so two parents and all of their ancestors are displayed rather than
+only the first/shortest branch. The result contains a de-duplicated member ID
+set, parent-child edges, and optional spouse-context edges.
+
+When spouse context is enabled, the algorithm adds spouses of the target and
+of selected ancestors as same-generation context nodes. It does not recurse
+through those spouses' parents unless a separate canonical `PARENT_CHILD`
+relationship explicitly connects them to the ancestry graph. Consequently a
+spouse edge is visual context, never evidence of biological/adoptive lineage.
+
+#### 4. Vietnamese Fuzzy Search (In-Memory)
 
 ```typescript
 function normalizeVietnamese(str: string): string {
@@ -859,7 +886,7 @@ function searchMembers(members: Member[], query: string): Member[] {
 }
 ```
 
-#### 4. GEDCOM Parser
+#### 5. GEDCOM Parser
 
 ```typescript
 interface GEDCOMRecord {
@@ -947,9 +974,9 @@ function parseGEDCOM(content: string): ParsedGEDCOM {
 
 **Validates: Requirements 3.5**
 
-### Property 9: Ancestry Path Validity
+### Property 9: Ancestry Subgraph Completeness
 
-*For any* member in a family tree, the ancestry path from root to that member SHALL be a valid sequence where each consecutive pair has a parent-child relationship, starting from a root ancestor (generation 0) and ending at the target member.
+*For any* member in a valid family tree, the lineage subgraph for that member SHALL contain the target, every canonical parent→child edge reachable by recursively following all parents, and every reachable root ancestor. Each selected member SHALL occur once. When spouse context is enabled, spouse edges for the target and its selected ancestors MAY add same-generation context nodes, but SHALL NOT be returned as parent→child edges or cause traversal into a spouse's parents without an explicit parent→child relationship.
 
 **Validates: Requirements 4.6**
 

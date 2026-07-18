@@ -2,8 +2,8 @@ import type { Member, Relationship } from '@/data/types';
 
 /**
  * Returns the shortest valid parent-to-child path from any root ancestor to
- * the requested member. The order of members and relationships is used as a
- * deterministic tie-breaker when a member can be reached through two parents.
+ * the requested member. Kept for callers that need a linear path; lineage
+ * views should use getAncestrySubgraph so no parent branch is lost.
  */
 export function getAncestryPath(
   members: readonly Member[],
@@ -52,6 +52,91 @@ export function getAncestryPath(
 export interface ParentChildEdge {
   parentId: string;
   childId: string;
+}
+
+export interface SpouseEdge {
+  sourceMemberId: string;
+  targetMemberId: string;
+}
+
+export interface AncestrySubgraph {
+  targetMemberId: string;
+  memberIds: string[];
+  parentChildEdges: ParentChildEdge[];
+  spouseEdges: SpouseEdge[];
+}
+
+/**
+ * Returns the complete ancestor subgraph for a member instead of choosing one
+ * shortest path. Every parent branch is traversed recursively. Spouses of the
+ * target and its ancestors are included as contextual nodes/edges, but their
+ * parents are not traversed unless they are also connected through a canonical
+ * parent-child edge. This keeps in-law context visible without turning a
+ * lineage view into the entire extended family graph.
+ */
+export function getAncestrySubgraph(
+  members: readonly Member[],
+  relationships: readonly Relationship[],
+  targetMemberId: string,
+  options: { includeSpouses?: boolean } = {}
+): AncestrySubgraph {
+  const memberIds = new Set(members.map((member) => member.id));
+  const empty: AncestrySubgraph = {
+    targetMemberId,
+    memberIds: [],
+    parentChildEdges: [],
+    spouseEdges: []
+  };
+  if (!targetMemberId || !memberIds.has(targetMemberId)) return empty;
+
+  const parentChildEdges = getCanonicalParentChildEdges(members, relationships);
+  const parentsByChild = new Map<string, ParentChildEdge[]>();
+  for (const edge of parentChildEdges) {
+    const parents = parentsByChild.get(edge.childId) ?? [];
+    parents.push(edge);
+    parentsByChild.set(edge.childId, parents);
+  }
+
+  const selected = new Set<string>([targetMemberId]);
+  const selectedParentEdges = new Map<string, ParentChildEdge>();
+  const queue = [targetMemberId];
+  while (queue.length > 0) {
+    const childId = queue.shift()!;
+    for (const edge of parentsByChild.get(childId) ?? []) {
+      const key = edgeKey(edge.parentId, edge.childId);
+      if (!selectedParentEdges.has(key)) selectedParentEdges.set(key, edge);
+      if (!selected.has(edge.parentId)) {
+        selected.add(edge.parentId);
+        queue.push(edge.parentId);
+      }
+    }
+  }
+
+  const spouseEdges: SpouseEdge[] = [];
+  if (options.includeSpouses !== false) {
+    const ancestorMemberIds = new Set(selected);
+    const spouseKeys = new Set<string>();
+    for (const relationship of relationships) {
+      if (relationship.type !== 'SPOUSE') continue;
+      if (!memberIds.has(relationship.sourceMemberId) || !memberIds.has(relationship.targetMemberId)) continue;
+      if (!ancestorMemberIds.has(relationship.sourceMemberId) && !ancestorMemberIds.has(relationship.targetMemberId)) continue;
+      const sourceMemberId = relationship.sourceMemberId;
+      const targetMemberId = relationship.targetMemberId;
+      const key = [sourceMemberId, targetMemberId].sort().join('\u0000');
+      if (spouseKeys.has(key)) continue;
+      spouseKeys.add(key);
+      spouseEdges.push({ sourceMemberId, targetMemberId });
+      selected.add(sourceMemberId);
+      selected.add(targetMemberId);
+    }
+  }
+
+  return {
+    targetMemberId,
+    memberIds: members.filter((member) => selected.has(member.id)).map((member) => member.id),
+    parentChildEdges: [...selectedParentEdges.values()],
+    spouseEdges
+  };
 }
 
 export function getCanonicalParentChildEdges(

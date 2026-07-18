@@ -155,20 +155,22 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
   - Canonical relationship migration, cycle detection and spouse-component generation are covered by unit/property tests.
   - Full test suite passes after the implementation.
 
-- [x] 7. Implement Tree service and ancestry path
+- [x] 7. Implement Tree service and complete ancestry subgraph
   - [x] 7.1 Create TreeService with CRUD operations
     - Implement `src/lib/services/tree-service.ts` with: createTree, getTree, deleteTree, getTreeWithMembers
     - Create API routes: `src/app/api/trees/route.ts` (GET/POST), `src/app/api/trees/[treeId]/route.ts` (GET/PUT/DELETE)
     - Manage TreeMembership within tree data
     - _Requirements: 16.1, 16.2, 16.3_
 
-  - [x] 7.2 Implement ancestry path algorithm
-    - Create `src/lib/algorithms/ancestry.ts` with `getAncestryPath` function
-    - Trace valid path from root ancestor (generation 0) to target member via parent-child relationships
+  - [x] 7.2 Implement complete ancestry subgraph algorithm
+    - Keep `getAncestryPath` as a backward-compatible single-path helper, and add `getAncestrySubgraph`
+    - Traverse recursively backwards from the selected member through every canonical parent→child edge, retaining all parent branches up to all reachable roots
+    - Include spouse edges for the selected member and its ancestors as same-generation context only; never infer a parent-child edge from a spouse edge or traverse a spouse's parents without an explicit parent-child relationship
     - _Requirements: 4.6_
 
-  - [x]* 7.3 Write property test for ancestry path validity
-    - **Property 9: Ancestry Path Validity**
+  - [x]* 7.3 Write property test for ancestry subgraph completeness
+    - **Property 9: Ancestry Subgraph Completeness**
+    - Verify every reachable parent branch is present exactly once and spouse context is represented without being treated as ancestry
     - **Validates: Requirements 4.6**
 
 - [x] 8. Implement Search and Filter service
@@ -315,10 +317,10 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Apply color coding by gender, generation, and alive/deceased status
     - _Requirements: 4.1, 4.3, 4.5_
 
-  - [x] 16.2 Implement member selection and ancestry path highlighting
+  - [x] 16.2 Implement member selection and complete ancestry subgraph highlighting
     - On member select: highlight node, show summary info panel
     - On double-click: navigate to member detail page
-    - Implement "lineage view" mode: highlight path from root ancestor to selected member
+    - Implement "lineage view" mode: highlight every ancestor branch from root ancestors to selected member, plus spouse context with a visually distinct spouse edge
     - _Requirements: 4.2, 4.6_
 
   - [x] 16.3 Implement lazy loading for large trees
@@ -332,6 +334,12 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Display: name, avatar, birth/death years, generation
     - Apply color scheme based on gender/generation/status
     - _Requirements: 4.2, 4.5_
+
+  - [x] 16.5 Fix same-generation spouse layout and relationship anchors
+    - Group spouse-connected members into contiguous blocks within each generation layer so unrelated members cannot be placed between spouses
+    - Add dedicated side handles for spouse edges and explicit parent/child handles for vertical and horizontal layouts
+    - Route same-generation spouse edges between the facing sides of the two cards instead of the default top/bottom handles
+    - _Requirements: 4.7_
 
 - [x] 17. Checkpoint - Ensure tree viewer and UI tests pass
   - Ensure all tests pass, ask the user if questions arise.
@@ -463,7 +471,7 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     { "id": 12, "tasks": ["15.1", "20.1"] },
     { "id": 13, "tasks": ["15.2", "15.3", "20.2"] },
     { "id": 14, "tasks": ["16.1", "16.4"] },
-    { "id": 15, "tasks": ["16.2", "16.3"] },
+    { "id": 15, "tasks": ["16.2", "16.3", "16.5"] },
     { "id": 16, "tasks": ["18.1", "18.2", "18.3", "18.4"] },
     { "id": 17, "tasks": ["19.1", "19.2", "23.1", "23.2"] },
     { "id": 18, "tasks": ["21.1", "22.1"] }

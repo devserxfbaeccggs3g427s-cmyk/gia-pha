@@ -79,7 +79,8 @@
 3. THE Tree_Viewer SHALL hỗ trợ zoom in/out, kéo thả (pan), và điều hướng bằng minimap
 4. WHEN Family_Tree có hơn 100 Member, THE Tree_Viewer SHALL áp dụng lazy loading và chỉ render các node trong viewport
 5. THE Tree_Viewer SHALL sử dụng màu sắc phân biệt giới tính, đời, và trạng thái (còn sống/đã mất) của Member
-6. WHEN một User chọn chế độ xem "dòng dõi" cho một Member, THE Tree_Viewer SHALL hiển thị đường từ tổ tiên gốc đến Member đó
+6. WHEN một User chọn chế độ xem "dòng dõi" cho một Member, THE Tree_Viewer SHALL hiển thị toàn bộ đồ thị tổ tiên từ Member đó ngược qua mọi nhánh quan hệ cha/mẹ-con đến các tổ tiên gốc, không chỉ chọn một đường đi; vợ/chồng của Member hoặc tổ tiên có thể được hiển thị như ngữ cảnh cùng thế hệ bằng cạnh vợ/chồng riêng biệt, nhưng cạnh vợ/chồng SHALL NOT được coi là đường tổ tiên
+7. WHEN hai Member có quan hệ vợ-chồng và cùng generation, THE Tree_Viewer SHALL đặt chúng trong một block liền kề của cùng layer và SHALL nối cạnh vợ-chồng từ các handle bên tương ứng, không để Member khác nằm giữa hoặc nối cạnh từ đầu node này vào cuối node kia
 
 ### Requirement 5: Responsive Design và Đa thiết bị
 

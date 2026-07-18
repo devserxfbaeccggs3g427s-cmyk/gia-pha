@@ -65,6 +65,11 @@ describe('TreeService', () => {
       [child.id, 1]
     ]));
     await expect(service.getAncestryPath(child.id, tree.id)).resolves.toEqual([root, child]);
+    await expect(service.getAncestrySubgraph(child.id, tree.id)).resolves.toMatchObject({
+      targetMemberId: child.id,
+      memberIds: [root.id, child.id],
+      parentChildEdges: [{ parentId: root.id, childId: child.id }]
+    });
   });
 
   it('deletes tree metadata and all per-tree JSON blobs', async () => {

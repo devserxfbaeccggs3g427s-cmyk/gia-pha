@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getAncestryPath } from '@/lib/algorithms/ancestry';
+import { getAncestryPath, getAncestrySubgraph } from '@/lib/algorithms/ancestry';
 import { buildMember, buildRelationship } from '../../utils/factories';
 
 describe('getAncestryPath', () => {
@@ -46,5 +46,44 @@ describe('getAncestryPath', () => {
       buildRelationship({ sourceMemberId: b.id, targetMemberId: c.id }),
       buildRelationship({ sourceMemberId: c.id, targetMemberId: a.id })
     ], b.id)).toEqual([]);
+  });
+
+  it('returns every parent branch and spouse context for lineage view', () => {
+    const members = ['grandparent-a', 'grandparent-b', 'parent', 'parent-spouse', 'target']
+      .map((id) => buildMember({ id }));
+    const relationships = [
+      buildRelationship({ sourceMemberId: 'grandparent-a', targetMemberId: 'parent' }),
+      buildRelationship({ sourceMemberId: 'grandparent-b', targetMemberId: 'parent' }),
+      buildRelationship({ sourceMemberId: 'parent', targetMemberId: 'target' }),
+      buildRelationship({ sourceMemberId: 'parent-spouse', targetMemberId: 'target' }),
+      buildRelationship({ sourceMemberId: 'parent', targetMemberId: 'parent-spouse', type: 'SPOUSE' })
+    ];
+
+    const subgraph = getAncestrySubgraph(members, relationships, 'target');
+    expect(subgraph.memberIds).toEqual(members.map((member) => member.id));
+    expect(subgraph.parentChildEdges).toEqual(expect.arrayContaining([
+      { parentId: 'grandparent-a', childId: 'parent' },
+      { parentId: 'grandparent-b', childId: 'parent' },
+      { parentId: 'parent', childId: 'target' },
+      { parentId: 'parent-spouse', childId: 'target' }
+    ]));
+    expect(subgraph.spouseEdges).toEqual([
+      { sourceMemberId: 'parent', targetMemberId: 'parent-spouse' }
+    ]);
+  });
+
+  it('does not traverse a contextual spouse\'s unrelated parents', () => {
+    const members = ['grandparent', 'parent', 'spouse', 'spouse-parent', 'target']
+      .map((id) => buildMember({ id }));
+    const relationships = [
+      buildRelationship({ sourceMemberId: 'grandparent', targetMemberId: 'parent' }),
+      buildRelationship({ sourceMemberId: 'parent', targetMemberId: 'target' }),
+      buildRelationship({ sourceMemberId: 'spouse-parent', targetMemberId: 'spouse' }),
+      buildRelationship({ sourceMemberId: 'parent', targetMemberId: 'spouse', type: 'SPOUSE' })
+    ];
+
+    const subgraph = getAncestrySubgraph(members, relationships, 'target');
+    expect(subgraph.memberIds).toEqual(['grandparent', 'parent', 'spouse', 'target']);
+    expect(subgraph.parentChildEdges).not.toContainEqual({ parentId: 'spouse-parent', childId: 'spouse' });
   });
 });

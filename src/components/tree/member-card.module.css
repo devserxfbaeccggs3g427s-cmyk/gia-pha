@@ -172,6 +172,8 @@
   opacity: .75;
 }
 
+.sideHandle { opacity: 0 !important; }
+
 .node[data-display='compact'] .card { gap: 10px; border-radius: 15px; padding: 10px 11px 10px 14px; }
 .node[data-display='compact'] .avatarWrap { width: 42px; height: 42px; border-radius: 13px; }
 .node[data-display='compact'] .avatar,

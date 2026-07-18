@@ -35,6 +35,28 @@ describe('buildTreeLayout', () => {
       .toBeGreaterThanOrEqual(TREE_NODE_DIMENSIONS.detailed.width);
   });
 
+  it('keeps spouses contiguous in the same generation layer', () => {
+    const { relationships } = familyFixture();
+    const members = [
+      buildMember({ id: 'root', fullName: 'Root' }),
+      buildMember({ id: 'root-other', fullName: 'Root Other' }),
+      buildMember({ id: 'spouse', fullName: 'Spouse', gender: 'FEMALE' }),
+      buildMember({ id: 'child-a', fullName: 'Child A' }),
+      buildMember({ id: 'child-b', fullName: 'Child B' }),
+      buildMember({ id: 'grandchild', fullName: 'Grandchild' })
+    ];
+    const positions = buildTreeLayout(members, relationships, 'vertical', 'detailed');
+    const byId = new Map(positions.map((item) => [item.id, item]));
+    const root = byId.get('root')!;
+    const spouse = byId.get('spouse')!;
+    const other = byId.get('root-other')!;
+    const gap = TREE_NODE_DIMENSIONS.detailed.width + TREE_NODE_DIMENSIONS.detailed.nodeGap;
+
+    expect(root.generation).toBe(spouse.generation);
+    expect(Math.abs(root.position.x - spouse.position.x)).toBe(gap);
+    expect(Math.abs(root.position.x - other.position.x)).not.toBe(gap);
+  });
+
   it('rotates the generation axis for horizontal layout', () => {
     const { members, relationships } = familyFixture();
     const positions = buildTreeLayout(members, relationships, 'horizontal', 'compact');
