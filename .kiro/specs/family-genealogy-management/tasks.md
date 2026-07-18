@@ -300,27 +300,27 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Implement smooth animations and transitions at 60fps
     - _Requirements: 13.4, 13.5_
 
-- [ ] 16. Implement Tree Viewer with React Flow
-  - [ ] 16.1 Create TreeViewer component with multiple layout modes
+- [x] 16. Implement Tree Viewer with React Flow
+  - [x] 16.1 Create TreeViewer component with multiple layout modes
     - Implement `src/components/tree/TreeViewer.tsx` using React Flow
     - Support 3 display modes: vertical tree, horizontal tree, fan chart
     - Implement zoom in/out, pan (drag), and minimap navigation
     - Apply color coding by gender, generation, and alive/deceased status
     - _Requirements: 4.1, 4.3, 4.5_
 
-  - [ ] 16.2 Implement member selection and ancestry path highlighting
+  - [x] 16.2 Implement member selection and ancestry path highlighting
     - On member select: highlight node, show summary info panel
     - On double-click: navigate to member detail page
     - Implement "lineage view" mode: highlight path from root ancestor to selected member
     - _Requirements: 4.2, 4.6_
 
-  - [ ] 16.3 Implement lazy loading for large trees
+  - [x] 16.3 Implement lazy loading for large trees
     - Render only nodes within viewport when tree has > 100 members
     - Implement virtual scrolling for node rendering
     - Support mobile gesture navigation (pinch-to-zoom, swipe)
     - _Requirements: 4.4, 5.2_
 
-  - [ ] 16.4 Create MemberCard component for tree nodes
+  - [x] 16.4 Create MemberCard component for tree nodes
     - Implement `src/components/tree/MemberCard.tsx` with compact and detailed modes
     - Display: name, avatar, birth/death years, generation
     - Apply color scheme based on gender/generation/status

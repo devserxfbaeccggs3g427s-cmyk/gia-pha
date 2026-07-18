@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { AppProviders } from '@/components/providers/app-providers';
 import { getTextDirection, isSupportedLocale } from '@/i18n/config';
+import 'reactflow/dist/style.css';
 import './globals.css';
 
 export const metadata: Metadata = {
