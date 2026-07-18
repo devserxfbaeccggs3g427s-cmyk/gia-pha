@@ -306,7 +306,8 @@ boundary.
 type RelationshipRole = 'PARENT' | 'CHILD' | 'SPOUSE' | 'SIBLING' | 'ADOPTED' | 'CUSTOM';
 
 interface RelationshipView {
-  relationshipId: string;
+  id: string; // canonical Relationship id
+  treeId: string;
   memberId: string;
   relatedMemberId: string;
   type: RelationType;
@@ -615,9 +616,9 @@ interface Relationship {
 `relationships.json` của các cây đã tồn tại có thể chứa cặp bản ghi đảo chiều do
 phiên bản cũ. Migration phải giữ lại một bản ghi canonical theo quy tắc
 `source=parent, target=child` cho PARENT_CHILD/ADOPTED, chuẩn hóa các quan hệ
-đối xứng theo một thứ tự ổn định, và ghi change log cho số bản ghi đã hợp nhất.
-Trong thời gian migration, reader có thể đọc dữ liệu cũ ở chế độ tương thích
-nhưng không được tạo thêm bản ghi đảo chiều mới.
+đối xứng theo một thứ tự ổn định. Audit log cho số bản ghi đã hợp nhất có thể
+được thực hiện ở lớp migration/bảo trì; lazy migration phải idempotent và
+không được tạo thêm bản ghi đảo chiều mới.
 
 // ===== Event =====
 type EventType = 'BIRTHDAY' | 'WEDDING' | 'FUNERAL' | 'REUNION' | 'ANNIVERSARY' | 'CUSTOM';

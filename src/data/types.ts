@@ -92,6 +92,15 @@ export interface Relationship {
   createdAt: string;
 }
 
+export type RelationshipRole = 'PARENT' | 'CHILD' | 'SPOUSE' | 'SIBLING' | 'ADOPTED' | 'CUSTOM';
+
+/** A member-perspective view of one canonical relationship record. */
+export interface RelationshipView extends Relationship {
+  memberId: string;
+  relatedMemberId: string;
+  role: RelationshipRole;
+}
+
 export interface Event {
   id: string;
   treeId: string;

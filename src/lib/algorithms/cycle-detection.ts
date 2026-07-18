@@ -1,13 +1,13 @@
 import type { Relationship } from '@/data/types';
+import { normalizeRelationships } from './relationship-normalization';
 
 /**
  * Returns true when adding `proposedSource -> proposedTarget` as a
  * PARENT_CHILD edge would introduce a cycle.
  *
- * Relationships are persisted in both directions by RelationshipService, but
- * the algorithm still treats each directed PARENT_CHILD edge as ancestry.
- * The service handles an already-present inverse as an idempotent retry before
- * invoking this algorithm.
+ * Only canonical parent→child edges participate in ancestry. Normalizing here
+ * also keeps validation safe for legacy input that still contains reciprocal
+ * rows before the blob migration has completed.
  */
 export function detectCycles(
   relationships: Relationship[],
@@ -17,7 +17,7 @@ export function detectCycles(
   if (!proposedSource || !proposedTarget || proposedSource === proposedTarget) return true;
 
   const parentToChildren = new Map<string, Set<string>>();
-  for (const relationship of relationships) {
+  for (const relationship of normalizeRelationships(relationships)) {
     if (relationship.type !== 'PARENT_CHILD') continue;
     const children = parentToChildren.get(relationship.sourceMemberId) ?? new Set<string>();
     children.add(relationship.targetMemberId);

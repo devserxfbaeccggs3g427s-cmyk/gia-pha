@@ -1,4 +1,5 @@
 import type { Album, ChangeLog, Event, FamilyTree, MediaMetadata, Member, Relationship, User } from '@/data/types';
+import { normalizeRelationships } from '@/lib/algorithms/relationship-normalization';
 import { BLOB_PATHS, writeBlob } from './client';
 
 export async function putUsers(users: User[]): Promise<void> {
@@ -14,7 +15,7 @@ export async function putMembers(treeId: string, members: Member[]): Promise<voi
 }
 
 export async function putRelationships(treeId: string, relationships: Relationship[]): Promise<void> {
-  await writeBlob(BLOB_PATHS.relationships(treeId), relationships);
+  await writeBlob(BLOB_PATHS.relationships(treeId), normalizeRelationships(relationships));
 }
 
 export async function putEvents(treeId: string, events: Event[]): Promise<void> {

@@ -50,18 +50,15 @@ describe('TreeService', () => {
     const forward = buildRelationship({
       id: 'forward', treeId: tree.id, sourceMemberId: root.id, targetMemberId: child.id
     });
-    const inverse = buildRelationship({
-      id: 'inverse', treeId: tree.id, sourceMemberId: child.id, targetMemberId: root.id
-    });
     await putTrees([tree]);
     await putMembers(tree.id, [root, child]);
-    await putRelationships(tree.id, [forward, inverse]);
+    await putRelationships(tree.id, [forward]);
     const service = new TreeService();
 
     await expect(service.getTreeWithMembers(tree.id)).resolves.toMatchObject({
       id: tree.id,
       members: [root, child],
-      relationships: [forward, inverse]
+      relationships: [forward]
     });
     await expect(service.calculateGenerations(tree.id)).resolves.toEqual(new Map([
       [root.id, 0],

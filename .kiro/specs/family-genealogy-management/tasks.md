@@ -110,8 +110,8 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Implement `mergeMember` with configurable merge strategy
     - _Requirements: 2.6_
 
-- [ ] 5. Align Relationship service with canonical relationship and generation rules
-  - [ ] 5.1 Refactor RelationshipService to persist one canonical relationship and derive inverse views
+- [x] 5. Align Relationship service with canonical relationship and generation rules
+  - [x] 5.1 Refactor RelationshipService to persist one canonical relationship and derive inverse views
     - Implement `src/lib/services/relationship-service.ts` with: createRelationship, deleteRelationship, getRelationshipsForMember
     - Persist one logical relationship record; do not persist a reversed PARENT_CHILD duplicate
     - Materialize inverse semantic views at the service/API boundary
@@ -122,11 +122,11 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Store marriage metadata: marriageDate, divorceDate, marriageStatus
     - _Requirements: 3.1, 3.2, 3.4, 3.6_
 
-  - [ ]* 5.2 Write property test for derived inverse relationship symmetry
+  - [x]* 5.2 Write property test for derived inverse relationship symmetry
     - **Property 6: Derived Inverse Relationship Symmetry**
     - **Validates: Requirements 3.2**
 
-  - [ ] 5.3 Refactor cycle detection for canonical parent→child edges
+  - [x] 5.3 Refactor cycle detection for canonical parent→child edges
     - Create `src/lib/algorithms/cycle-detection.ts` with `detectCycles` function
     - Prevent self-references and directed parent-child loops
     - Accept multiple parents converging on the same child when no directed cycle exists
@@ -135,11 +135,11 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Return specific error messages explaining why relationship is invalid
     - _Requirements: 3.3_
 
-  - [ ]* 5.4 Write property test for cycle detection correctness
+  - [x]* 5.4 Write property test for cycle detection correctness
     - **Property 7: Cycle Detection Correctness**
     - **Validates: Requirements 3.3**
 
-  - [ ] 5.5 Refactor generation calculation around spouse components
+  - [x] 5.5 Refactor generation calculation around spouse components
     - Create `src/lib/algorithms/generation.ts` with `calculateGenerations` function
     - Collapse spouse-connected members into one component before assigning generations
     - Components with no incoming parent-child edge = generation 0
@@ -147,13 +147,13 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - A spouse without recorded parents must not become an independent root
     - _Requirements: 3.5_
 
-  - [ ]* 5.6 Write property test for generation calculation invariants
+  - [x]* 5.6 Write property test for generation calculation invariants
     - **Property 8: Generation Calculation Invariants**
     - **Validates: Requirements 3.5**
 
-- [ ] 6. Checkpoint - Ensure revised member and relationship tests pass
-  - The new Property 7/8 contract tests are expected to expose the current implementation gap until tasks 5.1, 5.3 and 5.5 are complete.
-  - Ensure all tests pass after canonical relationship migration and spouse-component generation are implemented.
+- [x] 6. Checkpoint - Ensure revised member and relationship tests pass
+  - Canonical relationship migration, cycle detection and spouse-component generation are covered by unit/property tests.
+  - Full test suite passes after the implementation.
 
 - [x] 7. Implement Tree service and ancestry path
   - [x] 7.1 Create TreeService with CRUD operations

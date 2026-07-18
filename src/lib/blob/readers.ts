@@ -1,5 +1,7 @@
 import type { Album, ChangeLog, Event, FamilyTree, MediaMetadata, Member, Relationship, User } from '@/data/types';
+import { normalizeRelationships } from '@/lib/algorithms/relationship-normalization';
 import { BLOB_PATHS, readBlob } from './client';
+import { putRelationships } from './writers';
 
 export async function getUsers(): Promise<User[]> {
   return (await readBlob<User[]>(BLOB_PATHS.users())) ?? [];
@@ -14,7 +16,14 @@ export async function getMembers(treeId: string): Promise<Member[]> {
 }
 
 export async function getRelationships(treeId: string): Promise<Relationship[]> {
-  return (await readBlob<Relationship[]>(BLOB_PATHS.relationships(treeId))) ?? [];
+  const stored = (await readBlob<Relationship[]>(BLOB_PATHS.relationships(treeId))) ?? [];
+  const canonical = normalizeRelationships(stored);
+  // Lazy migration keeps legacy reciprocal rows from leaking into any reader.
+  // The writer is canonicalizing too, so concurrent reads remain idempotent.
+  if (JSON.stringify(stored) !== JSON.stringify(canonical)) {
+    await putRelationships(treeId, canonical);
+  }
+  return canonical;
 }
 
 export async function getEvents(treeId: string): Promise<Event[]> {

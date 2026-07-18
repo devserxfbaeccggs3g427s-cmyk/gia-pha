@@ -9,8 +9,7 @@ describe('Feature: family-genealogy-management, Property 9: Ancestry Path Validi
       fc.property(
         fc.array(fc.nat(), { minLength: 1, maxLength: 80 }),
         fc.nat(),
-        fc.boolean(),
-        (parentChoices, requestedTarget, persistInverse) => {
+        (parentChoices, requestedTarget) => {
           const memberCount = parentChoices.length + 1;
           const members = Array.from({ length: memberCount }, (_, index) => member(index));
           const canonical: Relationship[] = [];
@@ -20,18 +19,8 @@ describe('Feature: family-genealogy-management, Property 9: Ancestry Path Validi
             canonical.push(relationship(parent, child, `edge-${child}`));
           }
 
-          const relationships = persistInverse
-            ? canonical.flatMap((edge) => [
-                edge,
-                relationship(
-                  Number(edge.targetMemberId.slice(1)),
-                  Number(edge.sourceMemberId.slice(1)),
-                  `${edge.id}-inverse`
-                )
-              ])
-            : canonical;
           const targetId = `m${requestedTarget % memberCount}`;
-          const path = getAncestryPath(members, relationships, targetId);
+          const path = getAncestryPath(members, canonical, targetId);
 
           expect(path.length).toBeGreaterThan(0);
           expect(path.at(-1)?.id).toBe(targetId);

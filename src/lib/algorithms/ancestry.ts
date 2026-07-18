@@ -72,10 +72,8 @@ export function getCanonicalParentChildEdges(
     const reverseKey = edgeKey(target.id, source.id);
     if (accepted.has(key) || accepted.has(reverseKey)) continue;
 
-    // RelationshipService stores the derived inverse immediately after the
-    // canonical parent -> child record. Keeping the first direction makes the
-    // ancestry algorithm compatible with that persisted representation while
-    // remaining correct for ordinary one-way fixtures/imports.
+    // Legacy reciprocal rows are tolerated during migration. New persistence
+    // contains only the canonical parent -> child direction.
     accepted.add(key);
     edges.push({ parentId: source.id, childId: target.id });
   }

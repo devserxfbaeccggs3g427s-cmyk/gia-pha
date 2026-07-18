@@ -16,7 +16,7 @@ export type RelationshipMutation =
 interface RelationshipMutationContext {
   previous?: Relationship[];
   hadCache?: boolean;
-  temporaryIds?: string[];
+  temporaryId?: string;
 }
 
 export function useRelationshipMutation(treeId: string) {
@@ -36,32 +36,21 @@ export function useRelationshipMutation(treeId: string) {
       if (variables.operation === 'create') {
         const createdAt = new Date().toISOString();
         const directId = temporaryId('relationship');
-        const inverseId = temporaryId('relationship');
         const direct: Relationship = { ...variables.data, id: directId, treeId, createdAt };
-        const inverse: Relationship = {
-          ...direct, id: inverseId,
-          sourceMemberId: direct.targetMemberId,
-          targetMemberId: direct.sourceMemberId
-        };
-        queryClient.setQueryData<Relationship[]>(queryKeys.relationships(treeId), (current = []) => [...current, direct, inverse]);
-        return { previous, hadCache: cached !== undefined, temporaryIds: [directId, inverseId] };
+        queryClient.setQueryData<Relationship[]>(queryKeys.relationships(treeId), (current = []) => [...current, direct]);
+        return { previous, hadCache: cached !== undefined, temporaryId: directId };
       }
       queryClient.setQueryData<Relationship[]>(queryKeys.relationships(treeId), (current = []) => {
         const target = current.find((item) => item.id === variables.relationshipId);
         if (!target) return current;
-        return current.filter((item) => item.id !== target.id && !(
-          item.sourceMemberId === target.targetMemberId &&
-          item.targetMemberId === target.sourceMemberId &&
-          item.type === target.type &&
-          (item.customType ?? '') === (target.customType ?? '')
-        ));
+        return current.filter((item) => item.id !== target.id);
       });
       return { previous, hadCache: cached !== undefined };
     },
     onSuccess: (result, variables, context) => {
       if (variables.operation !== 'create' || !result) return;
       queryClient.setQueryData<Relationship[]>(queryKeys.relationships(treeId), (current = []) => current.map((item) =>
-        item.id === context?.temporaryIds?.[0] ? result : item
+        item.id === context?.temporaryId ? result : item
       ));
     },
     onError: (error, variables, context) => {

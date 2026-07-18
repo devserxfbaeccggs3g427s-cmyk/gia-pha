@@ -1,11 +1,12 @@
 import { nanoid } from 'nanoid';
 import { ZodError } from 'zod';
 import { createRelationshipSchema, type CreateRelationshipInput } from '@/data/schemas';
-import type { MarriageStatus, RelationType, Relationship } from '@/data/types';
+import type { MarriageStatus, RelationType, Relationship, RelationshipRole, RelationshipView } from '@/data/types';
 import type { ValidationResult } from '@/types/api';
 import { getMembers, getRelationships } from '@/lib/blob/readers';
 import { putRelationships } from '@/lib/blob/writers';
 import { detectCycles as detectRelationshipCycles } from '@/lib/algorithms/cycle-detection';
+import { logicalRelationshipKey, normalizeRelationship } from '@/lib/algorithms/relationship-normalization';
 import { changeLogService } from './changelog-service';
 
 export type RelationshipMutationActor = string | { userId?: string } | undefined;
@@ -39,38 +40,16 @@ export class RelationshipService {
 
     const now = new Date().toISOString();
     const relationship = toRelationship(treeId, input, nanoid(), now);
-    const inverse = toRelationship(
+    await putRelationships(treeId, [...relationships, relationship]);
+    await changeLogService.recordChange({
       treeId,
-      {
-        ...input,
-        sourceMemberId: input.targetMemberId,
-        targetMemberId: input.sourceMemberId
-      },
-      nanoid(),
-      now
-    );
-
-    // A pre-existing reciprocal record can occur after a partial retry. Keep
-    // it and only write the missing side, making creation idempotent for the
-    // same logical relationship.
-    const hasSame = relationships.some((candidate) => sameDirected(candidate, relationship));
-    const hasInverse = relationships.some((candidate) => sameDirected(candidate, inverse));
-    const next = [...relationships];
-    if (!hasSame) next.push(relationship);
-    if (!hasInverse) next.push(inverse);
-    if (next.length !== relationships.length) await putRelationships(treeId, next);
-
-    if (!hasSame || !hasInverse) {
-      await changeLogService.recordChange({
-        treeId,
-        userId: actorId(actor),
-        action: 'CREATE',
-        entityType: 'RELATIONSHIP',
-        newData: relationship as unknown as Record<string, unknown>,
-        createdAt: now
-      });
-    }
-    return relationships.find((candidate) => sameDirected(candidate, relationship)) ?? relationship;
+      userId: actorId(actor),
+      action: 'CREATE',
+      entityType: 'RELATIONSHIP',
+      newData: relationship as unknown as Record<string, unknown>,
+      createdAt: now
+    });
+    return relationship;
   }
 
   async deleteRelationship(
@@ -85,11 +64,7 @@ export class RelationshipService {
     const relationship = relationships.find((candidate) => candidate.id === relationshipId);
     if (!relationship) throw new RelationshipServiceError('NOT_FOUND', 'Relationship not found');
 
-    const remaining = relationships.filter(
-      (candidate) =>
-        candidate.id !== relationship.id &&
-        !isInverse(candidate, relationship)
-    );
+    const remaining = relationships.filter((candidate) => candidate.id !== relationship.id);
     await putRelationships(treeId, remaining);
     await changeLogService.recordChange({
       treeId,
@@ -117,13 +92,12 @@ export class RelationshipService {
     return validateInput(input, members, relationships);
   }
 
-  async getRelationshipsForMember(treeId: string, memberId: string): Promise<Relationship[]> {
+  async getRelationshipsForMember(treeId: string, memberId: string): Promise<RelationshipView[]> {
     if (!treeId?.trim() || !memberId?.trim()) return [];
     const relationships = await getRelationships(treeId);
-    return relationships.filter(
-      (relationship) =>
-        relationship.sourceMemberId === memberId || relationship.targetMemberId === memberId
-    );
+    return relationships
+      .filter((relationship) => relationship.sourceMemberId === memberId || relationship.targetMemberId === memberId)
+      .map((relationship) => toRelationshipView(relationship, memberId));
   }
 
   async detectCycles(treeId: string, proposedRelation: CreateRelationshipInput): Promise<boolean> {
@@ -138,9 +112,8 @@ export class RelationshipService {
   }
 
   getInverseRelationType(type: RelationType): RelationType {
-    // Every currently supported relation is represented as a directed record
-    // and has the same domain type when reversed (the source/target fields
-    // carry the direction for PARENT_CHILD).
+    // Inverse semantics are materialized as a RelationshipView; the persisted
+    // relationship remains one canonical logical record.
     switch (type) {
       case 'PARENT_CHILD':
       case 'SPOUSE':
@@ -165,12 +138,9 @@ function validateInput(
   if (!memberIds.has(input.targetMemberId)) errors.push(`Target member "${input.targetMemberId}" was not found`);
   if (input.sourceMemberId === input.targetMemberId) errors.push('A member cannot be related to itself');
 
-  const duplicate = relationships.some((relationship) =>
-    relationship.sourceMemberId === input.sourceMemberId &&
-    relationship.targetMemberId === input.targetMemberId &&
-    relationship.type === input.type &&
-    (relationship.customType ?? '') === (input.customType ?? '')
-  );
+  const candidate = toRelationship('validation', input, 'validation', '1970-01-01T00:00:00.000Z');
+  const candidateKey = logicalRelationshipKey(candidate);
+  const duplicate = relationships.some((relationship) => logicalRelationshipKey(relationship) === candidateKey);
   if (duplicate) errors.push('This relationship already exists');
 
   if (input.marriageDate && input.divorceDate && new Date(input.divorceDate) < new Date(input.marriageDate)) {
@@ -192,7 +162,7 @@ function toRelationship(
   id: string,
   createdAt: string
 ): Relationship {
-  return {
+  return normalizeRelationship({
     id,
     treeId,
     sourceMemberId: input.sourceMemberId,
@@ -203,21 +173,26 @@ function toRelationship(
     ...(input.divorceDate !== undefined ? { divorceDate: input.divorceDate } : {}),
     ...(input.marriageStatus !== undefined ? { marriageStatus: input.marriageStatus as MarriageStatus } : {}),
     createdAt
+  });
+}
+
+function toRelationshipView(relationship: Relationship, memberId: string): RelationshipView {
+  const isSource = relationship.sourceMemberId === memberId;
+  const relatedMemberId = isSource ? relationship.targetMemberId : relationship.sourceMemberId;
+  return {
+    ...relationship,
+    memberId,
+    relatedMemberId,
+    role: relationshipRole(relationship.type, isSource)
   };
 }
 
-function sameDirected(a: Relationship, b: Relationship): boolean {
-  return a.sourceMemberId === b.sourceMemberId &&
-    a.targetMemberId === b.targetMemberId &&
-    a.type === b.type &&
-    (a.customType ?? '') === (b.customType ?? '');
-}
-
-function isInverse(candidate: Relationship, original: Relationship): boolean {
-  return candidate.sourceMemberId === original.targetMemberId &&
-    candidate.targetMemberId === original.sourceMemberId &&
-    candidate.type === original.type &&
-    (candidate.customType ?? '') === (original.customType ?? '');
+function relationshipRole(type: RelationType, isSource: boolean): RelationshipRole {
+  if (type === 'PARENT_CHILD') return isSource ? 'PARENT' : 'CHILD';
+  if (type === 'ADOPTED') return isSource ? 'PARENT' : 'ADOPTED';
+  if (type === 'SPOUSE') return 'SPOUSE';
+  if (type === 'SIBLING') return 'SIBLING';
+  return 'CUSTOM';
 }
 
 function actorId(actor: RelationshipMutationActor): string {

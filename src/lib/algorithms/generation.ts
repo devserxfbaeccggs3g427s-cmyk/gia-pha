@@ -4,82 +4,110 @@ import { getCanonicalParentChildEdges } from './ancestry';
 export type GenerationMap = Map<string, number>;
 
 /**
- * Calculates relative generations using a breadth-first traversal.
- * Members without a parent are roots (generation 0), spouses inherit the
- * same generation and children are assigned parent generation + 1.
+ * Calculates relative generations after collapsing spouse-connected members
+ * into components. A spouse without recorded parents therefore inherits the
+ * component's generation instead of becoming an independent root.
  */
 export function calculateGenerations(
   members: Member[],
   relationships: Relationship[]
 ): GenerationMap {
   const memberIds = new Set(members.map((member) => member.id));
-  const parentToChildren = new Map<string, Set<string>>();
-  const childIds = new Set<string>();
-  const spouseByMember = new Map<string, Set<string>>();
+  const components = new DisjointSet([...memberIds]);
+  for (const relationship of relationships) {
+    if (relationship.type !== 'SPOUSE') continue;
+    if (!memberIds.has(relationship.sourceMemberId) || !memberIds.has(relationship.targetMemberId)) continue;
+    components.union(relationship.sourceMemberId, relationship.targetMemberId);
+  }
+
+  const componentIds = new Set([...memberIds].map((id) => components.find(id)));
+  const childrenByComponent = new Map<string, Set<string>>();
+  const indegree = new Map<string, number>([...componentIds].map((id) => [id, 0]));
+  const componentEdges = new Set<string>();
 
   for (const { parentId, childId } of getCanonicalParentChildEdges(members, relationships)) {
-    const children = parentToChildren.get(parentId) ?? new Set<string>();
-    children.add(childId);
-    parentToChildren.set(parentId, children);
-    childIds.add(childId);
+    const parentComponent = components.find(parentId);
+    const childComponent = components.find(childId);
+    // A parent-child edge inside one spouse component is malformed. It cannot
+    // advance a generation and is ignored here; relationship validation should
+    // reject it before this algorithm is called.
+    if (parentComponent === childComponent) continue;
+    const edgeKey = `${parentComponent}\u0000${childComponent}`;
+    if (componentEdges.has(edgeKey)) continue;
+    componentEdges.add(edgeKey);
+    const children = childrenByComponent.get(parentComponent) ?? new Set<string>();
+    children.add(childComponent);
+    childrenByComponent.set(parentComponent, children);
+    indegree.set(childComponent, (indegree.get(childComponent) ?? 0) + 1);
   }
 
-  for (const relationship of relationships) {
-    if (!memberIds.has(relationship.sourceMemberId) || !memberIds.has(relationship.targetMemberId)) {
-      continue;
+  const generationByComponent = new Map<string, number>();
+  const queue: string[] = [];
+  for (const componentId of componentIds) {
+    if ((indegree.get(componentId) ?? 0) === 0) {
+      generationByComponent.set(componentId, 0);
+      queue.push(componentId);
     }
-    if (relationship.type === 'SPOUSE') {
-      const sourceSpouses = spouseByMember.get(relationship.sourceMemberId) ?? new Set<string>();
-      sourceSpouses.add(relationship.targetMemberId);
-      spouseByMember.set(relationship.sourceMemberId, sourceSpouses);
-      const targetSpouses = spouseByMember.get(relationship.targetMemberId) ?? new Set<string>();
-      targetSpouses.add(relationship.sourceMemberId);
-      spouseByMember.set(relationship.targetMemberId, targetSpouses);
-    }
   }
 
-  const generations: GenerationMap = new Map();
-  const queue: Array<{ id: string; generation: number }> = [];
-  for (const member of members) {
-    if (!childIds.has(member.id)) queue.push({ id: member.id, generation: 0 });
+  // Keep the function total for malformed imported graphs. Valid data always
+  // has at least one root component because cycle validation runs on writes.
+  if (queue.length === 0 && componentIds.size > 0) {
+    const first = [...componentIds][0];
+    generationByComponent.set(first, 0);
+    queue.push(first);
   }
-
-  // A malformed/cyclic graph can have no roots. Starting any unvisited node
-  // at zero keeps the function total and makes the problematic component
-  // visible to callers instead of silently dropping members.
-  if (queue.length === 0 && members.length > 0) queue.push({ id: members[0].id, generation: 0 });
 
   while (queue.length > 0) {
-    const { id, generation } = queue.shift()!;
-    const existing = generations.get(id);
-    if (existing !== undefined) {
-      // A shorter path is the stable result for a graph with multiple roots.
-      if (generation >= existing) continue;
-      generations.set(id, generation);
-    } else {
-      generations.set(id, generation);
-    }
-
-    for (const spouseId of spouseByMember.get(id) ?? []) {
-      const spouseGeneration = generations.get(spouseId);
-      if (spouseGeneration === undefined || spouseGeneration !== generation) {
-        queue.push({ id: spouseId, generation });
+    const parentComponent = queue.shift()!;
+    const parentGeneration = generationByComponent.get(parentComponent) ?? 0;
+    for (const childComponent of childrenByComponent.get(parentComponent) ?? []) {
+      const candidate = parentGeneration + 1;
+      const current = generationByComponent.get(childComponent);
+      // Multiple parents should normally have the same generation. Taking the
+      // deepest constraint keeps malformed imported data deterministic while
+      // valid trees still satisfy child = parent + 1 for every edge.
+      if (current === undefined || candidate > current) {
+        generationByComponent.set(childComponent, candidate);
       }
-    }
-    for (const childId of parentToChildren.get(id) ?? []) {
-      const childGeneration = generation + 1;
-      const known = generations.get(childId);
-      if (known === undefined || childGeneration < known) {
-        queue.push({ id: childId, generation: childGeneration });
-      }
+      indegree.set(childComponent, (indegree.get(childComponent) ?? 1) - 1);
+      if ((indegree.get(childComponent) ?? 0) <= 0) queue.push(childComponent);
     }
   }
 
-  // Include isolated members and any nodes left in a malformed component.
-  for (const member of members) {
-    if (!generations.has(member.id)) generations.set(member.id, 0);
+  return new Map(members.map((member) => [
+    member.id,
+    generationByComponent.get(components.find(member.id)) ?? 0
+  ]));
+}
+
+class DisjointSet {
+  private readonly parent = new Map<string, string>();
+
+  constructor(ids: string[]) {
+    for (const id of ids) this.parent.set(id, id);
   }
-  return generations;
+
+  find(id: string): string {
+    const parent = this.parent.get(id);
+    if (parent === undefined) {
+      this.parent.set(id, id);
+      return id;
+    }
+    if (parent === id) return id;
+    const root = this.find(parent);
+    this.parent.set(id, root);
+    return root;
+  }
+
+  union(left: string, right: string): void {
+    const leftRoot = this.find(left);
+    const rightRoot = this.find(right);
+    if (leftRoot === rightRoot) return;
+    // Stable root selection makes maps and layouts deterministic.
+    if (leftRoot < rightRoot) this.parent.set(rightRoot, leftRoot);
+    else this.parent.set(leftRoot, rightRoot);
+  }
 }
 
 export default calculateGenerations;
