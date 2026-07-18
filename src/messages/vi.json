@@ -66,6 +66,10 @@
     "activeTrees": "gia phả đang quản lý",
     "upcoming": "Không có sự kiện trong 7 ngày tới",
     "upcomingHint": "Các sinh nhật, ngày cưới và dấu mốc quan trọng sẽ xuất hiện tại đây.",
+    "upcomingLoading": "Đang tải sự kiện sắp tới",
+    "upcomingEmpty": "Không có sự kiện nào trong 7 ngày tới.",
+    "upcomingToday": "Hôm nay",
+    "upcomingInDays": "Còn {count} ngày",
     "getStarted": "Bắt đầu xây dựng gia phả",
     "getStartedHint": "Tạo không gian riêng cho gia đình và mời người thân cùng đóng góp.",
     "stepOne": "Tạo gia phả đầu tiên",
@@ -78,11 +82,25 @@
   },
   "trees": {
     "metaTitle": "Gia phả của tôi | Quản lý gia phả",
+    "eyebrow": "Không gian gia đình",
     "title": "Gia phả của tôi",
     "subtitle": "Chọn một không gian để tiếp tục câu chuyện gia đình.",
     "emptyTitle": "Chưa có gia phả nào",
     "emptyDescription": "Tạo gia phả đầu tiên để bắt đầu lưu giữ các thế hệ, mối quan hệ và kỷ niệm.",
-    "create": "Tạo gia phả đầu tiên"
+    "create": "Tạo gia phả mới",
+    "createTitle": "Tạo gia phả mới",
+    "createDescription": "Tạo một không gian riêng để lưu giữ câu chuyện của gia đình.",
+    "name": "Tên gia phả",
+    "description": "Mô tả",
+    "noDescription": "Chưa có mô tả",
+    "members": "{count} thành viên",
+    "open": "Mở gia phả",
+    "cancel": "Hủy",
+    "saving": "Đang tạo…",
+    "submit": "Tạo gia phả",
+    "created": "Đã tạo gia phả",
+    "retry": "Thử lại",
+    "errors": {"generic": "Không thể tải hoặc tạo gia phả."}
   },
   "treeViewer": {
     "metaTitle": "Cây gia phả | Quản lý gia phả",
@@ -137,6 +155,39 @@
     "generationFull": "Thế hệ thứ {generation}",
     "selectMember": "Chọn {name}",
     "memberNodeLabel": "{name}, thế hệ {generation}, {status}"
+  },
+  "membersPage": {
+    "metaTitle": "Thành viên | Quản lý gia phả",
+    "detailMetaTitle": "Hồ sơ thành viên | Quản lý gia phả",
+    "eyebrow": "Hồ sơ gia đình",
+    "title": "Thành viên",
+    "description": "Quản lý thông tin, câu chuyện và các mối liên kết của từng người trong gia phả.",
+    "search": "Tìm theo tên, biệt danh, nghề nghiệp…",
+    "count": "{count} thành viên",
+    "updatedHint": "Thông tin được cập nhật theo thời gian thực",
+    "unknownYear": "Chưa rõ năm sinh",
+    "noDetails": "Chưa có thông tin bổ sung",
+    "generation": "Đời {generation}",
+    "updated": "Cập nhật {date}",
+    "gender": {"male": "Nam", "female": "Nữ", "other": "Khác"},
+    "status": {"alive": "Còn sống", "deceased": "Đã mất"},
+    "filters": {"allStatus": "Mọi trạng thái", "alive": "Còn sống", "deceased": "Đã mất", "allGender": "Mọi giới tính"},
+    "empty": {"title": "Chưa có thành viên nào", "description": "Thêm người đầu tiên để bắt đầu kết nối các thế hệ.", "searchTitle": "Không tìm thấy thành viên", "searchDescription": "Thử một từ khóa khác hoặc xóa bớt bộ lọc."},
+    "actions": {"add": "Thêm thành viên", "cancel": "Hủy", "saving": "Đang lưu…", "save": "Lưu thay đổi", "loading": "Đang kiểm tra…", "retry": "Thử lại", "edit": "Chỉnh sửa", "delete": "Xóa", "back": "Quay lại"},
+    "form": {"firstName": "Tên", "lastName": "Họ và tên đệm", "nickname": "Tên thường gọi", "gender": "Giới tính", "dateOfBirth": "Ngày sinh", "dateOfDeath": "Ngày mất", "placeOfBirth": "Nơi sinh", "currentAddress": "Địa chỉ hiện tại", "phone": "Số điện thoại", "email": "Email", "occupation": "Nghề nghiệp", "education": "Học vấn", "avatarUrl": "Ảnh đại diện (URL)", "avatarHint": "Có thể thêm liên kết ảnh công khai.", "biography": "Tiểu sử", "achievements": "Thành tựu", "notes": "Ghi chú", "isAlive": "Thành viên còn sống", "requiredName": "Vui lòng nhập họ và tên.", "invalidDates": "Ngày mất không thể trước ngày sinh."},
+    "createTitle": "Thêm thành viên mới", "editTitle": "Chỉnh sửa hồ sơ", "editDescription": "Mọi thay đổi sẽ được ghi vào lịch sử hoạt động của gia phả.",
+    "errors": {"generic": "Không thể hoàn tất thao tác. Vui lòng thử lại.", "notFound": "Không tìm thấy thành viên này."},
+    "toasts": {"created": "Đã thêm thành viên", "updated": "Đã cập nhật hồ sơ", "failed": "Thao tác chưa hoàn tất"},
+    "relationship": {"title": "Mối quan hệ", "description": "Kết nối {name} với một thành viên khác.", "type": "Loại quan hệ", "parentChild": "Cha / mẹ – con", "spouse": "Vợ / chồng", "sibling": "Anh / chị / em", "adopted": "Con nuôi", "custom": "Tùy chỉnh", "otherMember": "Thành viên liên quan", "direction": "Vai trò của thành viên hiện tại", "currentIsParent": "Là cha / mẹ", "currentIsChild": "Là con", "customType": "Tên quan hệ", "marriageDate": "Ngày kết hôn", "divorceDate": "Ngày ly hôn", "status": "Trạng thái hôn nhân", "married": "Đang kết hôn", "divorced": "Đã ly hôn", "widowed": "Góa", "validation": "Không thể tạo mối quan hệ", "create": "Tạo quan hệ", "deleted": "Đã xóa mối quan hệ", "count": "{count} mối quan hệ", "add": "Thêm", "empty": "Chưa có mối quan hệ nào.", "remove": "Xóa mối quan hệ", "types": {"PARENT_CHILD": "Cha / mẹ – con", "SPOUSE": "Vợ / chồng", "SIBLING": "Anh / chị / em", "ADOPTED": "Con nuôi", "CUSTOM": "Tùy chỉnh"}},
+    "delete": {"title": "Xóa thành viên", "description": "Bạn sắp xóa {name}. Hành động này không thể hoàn tác.", "impact": "Các dữ liệu liên quan sẽ được cập nhật như sau:", "relationships": "{count} mối quan hệ bị ảnh hưởng", "events": "{count} sự kiện sẽ bỏ liên kết", "media": "{count} tư liệu chỉ thuộc thành viên này sẽ bị xóa", "confirm": "Xác nhận xóa"},
+    "detail": {"birth": "Ngày sinh", "birthPlace": "Nơi sinh", "occupation": "Nghề nghiệp", "lifespan": "Tuổi thọ", "years": "tuổi", "story": "Câu chuyện", "storyHint": "Những điều gia đình muốn lưu lại.", "noStory": "Chưa có tiểu sử cho thành viên này.", "events": "Sự kiện tham gia", "eventsHint": "Các cột mốc có liên kết đến hồ sơ.", "noEvents": "Chưa có sự kiện nào."}
+  },
+  "eventsPage": {
+    "metaTitle": "Sự kiện | Quản lý gia phả", "eyebrow": "Dòng thời gian gia đình", "title": "Sự kiện & cột mốc", "description": "Lưu giữ những ngày đáng nhớ và kết nối chúng với người thân, hình ảnh và câu chuyện.", "count": "{count} sự kiện", "members": "{count} người tham gia", "media": "{count} tư liệu", "actions": {"add": "Tạo sự kiện", "cancel": "Hủy", "saving": "Đang lưu…", "save": "Lưu sự kiện", "retry": "Thử lại", "edit": "Chỉnh sửa", "delete": "Xóa", "view": "Xem chi tiết"},
+    "filters": {"all": "Tất cả", "upcoming": "Trong 7 ngày"}, "types": {"BIRTHDAY": "Sinh nhật", "WEDDING": "Đám cưới", "FUNERAL": "Tang lễ", "REUNION": "Họp mặt", "ANNIVERSARY": "Lễ kỷ niệm", "CUSTOM": "Tùy chỉnh"}, "upcoming": {"title": "Sắp diễn ra", "description": "Những dấu mốc trong 7 ngày tới.", "today": "Hôm nay", "days": "Còn {count} ngày"}, "empty": {"title": "Chưa có sự kiện", "description": "Tạo cột mốc đầu tiên để bắt đầu dòng thời gian gia đình."}, "createTitle": "Tạo sự kiện mới", "editTitle": "Chỉnh sửa sự kiện", "form": {"type": "Loại sự kiện", "title": "Tên sự kiện", "titlePlaceholder": "Ví dụ: Họp mặt đại gia đình 2025", "customType": "Tên loại tùy chỉnh", "date": "Ngày", "location": "Địa điểm", "locationPlaceholder": "Nhà thờ họ, thành phố…", "description": "Mô tả", "descriptionHint": "Thêm người tham gia và tư liệu để câu chuyện đầy đủ hơn.", "members": "Thành viên tham gia", "media": "Tư liệu đính kèm", "requiredTitle": "Vui lòng nhập tên sự kiện.", "requiredCustom": "Vui lòng nhập tên loại sự kiện tùy chỉnh."}, "detail": {"date": "Ngày", "location": "Địa điểm", "members": "Thành viên liên quan ({count})", "media": "Tư liệu ({count})", "noMembers": "Chưa có thành viên liên quan.", "noMedia": "Chưa có tư liệu đính kèm.", "noDescription": "Chưa có mô tả cho sự kiện này."}, "delete": {"confirmation": "Xóa sự kiện “{title}”?"}, "toasts": {"created": "Đã tạo sự kiện", "updated": "Đã cập nhật sự kiện", "deleted": "Đã xóa sự kiện", "failed": "Thao tác chưa hoàn tất"}, "errors": {"generic": "Không thể tải dữ liệu sự kiện."}
+  },
+  "mediaPage": {
+    "metaTitle": "Thư viện | Quản lý gia phả", "eyebrow": "Kho tư liệu gia đình", "title": "Thư viện media", "description": "Lưu giữ ảnh và tài liệu an toàn, sắp xếp theo album và kết nối với câu chuyện gia đình.", "count": "{count} tư liệu", "sortedByDate": "Mới nhất trước", "actions": {"upload": "Tải lên", "album": "Tạo album", "cancel": "Hủy", "remove": "Bỏ tệp", "retry": "Thử lại", "delete": "Xóa", "openOriginal": "Mở bản gốc"}, "filters": {"all": "Tất cả ({count})"}, "empty": {"title": "Thư viện đang chờ kỷ niệm đầu tiên", "description": "Tải ảnh JPEG, PNG, WebP hoặc tài liệu PDF tối đa 10MB để bắt đầu."}, "upload": {"title": "Tải tư liệu lên", "description": "Chọn nhiều tệp cùng lúc và gắn chúng với thành viên, sự kiện hoặc album.", "drop": "Kéo thả tệp vào đây hoặc bấm để chọn", "allowed": "JPEG, PNG, WebP hoặc PDF · tối đa 10MB mỗi tệp", "progress": "Đang tải lên", "uploading": "Đang tải…", "submit": "Bắt đầu tải lên"}, "form": {"members": "Gắn với thành viên", "events": "Gắn với sự kiện", "album": "Album", "noAlbum": "Không thuộc album", "takenAt": "Thời gian chụp", "caption": "Chú thích"}, "validation": {"type": "{name}: định dạng không được hỗ trợ.", "size": "{name}: kích thước vượt quá 10MB.", "empty": "Vui lòng chọn ít nhất một tệp."}, "album": {"title": "Tạo album ảnh", "description": "Nhóm những kỷ niệm theo chủ đề để tìm lại dễ dàng hơn.", "name": "Tên album", "about": "Mô tả", "create": "Tạo album"}, "delete": {"confirmation": "Xóa tư liệu “{name}”?"}, "toasts": {"uploaded": "Đã tải lên {count} tư liệu", "albumCreated": "Đã tạo album", "deleted": "Đã xóa tư liệu", "failed": "Thao tác chưa hoàn tất"}, "errors": {"generic": "Không thể tải dữ liệu thư viện."}
   },
   "settingsPage": {
     "description": "Quản lý tùy chọn không gian làm việc và quyền riêng tư.",

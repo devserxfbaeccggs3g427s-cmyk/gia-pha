@@ -326,31 +326,31 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Apply color scheme based on gender/generation/status
     - _Requirements: 4.2, 4.5_
 
-- [ ] 17. Checkpoint - Ensure tree viewer and UI tests pass
+- [x] 17. Checkpoint - Ensure tree viewer and UI tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 18. Implement Member, Event, and Media UI pages
-  - [ ] 18.1 Create Member management pages
+- [x] 18. Implement Member, Event, and Media UI pages
+  - [x] 18.1 Create Member management pages
     - Implement member list page: `src/app/[locale]/(dashboard)/trees/[treeId]/members/page.tsx`
     - Implement member detail page with edit form
     - Implement member creation form with Zod validation and optimistic updates
     - Show delete confirmation with affected relationships list
     - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-  - [ ] 18.2 Create Relationship management UI
+  - [x] 18.2 Create Relationship management UI
     - Implement relationship creation form with type selection
     - Show cycle detection errors inline
     - Display member's relationships list with navigation
     - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-  - [ ] 18.3 Create Event management pages
+  - [x] 18.3 Create Event management pages
     - Implement event list with interactive timeline view
     - Implement event creation/edit form
     - Display related members and attached media per event
     - Show upcoming events (within 7 days) on dashboard
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6_
 
-  - [ ] 18.4 Create Media gallery and upload UI
+  - [x] 18.4 Create Media gallery and upload UI
     - Implement media gallery with grid layout and lightbox viewer
     - Implement drag-and-drop upload with progress indicator
     - Show file type/size validation errors

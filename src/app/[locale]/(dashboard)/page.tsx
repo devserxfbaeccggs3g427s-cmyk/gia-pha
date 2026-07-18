@@ -4,6 +4,7 @@ import { ArrowUpRight, CalendarDays, Camera, GitBranch, Leaf, LockKeyhole, Netwo
 import { Link } from '@/i18n/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { DashboardUpcomingEvents } from '@/components/genealogy/dashboard-upcoming-events';
 
 interface DashboardPageProps { params: { locale: string }; }
 
@@ -51,7 +52,7 @@ export default async function DashboardPage() {
         </Card>
         <Card>
           <CardHeader><CardTitle className="font-display text-xl font-medium">{t('upcoming')}</CardTitle><CardDescription>{t('upcomingHint')}</CardDescription></CardHeader>
-          <CardContent><div className="flex min-h-24 items-center gap-3 rounded-xl border border-dashed border-border bg-muted/35 px-4 text-sm text-muted-foreground"><CalendarDays className="size-4 shrink-0" aria-hidden="true" /><span>{t('upcomingHint')}</span></div></CardContent>
+          <CardContent><DashboardUpcomingEvents /></CardContent>
         </Card>
       </section>
 
