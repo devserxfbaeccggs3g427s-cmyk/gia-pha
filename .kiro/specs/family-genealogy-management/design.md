@@ -298,14 +298,30 @@ interface MemberService {
 ```
 
 #### RelationshipService
-Quản lý mối quan hệ giữa các thành viên. Đọc/ghi từ `relationships.json` blob.
+Quản lý mối quan hệ giữa các thành viên. Đọc/ghi quan hệ chuẩn từ
+`relationships.json` blob và materialize góc nhìn theo từng Member ở service
+boundary.
 
 ```typescript
+type RelationshipRole = 'PARENT' | 'CHILD' | 'SPOUSE' | 'SIBLING' | 'ADOPTED' | 'CUSTOM';
+
+interface RelationshipView {
+  relationshipId: string;
+  memberId: string;
+  relatedMemberId: string;
+  type: RelationType;
+  role: RelationshipRole;
+  customType?: string;
+  marriageDate?: string;
+  divorceDate?: string;
+  marriageStatus?: MarriageStatus;
+}
+
 interface RelationshipService {
   createRelationship(treeId: string, data: CreateRelationshipInput): Promise<Relationship>;
   deleteRelationship(treeId: string, relationshipId: string): Promise<void>;
   validateRelationship(treeId: string, data: CreateRelationshipInput): Promise<ValidationResult>;
-  getRelationshipsForMember(treeId: string, memberId: string): Promise<Relationship[]>;
+  getRelationshipsForMember(treeId: string, memberId: string): Promise<RelationshipView[]>;
   detectCycles(treeId: string, proposedRelation: CreateRelationshipInput): Promise<boolean>;
   getInverseRelationType(type: RelationType): RelationType;
 }
@@ -582,6 +598,10 @@ type MarriageStatus = 'MARRIED' | 'DIVORCED' | 'WIDOWED';
 interface Relationship {
   id: string;
   treeId: string;
+  // One logical relationship is persisted exactly once.
+  // For PARENT_CHILD/ADOPTED: source is parent, target is child.
+  // For SPOUSE/SIBLING: the endpoints are symmetric and their inverse view
+  // is materialized at the service/API boundary, not persisted as a second row.
   sourceMemberId: string;
   targetMemberId: string;
   type: RelationType;
@@ -591,6 +611,13 @@ interface Relationship {
   marriageStatus?: MarriageStatus;
   createdAt: string;
 }
+
+`relationships.json` của các cây đã tồn tại có thể chứa cặp bản ghi đảo chiều do
+phiên bản cũ. Migration phải giữ lại một bản ghi canonical theo quy tắc
+`source=parent, target=child` cho PARENT_CHILD/ADOPTED, chuẩn hóa các quan hệ
+đối xứng theo một thứ tự ổn định, và ghi change log cho số bản ghi đã hợp nhất.
+Trong thời gian migration, reader có thể đọc dữ liệu cũ ở chế độ tương thích
+nhưng không được tạo thêm bản ghi đảo chiều mới.
 
 // ===== Event =====
 type EventType = 'BIRTHDAY' | 'WEDDING' | 'FUNERAL' | 'REUNION' | 'ANNIVERSARY' | 'CUSTOM';
@@ -723,67 +750,48 @@ export const createEventSchema = z.object({
 
 #### 1. Generation Calculation Algorithm
 
-Thuật toán tính đời (generation) in-memory từ parsed JSON data:
+Thuật toán tính đời (generation) in-memory từ các quan hệ chuẩn. Trước khi
+duyệt quan hệ cha/mẹ-con, thuật toán gom các thành viên nối với nhau bằng quan
+hệ vợ-chồng thành một spouse component. Mỗi component là một node trong đồ thị
+đời, nhờ đó một người chưa khai báo cha/mẹ nhưng đã có vợ/chồng không bị coi là
+một root độc lập.
 
 ```typescript
 function calculateGenerations(
   members: Member[],
   relationships: Relationship[]
 ): Map<string, number> {
-  const parentChildRels = relationships.filter(r => r.type === 'PARENT_CHILD');
-  const childToParents = new Map<string, string[]>();
-  const parentToChildren = new Map<string, string[]>();
+  const spouseComponents = unionFind(
+    members.map(member => member.id),
+    relationships.filter(rel => rel.type === 'SPOUSE')
+  );
+  const componentGraph = buildComponentGraph(
+    spouseComponents,
+    relationships.filter(rel => rel.type === 'PARENT_CHILD')
+  );
 
-  for (const rel of parentChildRels) {
-    // source is parent, target is child
-    const children = parentToChildren.get(rel.sourceMemberId) ?? [];
-    children.push(rel.targetMemberId);
-    parentToChildren.set(rel.sourceMemberId, children);
+  // Validation rejects self-component edges, ancestry cycles and conflicting
+  // generation constraints before this calculation is invoked.
+  const componentGeneration = topologicalGenerations(componentGraph, {
+    rootGeneration: 0,
+    childOffset: 1
+  });
 
-    const parents = childToParents.get(rel.targetMemberId) ?? [];
-    parents.push(rel.sourceMemberId);
-    childToParents.set(rel.targetMemberId, parents);
-  }
-
-  // Find root members (no parents)
-  const roots = members.filter(m => !childToParents.has(m.id));
-  const generationMap = new Map<string, number>();
-  const queue: Array<{ memberId: string; generation: number }> = [];
-
-  for (const root of roots) {
-    queue.push({ memberId: root.id, generation: 0 });
-  }
-
-  // BFS to assign generations
-  while (queue.length > 0) {
-    const { memberId, generation } = queue.shift()!;
-    if (generationMap.has(memberId)) continue;
-    generationMap.set(memberId, generation);
-
-    // Spouses get same generation
-    const spouseRels = relationships.filter(
-      r => r.type === 'SPOUSE' &&
-        (r.sourceMemberId === memberId || r.targetMemberId === memberId)
-    );
-    for (const rel of spouseRels) {
-      const spouseId = rel.sourceMemberId === memberId ? rel.targetMemberId : rel.sourceMemberId;
-      if (!generationMap.has(spouseId)) {
-        queue.push({ memberId: spouseId, generation });
-      }
-    }
-
-    // Children get generation + 1
-    const children = parentToChildren.get(memberId) ?? [];
-    for (const childId of children) {
-      if (!generationMap.has(childId)) {
-        queue.push({ memberId: childId, generation: generation + 1 });
-      }
-    }
-  }
-
-  return generationMap;
+  return new Map(members.map(member => [
+    member.id,
+    componentGeneration.get(spouseComponents.componentOf(member.id)) ?? 0
+  ]));
 }
 ```
+
+Quy tắc của đồ thị component:
+
+- Một Relationship `PARENT_CHILD` được lưu đúng một lần theo chiều parent→child.
+- Các spouse component không nhận cạnh parent→child là component gốc và có generation 0.
+- Tất cả Member trong cùng spouse component có cùng generation.
+- Component con có generation bằng component cha/mẹ cộng một.
+- Nhiều cha/mẹ cùng trỏ tới một component con là hợp lệ nếu các ràng buộc đời nhất quán.
+- Thành viên hoặc nhánh tách rời bắt đầu ở generation 0 trong component riêng của nhánh đó.
 
 #### 2. Relationship Cycle Detection
 
@@ -796,7 +804,8 @@ function detectCycles(
   // Self-reference check
   if (proposedSource === proposedTarget) return true;
 
-  // Build parent→child adjacency from existing PARENT_CHILD relationships
+  // Build parent→child adjacency from canonical PARENT_CHILD relationships.
+  // There are no persisted child→parent duplicates.
   const parentToChildren = new Map<string, Set<string>>();
   for (const rel of relationships.filter(r => r.type === 'PARENT_CHILD')) {
     const children = parentToChildren.get(rel.sourceMemberId) ?? new Set();
@@ -804,27 +813,15 @@ function detectCycles(
     parentToChildren.set(rel.sourceMemberId, children);
   }
 
-  // Check: is proposedTarget an ancestor of proposedSource?
-  // If yes → adding proposedSource as parent of proposedTarget creates a cycle
-  const visited = new Set<string>();
-
-  function isAncestor(current: string, target: string): boolean {
-    if (current === target) return true;
-    if (visited.has(current)) return false;
-    visited.add(current);
-
-    // Find parents of current
-    for (const rel of relationships.filter(
-      r => r.type === 'PARENT_CHILD' && r.targetMemberId === current
-    )) {
-      if (isAncestor(rel.sourceMemberId, target)) return true;
-    }
-    return false;
-  }
-
-  return isAncestor(proposedSource, proposedTarget);
+  // Adding source(parent) → target(child) is cyclic exactly when source is
+  // already reachable from target through parent→child edges.
+  return isReachable(parentToChildren, proposedTarget, proposedSource);
 }
 ```
+
+Việc hai cha/mẹ cùng trỏ tới một người con tạo hình hội tụ (diamond) chứ không
+phải chu trình. Cycle detection chỉ duyệt theo chiều parent→child chuẩn và không
+được diễn giải quan hệ vợ-chồng hoặc cách nhìn ngược child→parent như cạnh tổ tiên.
 
 #### 3. Vietnamese Fuzzy Search (In-Memory)
 
@@ -931,21 +928,21 @@ function parseGEDCOM(content: string): ParsedGEDCOM {
 
 **Validates: Requirements 2.5**
 
-### Property 6: Inverse Relationship Symmetry
+### Property 6: Derived Inverse Relationship Symmetry
 
-*For any* relationship created between member A and member B with type T, the system SHALL also store the corresponding inverse relationship (e.g., if A is parent of B, then B is child of A), and deleting either side SHALL remove both.
+*For any* canonical relationship created between member A and member B with type T, the persistence layer SHALL contain exactly one logical record and the read model SHALL expose the corresponding inverse semantic view (e.g., A is parent of B is viewed from B as child of A). Deleting the logical relationship SHALL remove both views.
 
 **Validates: Requirements 3.2**
 
 ### Property 7: Cycle Detection Correctness
 
-*For any* proposed PARENT_CHILD relationship where the target is already an ancestor of the source in the existing graph, the validation SHALL reject the relationship. Conversely, *for any* proposed relationship that does NOT create a cycle, the validation SHALL accept it.
+*For any* proposed canonical PARENT_CHILD relationship `source(parent) → target(child)`, validation SHALL reject it exactly when `source` is reachable from `target` through existing canonical parent→child edges (or source equals target). Multiple parents converging on the same child SHALL be accepted when no directed cycle is created.
 
 **Validates: Requirements 3.3**
 
 ### Property 8: Generation Calculation Invariants
 
-*For any* valid family tree, the generation assignment SHALL satisfy: (a) root members (no parents) have generation 0, (b) for every parent-child relationship, child.generation = parent.generation + 1, and (c) spouses have the same generation value.
+*For any* valid family tree, after collapsing spouse-connected members into components, the generation assignment SHALL satisfy: (a) components with no incoming parent-child edge have generation 0, (b) for every canonical parent-child relationship, childComponent.generation = parentComponent.generation + 1, and (c) every pair of spouses has the same generation. A spouse without recorded parents SHALL inherit the connected spouse component's generation rather than becoming an independent root.
 
 **Validates: Requirements 3.5**
 
@@ -1137,7 +1134,7 @@ import * as fc from 'fast-check';
 import { calculateGenerations } from '@/lib/algorithms/generation';
 
 describe('Feature: family-genealogy-management, Property 8: Generation Calculation Invariants', () => {
-  it('root members have generation 0, children = parent + 1, spouses equal', () => {
+  it('spouse components share a generation and children are one level below parents', () => {
     fc.assert(
       fc.property(
         arbitraryFamilyTree(), // custom arbitrary for valid tree
@@ -1145,15 +1142,7 @@ describe('Feature: family-genealogy-management, Property 8: Generation Calculati
           const { members, relationships } = tree;
           const generations = calculateGenerations(members, relationships);
 
-          // Root members (no parents) have generation 0
-          const roots = members.filter(m =>
-            !relationships.some(r => r.type === 'PARENT_CHILD' && r.targetMemberId === m.id)
-          );
-          for (const root of roots) {
-            expect(generations.get(root.id)).toBe(0);
-          }
-
-          // Children = parent + 1
+          // Canonical parent → child edges advance one generation.
           for (const rel of relationships.filter(r => r.type === 'PARENT_CHILD')) {
             const parentGen = generations.get(rel.sourceMemberId);
             const childGen = generations.get(rel.targetMemberId);
@@ -1162,7 +1151,8 @@ describe('Feature: family-genealogy-management, Property 8: Generation Calculati
             }
           }
 
-          // Spouses have same generation
+          // A spouse without recorded parents inherits the spouse component's
+          // generation; they are not seeded as an independent root.
           for (const rel of relationships.filter(r => r.type === 'SPOUSE')) {
             const gen1 = generations.get(rel.sourceMemberId);
             const gen2 = generations.get(rel.targetMemberId);

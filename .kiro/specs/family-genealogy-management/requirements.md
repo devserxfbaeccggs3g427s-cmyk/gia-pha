@@ -60,11 +60,13 @@
 #### Acceptance Criteria
 
 1. THE Application SHALL hỗ trợ các loại Relationship: cha-con, mẹ-con, vợ-chồng, anh-chị-em, con nuôi, và quan hệ tùy chỉnh
-2. WHEN một User tạo Relationship giữa hai Member, THE Application SHALL tự động tạo Relationship ngược (cha→con tự động tạo con→cha)
-3. IF một User tạo Relationship mâu thuẫn logic (người là cha của chính mình, vòng lặp cha-con), THEN THE Application SHALL từ chối và hiển thị thông báo lỗi cụ thể
+2. WHEN một User tạo Relationship giữa hai Member, THE Application SHALL chỉ lưu một Relationship chuẩn cho một quan hệ nghiệp vụ và SHALL suy ra cách nhìn ngược khi đọc dữ liệu hoặc hiển thị (ví dụ bản ghi cha→con được hiển thị từ phía người con là con→cha mà không lưu thêm một cạnh PARENT_CHILD đảo chiều)
+3. IF một User tạo Relationship mâu thuẫn logic (người là cha của chính mình, target đã là tổ tiên của source, hoặc quan hệ mới làm đồ thị cha/mẹ→con có chu trình), THEN THE Application SHALL từ chối và hiển thị thông báo lỗi cụ thể; nhiều cha/mẹ cùng trỏ tới một người con SHALL được chấp nhận khi không tạo chu trình
 4. WHEN một Relationship vợ-chồng được tạo, THE Application SHALL cho phép ghi nhận ngày kết hôn, ngày ly hôn (nếu có), và trạng thái hôn nhân
-5. THE Application SHALL tính toán và hiển thị đời (generation) của từng Member so với tổ tiên gốc
-6. WHEN một User xóa Relationship, THE Application SHALL cập nhật Family_Tree và loại bỏ các Relationship phái sinh liên quan
+5. THE Application SHALL tính toán và hiển thị đời (generation) theo đồ thị quan hệ chuẩn: các Member nối với nhau bằng quan hệ vợ-chồng SHALL thuộc cùng một nhóm đời; nhóm không nhận cạnh cha/mẹ→con là đời gốc; nhóm con SHALL có đời bằng nhóm cha/mẹ cộng một
+6. WHEN một User xóa Relationship, THE Application SHALL xóa bản ghi quan hệ chuẩn, cập nhật Family_Tree và loại bỏ các cách nhìn hoặc Relationship phái sinh liên quan
+7. THE Application SHALL suy ra các quan hệ thông gia như con dâu/con rể từ quan hệ vợ-chồng và cha/mẹ-con; các quan hệ thông gia SHALL NOT được lưu dưới dạng PARENT_CHILD và SHALL NOT tham gia đường tổ tiên
+8. IF một Member không khai báo cha/mẹ nhưng có vợ/chồng đã xác định được đời, THEN THE Application SHALL gán Member đó cùng đời với vợ/chồng thay vì coi Member đó là một tổ tiên gốc độc lập
 
 ### Requirement 4: Trực quan hóa Cây Gia phả
 
