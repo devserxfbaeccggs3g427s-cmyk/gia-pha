@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getChangeLogs, getEvents, getMediaMetadata, getMembers, getRelationships } from '@/lib/blob/readers';
 import { putEvents, putMediaMetadata, putRelationships } from '@/lib/blob/writers';
 import { calculateLifespan, MemberService } from '@/lib/services/member-service';
+import { buildMediaMetadata } from '../../utils/factories';
 
 describe('MemberService', () => {
   it('persists complete member data and writes a CREATE audit entry', async () => {
@@ -57,5 +58,21 @@ describe('MemberService', () => {
   it('computes lifespan using the birthday boundary', () => {
     expect(calculateLifespan('2000-06-15', '2020-06-14')).toBe(19);
     expect(calculateLifespan('2000-06-15', '2020-06-15')).toBe(20);
+  });
+
+  it('stores only an image Media Manager reference as the avatar', async () => {
+    const service = new MemberService();
+    const avatar = buildMediaMetadata({ id: 'avatar-1', treeId: 'tree_1', mimeType: 'image/png' });
+    const document = buildMediaMetadata({ id: 'document-1', treeId: 'tree_1', mimeType: 'application/pdf' });
+    await putMediaMetadata('tree_1', [avatar, document]);
+
+    const member = await service.createMember('tree_1', {
+      firstName: 'Avatar', lastName: 'Member', fullName: 'Avatar Member', gender: 'OTHER',
+      avatarMediaId: avatar.id, isAlive: true
+    });
+
+    expect(member.avatarMediaId).toBe(avatar.id);
+    await expect(service.updateMember('tree_1', member.id, { avatarMediaId: document.id }))
+      .rejects.toMatchObject({ code: 'INVALID_INPUT' });
   });
 });

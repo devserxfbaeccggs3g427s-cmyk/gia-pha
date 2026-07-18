@@ -355,6 +355,15 @@ interface MediaService {
 }
 ```
 
+Member avatars reuse this service. The member form sends an image with its
+`memberId`; the avatar upload mutation persists both media metadata and
+`Member.avatarMediaId` on the server before returning success. If either data
+write fails, it restores the previous metadata/member state and removes newly
+written blobs so a refresh cannot leave an uploaded image without an avatar
+reference. Rendering resolves that ID through the authenticated media content
+endpoint; legacy `avatarUrl` remains a read fallback only. Deleting an avatar
+media item also clears matching member references.
+
 #### ImportService / ExportService
 
 ```typescript
@@ -401,6 +410,11 @@ Layout rules for relationship edges:
 - Spouse edges use dedicated side handles that face each other. The source and
   target handles are selected from the rendered positions, so reversing the
   canonical spouse endpoint order does not reverse the visual connection.
+
+Breadcrumb labels and routes are intentionally separate: route segments and
+links retain immutable tree/member IDs, while the client resolves those IDs
+through React Query and displays `FamilyTree.name` or `Member.fullName`. During
+loading or lookup failure, the ID remains as a safe fallback label.
 
 #### MemberCard Component
 Hiển thị thông tin tóm tắt member trên tree node.
@@ -597,6 +611,8 @@ interface Member {
   biography?: string;
   achievements?: string;
   notes?: string;
+  avatarMediaId?: string; // canonical Media Manager reference
+  /** @deprecated Import/read compatibility only. */
   avatarUrl?: string;
   generation?: number;
   isAlive: boolean;

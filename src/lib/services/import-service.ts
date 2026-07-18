@@ -46,6 +46,7 @@ const memberSchema = z.object({
   biography: z.string().max(5000).optional(),
   achievements: z.string().max(2000).optional(),
   notes: z.string().max(2000).optional(),
+  avatarMediaId: id.optional(),
   avatarUrl: z.string().url().optional(),
   generation: z.number().int().min(0).optional(),
   isAlive: z.boolean(),
@@ -261,6 +262,7 @@ export class ImportService {
         biography: read(values, 'biography'),
         achievements: read(values, 'achievements'),
         notes: read(values, 'notes'),
+        avatarMediaId: read(values, 'avatarmediaid'),
         avatarUrl: read(values, 'avatarurl'),
         generation: parseOptionalInteger(read(values, 'generation')),
         isAlive,
@@ -410,6 +412,11 @@ function validateReferences(data: TreeCollections | ParsedImportData): ImportIss
   const eventIds = new Set(data.events.map((item) => item.id));
   const mediaIds = new Set(data.mediaMetadata.map((item) => item.id));
   const albumIds = new Set(data.albums.map((item) => item.id));
+  data.members.forEach((member, index) => {
+    if (member.avatarMediaId && !mediaIds.has(member.avatarMediaId)) {
+      issues.push(referenceIssue(`members.${index}.avatarMediaId`, member.avatarMediaId));
+    }
+  });
   data.relationships.forEach((relationship, index) => {
     for (const [field, referencedId] of [['sourceMemberId', relationship.sourceMemberId], ['targetMemberId', relationship.targetMemberId]] as const) {
       if (!memberIds.has(referencedId)) issues.push(referenceIssue(`relationships.${index}.${field}`, referencedId));

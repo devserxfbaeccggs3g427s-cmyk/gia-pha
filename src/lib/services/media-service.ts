@@ -9,7 +9,7 @@ import {
 import type { Album, Event, MediaMetadata } from '@/data/types';
 import { BLOB_PATHS, deleteBlobs, writeBinaryBlob } from '@/lib/blob/client';
 import { getAlbums, getEvents, getMediaMetadata, getMembers } from '@/lib/blob/readers';
-import { putAlbums, putEvents, putMediaMetadata } from '@/lib/blob/writers';
+import { putAlbums, putEvents, putMediaMetadata, putMembers } from '@/lib/blob/writers';
 import { changeLogService } from './changelog-service';
 import { MediaServiceError } from './event-media-errors';
 
@@ -40,6 +40,7 @@ export interface MediaUploadDetails {
   originalName?: string;
   mimeType?: string;
   fileSize?: number;
+  isAvatar?: boolean;
   memberId?: string;
   eventId?: string;
   memberIds?: string[];
@@ -99,6 +100,12 @@ export class MediaService {
       getAlbums(treeId)
     ]);
     validateLinks(input.memberIds, input.eventIds, input.albumId, members, events, albums);
+    if (input.isAvatar && !input.memberId) {
+      throw new MediaServiceError('INVALID_INPUT', 'Ảnh đại diện phải được liên kết với một thành viên');
+    }
+    if (input.isAvatar && !mimeType.startsWith('image/')) {
+      throw new MediaServiceError('INVALID_FILE_TYPE', 'Ảnh đại diện phải là tệp JPEG, PNG hoặc WebP');
+    }
 
     const originalPath = BLOB_PATHS.mediaOriginal(treeId, filename);
     const uploadedUrls: string[] = [];
@@ -157,12 +164,21 @@ export class MediaService {
     };
     const nextMedia = [...currentMedia, item];
     const nextEvents = addMediaToEvents(events, item.id, input.eventIds);
+    const nextMembers = input.isAvatar
+      ? members.map((member) => member.id === input.memberId
+        ? { ...member, avatarMediaId: item.id, updatedAt: uploadedAt }
+        : member
+      )
+      : members;
 
     try {
       await putMediaMetadata(treeId, nextMedia);
       if (!sameJson(events, nextEvents)) await putEvents(treeId, nextEvents);
+      if (!sameJson(members, nextMembers)) await putMembers(treeId, nextMembers);
     } catch (error) {
       await bestEffort(() => putMediaMetadata(treeId, currentMedia));
+      await bestEffort(() => putEvents(treeId, events));
+      await bestEffort(() => putMembers(treeId, members));
       await bestEffort(() => deleteBlobs(uploadedUrls));
       throw error;
     }
@@ -174,6 +190,23 @@ export class MediaService {
       newData: toRecord(item),
       createdAt: uploadedAt
     });
+    if (input.isAvatar) {
+      const previousMember = members.find((member) => member.id === input.memberId);
+      const nextMember = nextMembers.find((member) => member.id === input.memberId);
+      if (previousMember && nextMember) {
+        await changeLogService.recordChange({
+          treeId,
+          userId: actorId(actor),
+          memberId: previousMember.id,
+          action: 'UPDATE',
+          entityType: 'MEMBER',
+          previousData: previousMember as unknown as Record<string, unknown>,
+          newData: nextMember as unknown as Record<string, unknown>,
+          fieldChanged: 'avatarMediaId',
+          createdAt: uploadedAt
+        });
+      }
+    }
     return item;
   }
 
@@ -184,7 +217,11 @@ export class MediaService {
   ): Promise<MediaMetadata> {
     assertIdentifier(treeId, 'treeId');
     assertIdentifier(mediaId, 'mediaId');
-    const [media, events] = await Promise.all([getMediaMetadata(treeId), getEvents(treeId)]);
+    const [media, events, members] = await Promise.all([
+      getMediaMetadata(treeId),
+      getEvents(treeId),
+      getMembers(treeId)
+    ]);
     const item = media.find((candidate) => candidate.id === mediaId);
     if (!item) throw new MediaServiceError('NOT_FOUND', 'Media not found');
 
@@ -193,11 +230,18 @@ export class MediaService {
       ? { ...event, mediaIds: eventMediaIds(event).filter((id) => id !== mediaId), updatedAt: new Date().toISOString() }
       : event
     );
+    const nextMembers = members.map((member) => member.avatarMediaId === mediaId
+      ? { ...member, avatarMediaId: undefined, updatedAt: new Date().toISOString() }
+      : member
+    );
     await putMediaMetadata(treeId, nextMedia);
     try {
       if (!sameJson(events, nextEvents)) await putEvents(treeId, nextEvents);
+      if (!sameJson(members, nextMembers)) await putMembers(treeId, nextMembers);
     } catch (error) {
       await bestEffort(() => putMediaMetadata(treeId, media));
+      await bestEffort(() => putEvents(treeId, events));
+      await bestEffort(() => putMembers(treeId, members));
       throw error;
     }
 

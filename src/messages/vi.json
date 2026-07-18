@@ -160,6 +160,8 @@
     "memberNodeLabel": "{name}, thế hệ {generation}, {status}"
   },
   "membersPage": {
+    "avatarFile": "Tải ảnh đại diện",
+    "avatarUploadHint": "Hỗ trợ JPEG, PNG hoặc WebP, tối đa 10MB. Ảnh được quản lý trong Thư viện.",
     "metaTitle": "Thành viên | Quản lý gia phả",
     "detailMetaTitle": "Hồ sơ thành viên | Quản lý gia phả",
     "eyebrow": "Hồ sơ gia đình",

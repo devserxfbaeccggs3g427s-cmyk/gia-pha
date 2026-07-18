@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 import { useLocale, useTranslations } from 'next-intl';
 import { Link, useRouter } from '@/i18n/navigation';
@@ -33,8 +34,10 @@ import { useMembersQuery } from '@/hooks/useGenealogyQueries';
 import { useMemberMutation } from '@/hooks/useMemberMutation';
 import { useRelationshipMutation } from '@/hooks/useRelationshipMutation';
 import { isPrivateMediaUrl, privateMediaLoader } from '@/lib/images/media-loader';
+import { getMemberAvatarUrl } from '@/lib/media/avatar';
+import { queryKeys } from '@/lib/query/keys';
 
-type MemberFormValue = Partial<Member> & { firstName: string; lastName: string; fullName: string; gender: Gender; isAlive: boolean };
+type MemberFormValue = Partial<Member> & { firstName: string; lastName: string; fullName: string; gender: Gender; isAlive: boolean; avatarFile?: File };
 type RelationshipDraft = { sourceMemberId: string; targetMemberId: string; type: RelationType; customType?: string; marriageDate?: string; divorceDate?: string; marriageStatus?: string; direction?: 'SOURCE' | 'TARGET' };
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -49,7 +52,7 @@ function emptyMember(): MemberFormValue {
 }
 
 function toMemberPayload(form: MemberFormValue): CreateMemberInput {
-  const fields: Array<keyof MemberFormValue> = ['firstName', 'lastName', 'fullName', 'nickname', 'gender', 'dateOfBirth', 'dateOfDeath', 'placeOfBirth', 'currentAddress', 'phone', 'email', 'occupation', 'education', 'biography', 'achievements', 'notes', 'avatarUrl', 'generation', 'isAlive'];
+  const fields: Array<keyof MemberFormValue> = ['firstName', 'lastName', 'fullName', 'nickname', 'gender', 'dateOfBirth', 'dateOfDeath', 'placeOfBirth', 'currentAddress', 'phone', 'email', 'occupation', 'education', 'biography', 'achievements', 'notes', 'generation', 'isAlive'];
   const payload: Record<string, unknown> = Object.fromEntries(fields.map((key) => [key, form[key]]));
   for (const key of Object.keys(payload)) if (payload[key] === '' || payload[key] === undefined) delete payload[key];
   payload.fullName = `${String(form.firstName).trim()} ${String(form.lastName).trim()}`.trim();
@@ -72,10 +75,11 @@ function years(member: Member): string {
 
 function initials(name: string) { return name.split(/\s+/).filter(Boolean).slice(-2).map((part) => part[0]).join('').toUpperCase() || '?'; }
 
-function Avatar({ member, size = 'md' }: { member?: Member; size?: 'sm' | 'md' | 'lg' }) {
+function Avatar({ member, treeId, size = 'md' }: { member?: Member; treeId?: string; size?: 'sm' | 'md' | 'lg' }) {
   const cls = size === 'lg' ? 'size-20 text-2xl rounded-2xl' : size === 'sm' ? 'size-9 text-xs rounded-lg' : 'size-12 text-sm rounded-xl';
   const pixels = size === 'lg' ? 80 : size === 'sm' ? 36 : 48;
-  return member?.avatarUrl ? <Image src={member.avatarUrl} alt="" width={pixels} height={pixels} sizes={`${pixels}px`} className={`${cls} shrink-0 object-cover`} /> : <span className={`grid shrink-0 place-items-center bg-primary/10 font-bold text-primary ${cls}`}>{initials(member?.fullName ?? '')}</span>;
+  const avatarUrl = member ? getMemberAvatarUrl(member, treeId) : undefined;
+  return avatarUrl ? <Image src={avatarUrl} loader={isPrivateMediaUrl(avatarUrl) ? privateMediaLoader : undefined} alt="" width={pixels} height={pixels} sizes={`${pixels}px`} className={`${cls} shrink-0 object-cover`} /> : <span className={`grid shrink-0 place-items-center bg-primary/10 font-bold text-primary ${cls}`}>{initials(member?.fullName ?? '')}</span>;
 }
 
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
@@ -111,7 +115,7 @@ function MemberForm({ initial, onSubmit, onCancel, submitting }: { initial: Memb
       <Field label={t('form.email')}>{input('email', 'email')}</Field>
       <Field label={t('form.education')}>{input('education')}</Field>
     </div>
-    <Field label={t('form.avatarUrl')} hint={t('form.avatarHint')}>{input('avatarUrl', 'url')}</Field>
+    <Field label={t('avatarFile')} hint={t('avatarUploadHint')}><Input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => change('avatarFile', event.target.files?.[0])} /></Field>
     <Field label={t('form.biography')}><textarea className="min-h-24 rounded-lg border border-input bg-background px-3 py-2 text-sm" value={form.biography ?? ''} onChange={(e) => change('biography', e.target.value)} /></Field>
     <div className="grid gap-4 sm:grid-cols-2"><Field label={t('form.achievements')}><textarea className="min-h-20 rounded-lg border border-input bg-background px-3 py-2 text-sm" value={form.achievements ?? ''} onChange={(e) => change('achievements', e.target.value)} /></Field><Field label={t('form.notes')}><textarea className="min-h-20 rounded-lg border border-input bg-background px-3 py-2 text-sm" value={form.notes ?? ''} onChange={(e) => change('notes', e.target.value)} /></Field></div>
     <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(form.isAlive)} onChange={(e) => change('isAlive', e.target.checked)} disabled={Boolean(form.dateOfDeath)} className="size-4 accent-primary" />{t('form.isAlive')}</label>
@@ -139,28 +143,111 @@ function DeleteMemberDialog({ treeId, member, onDeleted, onClose }: { treeId: st
   return <Dialog open onOpenChange={(open) => !open && onClose()}><DialogContent><DialogHeader><DialogTitle className="flex items-center gap-2 text-destructive"><Trash2 className="size-5" />{t('delete.title')}</DialogTitle><DialogDescription>{t('delete.description', { name: member.fullName })}</DialogDescription></DialogHeader>{loading ? <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><Loader2 className="animate-spin" />{t('actions.loading')}</div> : <div className="space-y-3 text-sm"><p>{t('delete.impact')}</p><ul className="grid gap-2 rounded-xl bg-muted/50 p-3 text-muted-foreground"><li>{t('delete.relationships', { count: preview?.affectedRelationships?.length ?? 0 })}</li><li>{t('delete.events', { count: preview?.affectedEvents?.length ?? 0 })}</li><li>{t('delete.media', { count: preview?.affectedMedia?.length ?? 0 })}</li></ul>{error && <p role="alert" className="text-destructive">{error}</p>}</div>}<DialogFooter><Button variant="ghost" onClick={onClose}>{t('actions.cancel')}</Button><Button variant="destructive" onClick={() => void confirm()} disabled={loading || mutation.isPending}>{mutation.isPending && <Loader2 className="animate-spin" />}{t('delete.confirm')}</Button></DialogFooter></DialogContent></Dialog>;
 }
 
+async function uploadAvatar(treeId: string, memberId: string, file: File): Promise<MediaMetadata> {
+  const form = new FormData();
+  form.set('treeId', treeId);
+  form.set('memberId', memberId);
+  form.set('isAvatar', 'true');
+  form.set('file', file);
+  return request<MediaMetadata>('/api/media/upload', { method: 'POST', body: form });
+}
+
 export function MemberListPage({ treeId }: { treeId: string }) {
   const t = useTranslations('membersPage'); const locale = useLocale(); const router = useRouter(); const { toast } = useToast();
+  const queryClient = useQueryClient();
   const membersQuery = useMembersQuery(treeId); const memberMutation = useMemberMutation(treeId); const members = membersQuery.data ?? []; const loading = membersQuery.isLoading; const error = membersQuery.error?.message ?? '';
-  const [query, setQuery] = useState(''); const [status, setStatus] = useState<'ALL' | 'ALIVE' | 'DECEASED'>('ALL'); const [gender, setGender] = useState<'ALL' | Gender>('ALL'); const [formOpen, setFormOpen] = useState(false); const saving = memberMutation.isPending;
+  const [query, setQuery] = useState(''); const [status, setStatus] = useState<'ALL' | 'ALIVE' | 'DECEASED'>('ALL'); const [gender, setGender] = useState<'ALL' | Gender>('ALL'); const [formOpen, setFormOpen] = useState(false); const [avatarSaving, setAvatarSaving] = useState(false); const saving = memberMutation.isPending || avatarSaving;
   const visible = useMemo(() => members.filter((member) => { const needle = query.trim().toLocaleLowerCase(locale); return (!needle || [member.fullName, member.nickname, member.occupation, member.placeOfBirth].filter(Boolean).some((field) => field!.toLocaleLowerCase(locale).includes(needle))) && (status === 'ALL' || (status === 'ALIVE' ? member.isAlive : !member.isAlive)) && (gender === 'ALL' || member.gender === gender); }), [members, query, status, gender, locale]);
-  const create = (form: MemberFormValue) => memberMutation.mutate({ operation: 'create', data: toMemberPayload(form) }, { onSuccess: () => { setFormOpen(false); toast({ title: t('toasts.created'), tone: 'success' }); } });
+  const create = async (form: MemberFormValue) => {
+    setAvatarSaving(true);
+    let created: Member | undefined;
+    try {
+      created = await memberMutation.mutateAsync({ operation: 'create', data: toMemberPayload(form) }) as Member;
+      if (form.avatarFile) {
+        const media = await uploadAvatar(treeId, created.id, form.avatarFile);
+        created = { ...created, avatarMediaId: media.id };
+        queryClient.setQueryData<Member[]>(queryKeys.members(treeId), (current = []) => current.map((member) =>
+          member.id === created!.id ? created! : member
+        ));
+        void queryClient.invalidateQueries({ queryKey: queryKeys.tree(treeId) });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.media(treeId) });
+      }
+      setFormOpen(false);
+      toast({ title: t('toasts.created'), tone: 'success' });
+    } catch (error) {
+      if (created) setFormOpen(false);
+      toast({ title: created ? t('toasts.created') : t('toasts.failed'), description: error instanceof Error ? error.message : t('errors.generic'), tone: 'destructive' });
+    } finally {
+      setAvatarSaving(false);
+    }
+  };
   return <div className="space-y-7"><section className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-[.16em] text-primary">{t('eyebrow')}</p><h1 className="mt-2 font-display text-4xl font-medium tracking-[-.035em]">{t('title')}</h1><p className="mt-2 max-w-2xl text-muted-foreground">{t('description')}</p></div><Button size="lg" onClick={() => setFormOpen(true)}><Plus />{t('actions.add')}</Button></section><Card><CardContent className="grid gap-3 p-4 lg:grid-cols-[1fr_auto_auto]"><label className="relative block"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('search')} /></label><select className="h-10 rounded-lg border border-input bg-background px-3 text-sm" value={status} onChange={(e) => setStatus(e.target.value as typeof status)}><option value="ALL">{t('filters.allStatus')}</option><option value="ALIVE">{t('filters.alive')}</option><option value="DECEASED">{t('filters.deceased')}</option></select><select className="h-10 rounded-lg border border-input bg-background px-3 text-sm" value={gender} onChange={(e) => setGender(e.target.value as typeof gender)}><option value="ALL">{t('filters.allGender')}</option><option value="MALE">{t('gender.male')}</option><option value="FEMALE">{t('gender.female')}</option><option value="OTHER">{t('gender.other')}</option></select></CardContent></Card>{error && <Card className="border-destructive/30 bg-destructive/5"><CardContent className="flex items-center gap-3 p-5 text-sm text-destructive"><AlertTriangle className="size-5" />{error}<Button variant="outline" size="sm" className="ml-auto" onClick={() => void membersQuery.refetch()}>{t('actions.retry')}</Button></CardContent></Card>}{loading ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="h-44 animate-pulse rounded-2xl bg-muted" />)}</div> : visible.length === 0 ? <Card><CardContent className="grid min-h-56 place-items-center p-8 text-center"><UsersRound className="size-10 text-primary/35" /><h2 className="mt-3 font-display text-xl">{query ? t('empty.searchTitle') : t('empty.title')}</h2><p className="mt-1 max-w-md text-sm text-muted-foreground">{query ? t('empty.searchDescription') : t('empty.description')}</p></CardContent></Card> : <><div className="flex items-center justify-between text-sm text-muted-foreground"><span>{t('count', { count: visible.length })}</span><span>{t('updatedHint')}</span></div><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{visible.map((member) => <MemberCard key={member.id} member={member} locale={locale} onOpen={() => router.push(`/trees/${treeId}/members/${member.id}`)} t={t} />)}</div></>}{formOpen && <Dialog open onOpenChange={(open) => !open && setFormOpen(false)}><DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto"><DialogHeader><DialogTitle>{t('createTitle')}</DialogTitle><DialogDescription>{t('description')}</DialogDescription></DialogHeader><MemberForm initial={emptyMember()} onSubmit={create} onCancel={() => setFormOpen(false)} submitting={saving} /></DialogContent></Dialog>}</div>;
 }
 
 function MemberCard({ member, locale, onOpen, t }: { member: Member; locale: string; onOpen: () => void; t: ReturnType<typeof useTranslations<'membersPage'>> }) {
-  return <Card className="group overflow-hidden transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-md"><button className="block w-full text-left" onClick={onOpen}><CardContent className="p-5"><div className="flex items-start gap-3"><Avatar member={member} /><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h2 className="truncate font-semibold">{member.fullName}</h2><ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" /></div><p className="mt-1 text-sm text-muted-foreground">{years(member) || t('unknownYear')}</p></div></div><div className="mt-5 flex flex-wrap gap-2 text-xs"><span className={`rounded-full px-2.5 py-1 ${member.isAlive ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>{member.isAlive ? t('status.alive') : t('status.deceased')}</span>{member.generation !== undefined && <span className="rounded-full bg-accent px-2.5 py-1 text-accent-foreground">{t('generation', { generation: member.generation })}</span>}</div><div className="mt-4 grid gap-2 text-sm text-muted-foreground">{member.occupation && <span className="truncate">{member.occupation}</span>}{member.placeOfBirth && <span className="flex items-center gap-1.5 truncate"><MapPin className="size-3.5" />{member.placeOfBirth}</span>}{!member.occupation && !member.placeOfBirth && <span>{t('noDetails')}</span>}</div><p className="mt-4 text-xs text-muted-foreground">{t('updated', { date: formatDate(member.updatedAt, locale) })}</p></CardContent></button></Card>;
+  return <Card className="group overflow-hidden transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-md"><button className="block w-full text-left" onClick={onOpen}><CardContent className="p-5"><div className="flex items-start gap-3"><Avatar member={member} treeId={member.treeId} /><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h2 className="truncate font-semibold">{member.fullName}</h2><ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" /></div><p className="mt-1 text-sm text-muted-foreground">{years(member) || t('unknownYear')}</p></div></div><div className="mt-5 flex flex-wrap gap-2 text-xs"><span className={`rounded-full px-2.5 py-1 ${member.isAlive ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>{member.isAlive ? t('status.alive') : t('status.deceased')}</span>{member.generation !== undefined && <span className="rounded-full bg-accent px-2.5 py-1 text-accent-foreground">{t('generation', { generation: member.generation })}</span>}</div><div className="mt-4 grid gap-2 text-sm text-muted-foreground">{member.occupation && <span className="truncate">{member.occupation}</span>}{member.placeOfBirth && <span className="flex items-center gap-1.5 truncate"><MapPin className="size-3.5" />{member.placeOfBirth}</span>}{!member.occupation && !member.placeOfBirth && <span>{t('noDetails')}</span>}</div><p className="mt-4 text-xs text-muted-foreground">{t('updated', { date: formatDate(member.updatedAt, locale) })}</p></CardContent></button></Card>;
 }
 
 export function MemberDetailPage({ treeId, memberId }: { treeId: string; memberId: string }) {
   const t = useTranslations('membersPage'); const mt = useTranslations('mediaPage'); const locale = useLocale(); const router = useRouter(); const { toast } = useToast();
+  const queryClient = useQueryClient();
   const memberMutation = useMemberMutation(treeId);
-  const [detail, setDetail] = useState<Member & { relationships: Relationship[]; relatedMembers: Member[]; events: Event[]; media: MediaMetadata[]; lifespan: number | null }>(); const [members, setMembers] = useState<Member[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [editOpen, setEditOpen] = useState(false); const [relationOpen, setRelationOpen] = useState(false); const [deleteOpen, setDeleteOpen] = useState(false); const saving = memberMutation.isPending;
+  const [detail, setDetail] = useState<Member & { relationships: Relationship[]; relatedMembers: Member[]; events: Event[]; media: MediaMetadata[]; lifespan: number | null }>(); const [members, setMembers] = useState<Member[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [editOpen, setEditOpen] = useState(false); const [relationOpen, setRelationOpen] = useState(false); const [deleteOpen, setDeleteOpen] = useState(false); const [avatarSaving, setAvatarSaving] = useState(false); const saving = memberMutation.isPending || avatarSaving;
   const load = useCallback(async () => { setLoading(true); try { const [member, all] = await Promise.all([request<typeof detail>(`/api/members/${memberId}?treeId=${encodeURIComponent(treeId)}`), request<Member[]>(`/api/trees/${treeId}/members`)]); setDetail(member); setMembers(all); setError(''); } catch (e) { setError(e instanceof Error ? e.message : t('errors.generic')); } finally { setLoading(false); } }, [memberId, treeId, t]);
   useEffect(() => { void load(); }, [load]);
   if (loading) return <div className="grid min-h-80 place-items-center text-muted-foreground"><Loader2 className="size-6 animate-spin" /></div>;
   if (error || !detail) return <Card><CardContent className="grid min-h-56 place-items-center p-8 text-center"><AlertTriangle className="size-8 text-destructive" /><p className="mt-3 text-sm text-destructive">{error || t('errors.notFound')}</p><Button className="mt-4" variant="outline" onClick={() => router.push(`/trees/${treeId}/members`)}>{t('actions.back')}</Button></CardContent></Card>;
-  const update = async (form: MemberFormValue) => { const previous = detail; const next = { ...detail, ...toMemberPayload(form), fullName: `${form.firstName} ${form.lastName}` } as typeof detail; setDetail(next); try { const saved = await memberMutation.mutateAsync({ operation: 'update', memberId, data: toMemberPayload(form) }); setDetail((current) => current ? { ...current, ...(saved as Member) } : current); setEditOpen(false); toast({ title: t('toasts.updated'), tone: 'success' }); } catch { setDetail(previous); } };
+  const update = async (form: MemberFormValue) => {
+    const previous = detail;
+    const payload = toMemberPayload(form);
+    setAvatarSaving(true);
+    try {
+      const next = { ...detail, ...payload, fullName: `${form.firstName} ${form.lastName}` } as typeof detail;
+      setDetail(next);
+      const saved = await memberMutation.mutateAsync({ operation: 'update', memberId, data: payload }) as Member;
+      let uploadedAvatar: MediaMetadata | undefined;
+      let finalMember = saved;
+      if (form.avatarFile) {
+        try {
+          uploadedAvatar = await uploadAvatar(treeId, memberId, form.avatarFile);
+          finalMember = { ...saved, avatarMediaId: uploadedAvatar.id };
+          queryClient.setQueryData<Member[]>(queryKeys.members(treeId), (current = []) => current.map((member) =>
+            member.id === memberId ? finalMember : member
+          ));
+          queryClient.setQueryData(queryKeys.member(treeId, memberId), (current: Record<string, unknown> | undefined) =>
+            current ? { ...current, ...finalMember, member: finalMember } : finalMember
+          );
+          void queryClient.invalidateQueries({ queryKey: queryKeys.tree(treeId) });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.media(treeId) });
+        } catch (avatarError) {
+          setDetail((current) => current ? { ...current, ...saved } : current);
+          setEditOpen(false);
+          toast({
+            title: t('toasts.updated'),
+            description: locale === 'vi'
+              ? `Thông tin đã được lưu nhưng ảnh đại diện chưa thể cập nhật: ${avatarError instanceof Error ? avatarError.message : t('errors.generic')}`
+              : `The profile was saved, but the avatar could not be updated: ${avatarError instanceof Error ? avatarError.message : t('errors.generic')}`,
+            tone: 'destructive'
+          });
+          return;
+        }
+      }
+      setDetail((current) => current ? {
+        ...current,
+        ...finalMember,
+        media: uploadedAvatar && !current.media.some((item) => item.id === uploadedAvatar!.id)
+          ? [uploadedAvatar, ...current.media]
+          : current.media
+      } : current);
+      setEditOpen(false);
+      toast({ title: t('toasts.updated'), tone: 'success' });
+    } catch (error) {
+      setDetail(previous);
+      toast({ title: t('toasts.failed'), description: error instanceof Error ? error.message : t('errors.generic'), tone: 'destructive' });
+    } finally {
+      setAvatarSaving(false);
+    }
+  };
   const removeRelationship = async (relationship: Relationship) => { try { await request(`/api/relationships/${relationship.id}?treeId=${encodeURIComponent(treeId)}`, { method: 'DELETE' }); setDetail((current) => current ? { ...current, relationships: current.relationships.filter((item) => item.id !== relationship.id), relatedMembers: current.relatedMembers } : current); toast({ title: t('relationship.deleted'), tone: 'success' }); } catch (e) { toast({ title: t('toasts.failed'), description: e instanceof Error ? e.message : t('errors.generic'), tone: 'destructive' }); } };
   const nameById = new Map(members.map((item) => [item.id, item]));
   const relationships = detail.relationships.filter((relation, index, all) => index === all.findIndex((candidate) => candidate.type === relation.type && (candidate.customType ?? '') === (relation.customType ?? '') && ((candidate.sourceMemberId === relation.sourceMemberId && candidate.targetMemberId === relation.targetMemberId) || (candidate.sourceMemberId === relation.targetMemberId && candidate.targetMemberId === relation.sourceMemberId))));

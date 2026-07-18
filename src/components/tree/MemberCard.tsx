@@ -6,6 +6,8 @@ import { Handle, Position, type NodeProps } from 'reactflow';
 import { CalendarDays, Leaf, Sparkles } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { Member } from '@/data/types';
+import { getMemberAvatarUrl } from '@/lib/media/avatar';
+import { isPrivateMediaUrl, privateMediaLoader } from '@/lib/images/media-loader';
 import type { TreeDisplayMode, TreeLayoutMode } from './tree-layout';
 import styles from './member-card.module.css';
 
@@ -53,6 +55,7 @@ export function MemberCard({
   } as CSSProperties;
   const years = formatLifeYears(member, t('unknownYear'));
   const initials = getInitials(member.fullName);
+  const avatarUrl = getMemberAvatarUrl(member);
 
   const select = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -96,10 +99,11 @@ export function MemberCard({
       >
         <span className={styles.generationBar} aria-hidden="true" />
         <span className={styles.avatarWrap}>
-          {member.avatarUrl ? (
+          {avatarUrl ? (
             <Image
               className={styles.avatar}
-              src={member.avatarUrl}
+              src={avatarUrl}
+              loader={isPrivateMediaUrl(avatarUrl) ? privateMediaLoader : undefined}
               alt=""
               fill
               sizes="(max-width: 767px) 42px, 52px"

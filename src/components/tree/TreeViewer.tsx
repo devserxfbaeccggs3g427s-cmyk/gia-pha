@@ -46,6 +46,8 @@ import { buildTreeLayout, type TreeDisplayMode, type TreeLayoutMode } from './tr
 import { useTreeUiStore } from '@/store/tree-ui-store';
 import { apiRequest } from '@/lib/api/mutations';
 import { queryKeys } from '@/lib/query/keys';
+import { getMemberAvatarUrl } from '@/lib/media/avatar';
+import { isPrivateMediaUrl, privateMediaLoader } from '@/lib/images/media-loader';
 import { ImportExportActions } from '@/components/genealogy/import-export-dialog';
 import styles from './tree-viewer.module.css';
 import 'reactflow/dist/style.css';
@@ -379,14 +381,15 @@ function MemberSummaryPanel({
     day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC'
   }), [locale]);
   const birthDate = formatDate(member.dateOfBirth, dateFormatter);
+  const avatarUrl = getMemberAvatarUrl(member);
 
   return (
     <aside className={styles.summary} aria-label={t('memberSummary')}>
       <button type="button" className={styles.closeSummary} onClick={onClose} aria-label={t('closeSummary')}><X /></button>
       <div className={styles.summaryIdentity}>
         <span className={styles.summaryAvatar} style={{ background: `hsl(${color.accent} / .12)`, color: `hsl(${color.accent})` }}>
-          {member.avatarUrl
-            ? <Image src={member.avatarUrl} alt="" width={55} height={55} sizes="55px" />
+          {avatarUrl
+            ? <Image src={avatarUrl} loader={isPrivateMediaUrl(avatarUrl) ? privateMediaLoader : undefined} alt="" width={55} height={55} sizes="55px" />
             : <UserRound aria-hidden="true" />}
         </span>
         <span>

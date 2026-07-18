@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getAlbums, getEvents, getMediaMetadata } from '@/lib/blob/readers';
+import { getAlbums, getEvents, getMediaMetadata, getMembers } from '@/lib/blob/readers';
 import { MediaService, MediaServiceError } from '@/lib/services/media-service';
 import { putEvents, putMembers } from '@/lib/blob/writers';
 import { mockBlobStorage } from '../../utils/mock-blob-storage';
@@ -29,7 +29,7 @@ describe('MediaService', () => {
     const album = await service.createAlbum('tree-1', { title: 'Kỷ niệm 2026' });
 
     const item = await service.uploadMedia('tree-1', uploadFile(), {
-      memberIds: [member.id], eventIds: [event.id], albumId: album.id
+      memberId: member.id, eventIds: [event.id], albumId: album.id, isAvatar: true
     }, 'user-1');
     expect(item).toMatchObject({
       mimeType: 'image/png',
@@ -41,12 +41,16 @@ describe('MediaService', () => {
     });
     expect(mockBlobStorage.list('media/tree-1/')).toHaveLength(2);
     expect((await getEvents('tree-1'))[0].mediaIds).toEqual([item.id]);
+    expect((await getMembers('tree-1'))[0].avatarMediaId).toBe(item.id);
     await expect(service.getMediaForMember('tree-1', member.id)).resolves.toEqual([item]);
     await expect(service.getMediaForEvent('tree-1', event.id)).resolves.toEqual([item]);
     await expect(service.getAlbums('tree-1')).resolves.toEqual([album]);
 
     await service.deleteMedia('tree-1', item.id, 'user-1');
     await expect(getMediaMetadata('tree-1')).resolves.toEqual([]);
+    const memberAfterDelete = (await getMembers('tree-1'))[0];
+    expect(memberAfterDelete.id).toBe(member.id);
+    expect(memberAfterDelete).not.toHaveProperty('avatarMediaId');
     expect(mockBlobStorage.list('media/tree-1/')).toHaveLength(0);
   });
 

@@ -50,6 +50,7 @@ export interface AutocompleteItem {
   label: string;
   fullName: string;
   nickname?: string;
+  avatarMediaId?: string;
   avatarUrl?: string;
 }
 
@@ -134,6 +135,7 @@ export class SearchService {
           : member.fullName,
         fullName: member.fullName,
         ...(member.nickname ? { nickname: member.nickname } : {}),
+        ...(member.avatarMediaId ? { avatarMediaId: member.avatarMediaId } : {}),
         ...(member.avatarUrl ? { avatarUrl: member.avatarUrl } : {})
       }));
   }

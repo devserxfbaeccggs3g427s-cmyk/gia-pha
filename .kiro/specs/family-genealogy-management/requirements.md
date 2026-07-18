@@ -46,7 +46,7 @@
 
 #### Acceptance Criteria
 
-1. WHEN một User tạo Member mới, THE Application SHALL lưu thông tin bao gồm: họ tên, ngày sinh, giới tính, nơi sinh, nghề nghiệp, tiểu sử, và ảnh đại diện
+1. WHEN một User tạo hoặc cập nhật Member, THE Application SHALL lưu họ tên, ngày sinh, giới tính, nơi sinh, nghề nghiệp và tiểu sử; IF User chọn ảnh đại diện, THEN THE Application SHALL upload ảnh qua Media Manager và lưu cả metadata media lẫn liên kết `Member.avatarMediaId` trong cùng một mutation phía server, rollback khi chỉ một phần dữ liệu lưu thành công, còn dữ liệu `avatarUrl` cũ chỉ được dùng làm fallback tương thích đọc
 2. WHEN một User cập nhật thông tin Member, THE Application SHALL lưu lịch sử thay đổi và hiển thị thông tin mới trong vòng 1 giây
 3. WHEN một User xóa Member, THE Application SHALL hiển thị cảnh báo xác nhận và liệt kê các Relationship bị ảnh hưởng trước khi xóa
 4. THE Application SHALL hỗ trợ lưu trữ thông tin mở rộng cho Member: địa chỉ hiện tại, số điện thoại, email, học vấn, thành tựu, và ghi chú
@@ -195,7 +195,7 @@
 3. THE Application SHALL hỗ trợ điều hướng bằng bàn phím và tuân thủ WCAG 2.1 Level AA cho accessibility
 4. WHEN một thao tác yêu cầu thời gian xử lý trên 1 giây, THE Application SHALL hiển thị loading indicator hoặc skeleton screen
 5. THE Application SHALL sử dụng animation và transition mượt mà (60fps) cho các tương tác UI
-6. THE Application SHALL hiển thị breadcrumb navigation cho phép User biết vị trí hiện tại và điều hướng nhanh
+6. THE Application SHALL hiển thị breadcrumb navigation bằng tên gia phả và tên thành viên có ý nghĩa với User, trong khi URL và href tiếp tục dùng ID ổn định để định tuyến
 
 ### Requirement 14: Bảo mật Dữ liệu
 

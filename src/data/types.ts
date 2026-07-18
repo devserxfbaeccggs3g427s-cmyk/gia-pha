@@ -72,6 +72,9 @@ export interface Member {
   biography?: string;
   achievements?: string;
   notes?: string;
+  /** ID of the image managed by MediaService and used as this member's avatar. */
+  avatarMediaId?: string;
+  /** @deprecated Kept for imports and records created before avatar uploads. */
   avatarUrl?: string;
   generation?: number;
   isAlive: boolean;

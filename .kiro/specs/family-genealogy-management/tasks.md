@@ -110,6 +110,13 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Implement `mergeMember` with configurable merge strategy
     - _Requirements: 2.6_
 
+  - [x] 4.8 Replace avatar URL input with managed media upload
+    - Add `avatarMediaId` to the Member schema and retain `avatarUrl` as read-only legacy compatibility
+    - Upload JPEG/PNG/WebP avatars through the existing Media Manager and link uploaded media to the member
+    - Persist media metadata and `Member.avatarMediaId` in the same server-side mutation, with rollback on partial storage failure
+    - Resolve avatar rendering through the authenticated media content endpoint and clear stale avatar references when media is deleted
+    - _Requirements: 2.1_
+
 - [x] 5. Align Relationship service with canonical relationship and generation rules
   - [x] 5.1 Refactor RelationshipService to persist one canonical relationship and derive inverse views
     - Implement `src/lib/services/relationship-service.ts` with: createRelationship, deleteRelationship, getRelationshipsForMember
@@ -299,7 +306,7 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
   - [x] 15.2 Create responsive layout system with navigation
     - Implement `src/app/[locale]/(dashboard)/layout.tsx` with sidebar navigation
     - Create responsive breakpoints: mobile (< 768px), tablet (768-1024px), desktop (> 1024px)
-    - Implement breadcrumb navigation component
+    - Implement breadcrumb navigation that resolves tree/member display names while preserving ID-based URLs and hrefs
     - Handle orientation change within 300ms without losing state
     - Support keyboard navigation and WCAG 2.1 Level AA
     - _Requirements: 5.1, 5.4, 13.3, 13.5, 13.6_
@@ -466,7 +473,7 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     { "id": 7, "tasks": ["4.2", "4.3", "4.5", "4.7", "5.2", "5.3", "5.5", "7.2"] },
     { "id": 8, "tasks": ["4.4", "4.6", "5.4", "5.6", "7.3", "8.1"] },
     { "id": 9, "tasks": ["8.2", "8.3", "9.1", "9.2"] },
-    { "id": 10, "tasks": ["8.4", "10.1", "10.3", "12.1", "13.1"] },
+    { "id": 10, "tasks": ["4.8", "8.4", "10.1", "10.3", "12.1", "13.1"] },
     { "id": 11, "tasks": ["10.2", "10.4", "12.2", "12.3"] },
     { "id": 12, "tasks": ["15.1", "20.1"] },
     { "id": 13, "tasks": ["15.2", "15.3", "20.2"] },

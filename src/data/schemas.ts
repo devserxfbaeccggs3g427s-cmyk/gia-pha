@@ -55,7 +55,7 @@ export const createMemberSchema = z.object({
   biography: z.string().max(5000).optional(),
   achievements: z.string().max(2000).optional(),
   notes: z.string().max(2000).optional(),
-  avatarUrl: z.string().url().optional(),
+  avatarMediaId: z.string().min(1).optional(),
   generation: z.number().int().min(0).optional(),
   isAlive: z.boolean().default(true)
 });
@@ -120,6 +120,7 @@ export const mediaUploadSchema = z.object({
   originalName: z.string().min(1).max(255),
   mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
   fileSize: z.number().int().positive().max(10 * 1024 * 1024),
+  isAvatar: z.boolean().default(false),
   caption: z.string().max(500).optional(),
   takenAt: optionalIsoDate
 }).transform((value) => ({

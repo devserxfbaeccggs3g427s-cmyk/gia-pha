@@ -21,6 +21,8 @@ import type { AutocompleteItem, SearchResult, SearchableMemberField } from '@/li
 import { Button } from '@/components/ui/button';
 import { DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { getMemberAvatarUrl } from '@/lib/media/avatar';
+import { isPrivateMediaUrl, privateMediaLoader } from '@/lib/images/media-loader';
 
 type SearchStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -34,7 +36,7 @@ interface SearchFilters {
 }
 
 interface DisplayResult {
-  member: Pick<Member, 'id' | 'fullName'> & Partial<Pick<Member, 'nickname' | 'avatarUrl' | 'gender' | 'generation' | 'dateOfBirth' | 'isAlive' | 'occupation' | 'placeOfBirth' | 'currentAddress'>>;
+  member: Pick<Member, 'id' | 'fullName'> & Partial<Pick<Member, 'nickname' | 'avatarMediaId' | 'avatarUrl' | 'gender' | 'generation' | 'dateOfBirth' | 'isAlive' | 'occupation' | 'placeOfBirth' | 'currentAddress'>>;
   matchedFields: SearchableMemberField[];
 }
 
@@ -241,7 +243,7 @@ export function MemberSearch({ treeId, onClose }: { treeId: string; onClose: () 
                     if (event.key === 'ArrowUp') { event.preventDefault(); index === 0 ? document.querySelector<HTMLInputElement>('[role="combobox"]')?.focus() : resultRefs.current[index - 1]?.focus(); }
                   }}
                 >
-                  <SearchAvatar member={member} />
+                  <SearchAvatar member={member} treeId={treeId} />
                   <span className="min-w-0 flex-1">
                     <span className="flex min-w-0 items-center gap-2">
                       <strong className="truncate text-sm font-semibold">{member.fullName}</strong>
@@ -286,7 +288,7 @@ function normalizeResults(body: unknown): DisplayResult[] {
     if ('memberId' in item && 'fullName' in item) {
       const suggestion = item as AutocompleteItem;
       return [{
-        member: { id: suggestion.memberId, fullName: suggestion.fullName, nickname: suggestion.nickname, avatarUrl: suggestion.avatarUrl },
+        member: { id: suggestion.memberId, fullName: suggestion.fullName, nickname: suggestion.nickname, avatarMediaId: suggestion.avatarMediaId, avatarUrl: suggestion.avatarUrl },
         matchedFields: []
       } as DisplayResult];
     }
@@ -311,8 +313,9 @@ function SearchSelect({ label, value, onChange, options }: { label: string; valu
   return <SearchField label={label}><select className="h-10 rounded-lg border border-input bg-background px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring" value={value} onChange={(event) => onChange(event.target.value)}>{options.map(([optionValue, optionLabel]) => <option key={optionValue || 'all'} value={optionValue}>{optionLabel}</option>)}</select></SearchField>;
 }
 
-function SearchAvatar({ member }: { member: DisplayResult['member'] }) {
-  if (member.avatarUrl) return <Image className="size-11 shrink-0 rounded-xl object-cover" src={member.avatarUrl} alt="" width={44} height={44} sizes="44px" />;
+function SearchAvatar({ member, treeId }: { member: DisplayResult['member']; treeId: string }) {
+  const avatarUrl = getMemberAvatarUrl(member, treeId);
+  if (avatarUrl) return <Image className="size-11 shrink-0 rounded-xl object-cover" src={avatarUrl} loader={isPrivateMediaUrl(avatarUrl) ? privateMediaLoader : undefined} alt="" width={44} height={44} sizes="44px" />;
   const initials = member.fullName.split(/\s+/).filter(Boolean).slice(-2).map((part) => part[0]).join('').toUpperCase();
   const tone = member.gender === 'FEMALE' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-200' : member.gender === 'MALE' ? 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-200' : 'bg-primary/10 text-primary';
   return <span className={`grid size-11 shrink-0 place-items-center rounded-xl text-xs font-bold ${tone}`} aria-hidden="true">{initials || '?'}</span>;

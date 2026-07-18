@@ -98,7 +98,8 @@ export class MemberService {
   ): Promise<Member> {
     const input = createMemberSchema.parse(data);
     validateDates(input.dateOfBirth, input.dateOfDeath);
-    const members = await getMembers(treeId);
+    const [members, media] = await Promise.all([getMembers(treeId), getMediaMetadata(treeId)]);
+    validateAvatarMedia(input.avatarMediaId, media);
     const now = new Date().toISOString();
     const member: Member = {
       ...input,
@@ -130,9 +131,10 @@ export class MemberService {
     actor: MemberMutationActor = undefined
   ): Promise<Member> {
     const input = updateMemberSchema.parse(data);
-    const members = await getMembers(treeId);
+    const [members, media] = await Promise.all([getMembers(treeId), getMediaMetadata(treeId)]);
     const index = members.findIndex((member) => member.id === memberId);
     if (index < 0) throw new MemberServiceError('NOT_FOUND', 'Member not found');
+    validateAvatarMedia(input.avatarMediaId, media);
 
     const current = members[index];
     const nextDateOfBirth = input.dateOfBirth ?? current.dateOfBirth;
@@ -444,6 +446,15 @@ function validateDates(dateOfBirth?: string, dateOfDeath?: string): void {
   if (dateOfDeath && !death) throw new MemberServiceError('INVALID_INPUT', 'dateOfDeath must be a valid ISO date');
   if (birth && death && death < birth) {
     throw new MemberServiceError('INVALID_INPUT', 'dateOfDeath cannot be before dateOfBirth');
+  }
+}
+
+function validateAvatarMedia(mediaId: string | undefined, media: readonly MediaMetadata[]): void {
+  if (!mediaId) return;
+  const item = media.find((candidate) => candidate.id === mediaId);
+  if (!item) throw new MemberServiceError('INVALID_INPUT', 'Avatar media not found in this family tree');
+  if (!item.mimeType.startsWith('image/')) {
+    throw new MemberServiceError('INVALID_INPUT', 'Avatar media must be an image');
   }
 }
 

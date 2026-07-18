@@ -22,6 +22,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       memberIds: arrayField(form, 'memberIds'),
       eventIds: arrayField(form, 'eventIds'),
       albumId: stringField(form, 'albumId'),
+      isAvatar: stringField(form, 'isAvatar') === 'true',
       caption: stringField(form, 'caption'),
       takenAt: stringField(form, 'takenAt')
     }, userId);
