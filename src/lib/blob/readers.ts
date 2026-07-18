@@ -1,3 +1,4 @@
+import { familyTreeSchema } from '@/data/schemas';
 import type { Album, ChangeLog, Event, FamilyTree, MediaMetadata, Member, Relationship, User } from '@/data/types';
 import { normalizeRelationships } from '@/lib/algorithms/relationship-normalization';
 import { BLOB_PATHS, readBlob } from './client';
@@ -8,7 +9,8 @@ export async function getUsers(): Promise<User[]> {
 }
 
 export async function getTrees(): Promise<FamilyTree[]> {
-  return (await readBlob<FamilyTree[]>(BLOB_PATHS.trees())) ?? [];
+  const stored = (await readBlob<unknown[]>(BLOB_PATHS.trees())) ?? [];
+  return familyTreeSchema.array().parse(stored);
 }
 
 export async function getMembers(treeId: string): Promise<Member[]> {

@@ -16,6 +16,7 @@ export function createInitialTree(params: {
 }): FamilyTree {
   return {
     id: params.id,
+    kind: 'STANDALONE',
     name: params.name,
     description: params.description,
     ownerId: params.ownerId,

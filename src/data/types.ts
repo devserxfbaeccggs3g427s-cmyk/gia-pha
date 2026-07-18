@@ -1,5 +1,6 @@
 export type Provider = 'credentials' | 'google' | 'facebook';
 export type TreeRole = 'ADMIN' | 'EDITOR' | 'VIEWER';
+export type FamilyTreeKind = 'STANDALONE' | 'COMPOSITE';
 export type Gender = 'MALE' | 'FEMALE' | 'OTHER';
 export type RelationType = 'PARENT_CHILD' | 'SPOUSE' | 'SIBLING' | 'ADOPTED' | 'CUSTOM';
 export type MarriageStatus = 'MARRIED' | 'DIVORCED' | 'WIDOWED';
@@ -39,6 +40,11 @@ export interface Session {
 
 export interface FamilyTree {
   id: string;
+  /**
+   * Records created before composite trees do not contain this field.
+   * Read boundaries normalize an omitted value to STANDALONE.
+   */
+  kind?: FamilyTreeKind;
   name: string;
   description?: string;
   ownerId: string;
@@ -183,4 +189,161 @@ export interface BackupSnapshot {
     events: Event[];
     mediaMetadata: MediaMetadata[];
   };
+}
+
+export type CompositeSourceScope = 'FULL_TREE' | 'DESCENDANTS' | 'SELECTED_MEMBERS';
+export type CompositeSourceStatus = 'ACTIVE' | 'UNAVAILABLE';
+export type IdentityLinkStatus = 'PROPOSED' | 'CONFIRMED' | 'REJECTED';
+
+export interface SourceReference {
+  treeId: string;
+  memberId: string;
+}
+
+export interface CompositeSource {
+  id: string;
+  sourceTreeId: string;
+  scope: CompositeSourceScope;
+  anchorMemberIds: string[];
+  selectedMemberIds: string[];
+  includeSpouses: boolean;
+  includeEvents: boolean;
+  includeMedia: boolean;
+  allowCompositeSharing: boolean;
+  shareLivingDetails: boolean;
+  preferredLabel?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CompositeIdentityGroup {
+  id: string;
+  references: SourceReference[];
+  status: IdentityLinkStatus;
+  preferredReference?: SourceReference;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CompositeRelationship {
+  id: string;
+  source: SourceReference;
+  target: SourceReference;
+  type: RelationType;
+  customType?: string;
+  marriageDate?: string;
+  divorceDate?: string;
+  marriageStatus?: MarriageStatus;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface CompositeTreeConfig {
+  treeId: string;
+  schemaVersion: 1;
+  revision: number;
+  sources: CompositeSource[];
+  identityGroups: CompositeIdentityGroup[];
+  crossTreeRelationships: CompositeRelationship[];
+  publishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SourceEntityType = 'MEMBER' | 'RELATIONSHIP' | 'EVENT' | 'MEDIA';
+
+export interface SourceProvenance {
+  treeId: string;
+  entityId: string;
+  entityType: SourceEntityType;
+  sourceUpdatedAt?: string;
+}
+
+export interface VirtualMember extends Omit<Member, 'id' | 'treeId'> {
+  id: string;
+  treeId: string;
+  sourceReferences: SourceReference[];
+  preferredReference: SourceReference;
+  provenance: SourceProvenance[];
+  hasConflictingFields: boolean;
+  isPlaceholder?: boolean;
+}
+
+export interface VirtualRelationship
+  extends Omit<Relationship, 'id' | 'treeId' | 'sourceMemberId' | 'targetMemberId'> {
+  id: string;
+  treeId: string;
+  sourceMemberId: string;
+  targetMemberId: string;
+  provenance: SourceProvenance[];
+  isCrossTree: boolean;
+}
+
+/**
+ * Read-only event DTO emitted by a composite resolver.
+ *
+ * The explicit type prevents source Event values from being cast after their
+ * identity, tree, member and media references have been rewritten.
+ */
+export interface ResolvedEvent extends Omit<Event, 'id' | 'treeId' | 'memberIds' | 'mediaIds'> {
+  id: string;
+  treeId: string;
+  memberIds: string[];
+  mediaIds: string[];
+  provenance: SourceProvenance[];
+}
+
+/**
+ * Read-only media DTO emitted by a composite resolver.
+ *
+ * Legacy singular links are intentionally removed. Composite consumers always
+ * receive normalized arrays containing virtual member and event identifiers.
+ */
+export interface ResolvedMediaMetadata
+  extends Omit<MediaMetadata, 'id' | 'treeId' | 'memberId' | 'eventId' | 'memberIds' | 'eventIds'> {
+  id: string;
+  treeId: string;
+  memberIds: string[];
+  eventIds: string[];
+  provenance: SourceProvenance[];
+}
+
+export interface ResolvedSourceManifest {
+  sourceTreeId: string;
+  status: CompositeSourceStatus;
+  version: string;
+  resolvedMemberCount: number;
+  warningCode?: string;
+}
+
+export type CompositeWarningCode =
+  | 'SOURCE_FORBIDDEN'
+  | 'SOURCE_UNAVAILABLE'
+  | 'STALE_SOURCE'
+  | 'INVALID_REFERENCE'
+  | 'IDENTITY_CONFLICT'
+  | 'UNRESOLVED_IDENTITY';
+
+export interface CompositeWarning {
+  code: CompositeWarningCode;
+  message: string;
+  sourceTreeId?: string;
+  sourceReference?: SourceReference;
+  entityId?: string;
+}
+
+export interface ResolvedTreeData {
+  tree: FamilyTree;
+  members: VirtualMember[];
+  relationships: VirtualRelationship[];
+  events: ResolvedEvent[];
+  mediaMetadata: ResolvedMediaMetadata[];
+  sourceManifest: ResolvedSourceManifest[];
+  warnings: CompositeWarning[];
+  resolvedAt: string;
+  configRevision: number;
+  stale: boolean;
 }

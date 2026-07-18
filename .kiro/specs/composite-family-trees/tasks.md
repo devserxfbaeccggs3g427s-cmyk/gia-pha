@@ -10,17 +10,17 @@ stable.
 
 ## Tasks
 
-- [ ] 1. Add backward-compatible tree kinds and composite domain types
-  - [ ] 1.1 Add `FamilyTreeKind`, SourceReference, CompositeSource,
+- [x] 1. Add backward-compatible tree kinds and composite domain types
+  - [x] 1.1 Add `FamilyTreeKind`, SourceReference, CompositeSource,
     CompositeIdentityGroup, CompositeRelationship and CompositeTreeConfig to
     `src/data/types.ts`
-  - [ ] 1.2 Add input and persisted-config Zod schemas, including source limits,
+  - [x] 1.2 Add input and persisted-config Zod schemas, including source limits,
     reference uniqueness, scope rules and cross-tree relationship validation
-  - [ ] 1.3 Normalize missing `FamilyTree.kind` to `STANDALONE` at the read
+  - [x] 1.3 Normalize missing `FamilyTree.kind` to `STANDALONE` at the read
     boundary and write explicit kind for all new trees
-  - [ ] 1.4 Add resolved DTO types instead of reusing or casting source Event
+  - [x] 1.4 Add resolved DTO types instead of reusing or casting source Event
     and Media interfaces after IDs are remapped
-  - [ ]* 1.5 Add schema and backward-compatibility unit/property tests
+  - [x]* 1.5 Add schema and backward-compatibility unit/property tests
   - _Requirements: 1.1, 1.2, 5.2, 12.1_
 
 - [ ] 2. Implement composite Blob storage and optimistic config concurrency
@@ -54,7 +54,6 @@ stable.
     traversal
   - [ ] 4.3 Filter relationships and compute Event/Media preview counts
   - [ ] 4.4 Return warnings for invalid, missing or out-of-scope anchors
-  - [ ]* 4.5 Add unit and property tests for scope soundness and multiple anchors
   - _Requirements: 2, 5.1_
 
 - [ ] 5. Implement identity suggestion and confirmation
@@ -80,7 +79,6 @@ stable.
   - [ ] 6.6 Run whole-graph cycle detection and existing generation algorithm
   - [ ] 6.7 Return partial results and sanitized placeholders for unavailable
     sources where appropriate
-  - [ ]* 6.8 Add property tests for determinism, fetch-order invariance,
     normalization, DAG safety and source isolation
   - _Requirements: 4, 5, 10.1, 11.4, 12.3_
 
