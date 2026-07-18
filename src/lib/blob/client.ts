@@ -1,4 +1,4 @@
-import { del, get, put } from '@vercel/blob';
+import { del, get, list, put } from '@vercel/blob';
 
 export type BlobStorageErrorCode =
   | 'CONFIGURATION'
@@ -34,8 +34,19 @@ export const BLOB_PATHS = {
   mediaOriginal: (treeId: string, filename: string) => `media/${treeId}/originals/${filename}`,
   mediaThumbnail: (treeId: string, filename: string) => `media/${treeId}/thumbnails/${filename}`,
   changeLogs: (treeId: string) => `data/trees/${treeId}/change-logs.json`,
-  backup: (treeId: string, timestamp: string) => `backups/${treeId}/${timestamp}.json`
+  backup: (treeId: string, timestamp: string) => `backups/${treeId}/${timestamp}.json`,
+  backupPrefix: (treeId: string) => `backups/${treeId}/`,
+  shareLinks: (treeId: string) => `data/trees/${treeId}/share-links.json`,
+  shareLink: (token: string) => `share-links/${token}.json`
 } as const;
+
+export interface BlobMetadata {
+  pathname: string;
+  url: string;
+  size: number;
+  uploadedAt: Date;
+  contentType?: string;
+}
 
 export interface StoredBinaryBlob {
   url: string;
@@ -89,6 +100,30 @@ export async function writeBlob<T>(path: string, data: T): Promise<void> {
       contentType: 'application/json; charset=utf-8'
     });
   }, `Write blob "${path}"`);
+}
+
+/** Lists every blob under a prefix, following Vercel Blob cursors when needed. */
+export async function listBlobs(prefix: string): Promise<BlobMetadata[]> {
+  return withBlobErrorHandling(async () => {
+    assertBlobCredentials();
+    const blobs: BlobMetadata[] = [];
+    let cursor: string | undefined;
+
+    do {
+      const page = await list({ prefix, ...(cursor ? { cursor } : {}), limit: 1000 });
+      blobs.push(
+        ...page.blobs.map((blob) => ({
+          pathname: blob.pathname,
+          url: blob.url,
+          size: blob.size,
+          uploadedAt: blob.uploadedAt
+        }))
+      );
+      cursor = page.hasMore ? page.cursor : undefined;
+    } while (cursor);
+
+    return blobs;
+  }, `List blobs with prefix "${prefix}"`);
 }
 
 export async function writeBinaryBlob(

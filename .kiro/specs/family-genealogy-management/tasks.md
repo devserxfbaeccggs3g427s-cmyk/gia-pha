@@ -234,8 +234,8 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
 - [x] 11. Checkpoint - Ensure service layer tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 12. Implement Backup/Restore and Share Link features
-  - [ ] 12.1 Create backup and restore service
+- [x] 12. Implement Backup/Restore and Share Link features
+  - [x] 12.1 Create backup and restore service
     - Implement `src/lib/services/backup-service.ts` with: createBackup, restoreFromBackup, listBackups
     - Create API route: `src/app/api/backup/[treeId]/route.ts`
     - Backup creates timestamped JSON snapshot of all tree data (members, relationships, events, media metadata)
@@ -243,11 +243,11 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Support restore from any backup within 30 days
     - _Requirements: 14.4, 16.7_
 
-  - [ ]* 12.2 Write property test for backup/restore round-trip
+  - [x]* 12.2 Write property test for backup/restore round-trip
     - **Property 14: Backup/Restore Round-Trip**
     - **Validates: Requirements 16.7**
 
-  - [ ] 12.3 Implement share link functionality
+  - [x] 12.3 Implement share link functionality
     - Create share link with expiration time and VIEW-only permission
     - Generate unique tokens for share links
     - Validate share link access in middleware

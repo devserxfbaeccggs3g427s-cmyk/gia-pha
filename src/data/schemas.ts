@@ -165,6 +165,14 @@ export const roleAssignmentSchema = z.object({
   role: treeRoleSchema
 });
 
+export const createShareLinkSchema = z.object({
+  expiresAt: z.string().datetime()
+});
+
+export const restoreBackupSchema = z.object({
+  timestamp: z.string().datetime()
+});
+
 export type CreateMemberInput = z.infer<typeof createMemberSchema>;
 export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
 export type CreateRelationshipInput = z.infer<typeof createRelationshipSchema>;
@@ -177,3 +185,5 @@ export type CreateTreeInput = z.infer<typeof createTreeSchema>;
 export type UpdateTreeInput = z.infer<typeof updateTreeSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type RoleAssignmentInput = z.infer<typeof roleAssignmentSchema>;
+export type CreateShareLinkInput = z.infer<typeof createShareLinkSchema>;
+export type RestoreBackupInput = z.infer<typeof restoreBackupSchema>;
