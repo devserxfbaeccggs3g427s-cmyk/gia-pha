@@ -6,6 +6,7 @@ import { ChangeEvent, useEffect, useTransition } from 'react';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import { isSupportedLocale, localeDetails } from '@/i18n/config';
 import { routing, type AppLocale } from '@/i18n/routing';
+import { useUiStore } from '@/store/ui-store';
 import styles from './language-switcher.module.css';
 
 export function LanguageSwitcher() {
@@ -15,6 +16,11 @@ export function LanguageSwitcher() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const setStoredLocale = useUiStore((state) => state.setLocale);
+
+  useEffect(() => {
+    if (isSupportedLocale(locale)) setStoredLocale(locale);
+  }, [locale, setStoredLocale]);
 
   useEffect(() => {
     for (const availableLocale of routing.locales) {
@@ -31,6 +37,7 @@ export function LanguageSwitcher() {
     if (!isSupportedLocale(nextLocale) || nextLocale === locale) return;
 
     const href = buildLocaleHref(pathname, searchParams, nextLocale);
+    setStoredLocale(nextLocale);
     startTransition(() => {
       router.replace(href, { locale: nextLocale, scroll: false });
     });

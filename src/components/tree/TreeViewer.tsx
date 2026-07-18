@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -41,6 +42,9 @@ import { getAncestryPath, getCanonicalParentChildEdges } from '@/lib/algorithms/
 import { calculateGenerations } from '@/lib/algorithms/generation';
 import { MemberNode, getMemberColorScheme, formatLifeYears, type MemberNodeData, type MemberSummary } from './MemberCard';
 import { buildTreeLayout, type TreeDisplayMode, type TreeLayoutMode } from './tree-layout';
+import { useTreeUiStore } from '@/store/tree-ui-store';
+import { apiRequest } from '@/lib/api/mutations';
+import { queryKeys } from '@/lib/query/keys';
 import styles from './tree-viewer.module.css';
 
 export interface TreeViewerProps {
@@ -77,44 +81,25 @@ export function TreeViewer({
   const locale = useLocale();
   const router = useRouter();
   const flowRef = useRef<ReactFlowInstance<MemberNodeData> | null>(null);
-  const [data, setData] = useState<TreeViewerData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<TreeLayoutMode>(mode);
   const [displayMode, setDisplayMode] = useState<TreeDisplayMode>('detailed');
-  const [internalSelectedId, setInternalSelectedId] = useState<string>();
+  const storedSelectedId = useTreeUiStore((state) => state.activeTreeId === treeId ? state.selectedNodeId : undefined);
+  const setActiveTree = useTreeUiStore((state) => state.setActiveTree);
+  const setInternalSelectedId = useTreeUiStore((state) => state.selectNode);
+  const storedViewport = useTreeUiStore((state) => state.viewport);
+  const setStoredViewport = useTreeUiStore((state) => state.setViewport);
   const [lineageEnabled, setLineageEnabled] = useState(false);
-  const [zoom, setZoom] = useState(1);
+  const zoom = storedViewport.zoom;
 
-  const selectedId = selectedMemberId ?? internalSelectedId;
+  const selectedId = selectedMemberId ?? storedSelectedId;
 
-  const loadTree = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/trees/${encodeURIComponent(treeId)}`, {
-        signal,
-        headers: { Accept: 'application/json' }
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: string } | null;
-        throw new Error(body?.error || t('loadError'));
-      }
-      const tree = await response.json() as TreeViewerData;
-      setData(tree);
-    } catch (reason) {
-      if (reason instanceof DOMException && reason.name === 'AbortError') return;
-      setError(reason instanceof Error ? reason.message : t('loadError'));
-    } finally {
-      if (!signal?.aborted) setLoading(false);
-    }
-  }, [t, treeId]);
+  useEffect(() => setActiveTree(treeId), [setActiveTree, treeId]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    void loadTree(controller.signal);
-    return () => controller.abort();
-  }, [loadTree]);
+  const treeQuery = useQuery({
+    queryKey: queryKeys.tree(treeId),
+    queryFn: () => apiRequest<TreeViewerData>(`/api/trees/${encodeURIComponent(treeId)}`)
+  });
+  const data = treeQuery.data;
 
   useEffect(() => setLayoutMode(mode), [mode]);
 
@@ -217,8 +202,8 @@ export function TreeViewer({
   const generationCount = generationMap.size > 0 ? Math.max(...generationMap.values()) + 1 : 0;
   const virtualized = members.length > 100;
 
-  if (loading) return <TreeViewerSkeleton label={t('loading')} />;
-  if (error) return <TreeViewerError message={error} retry={() => void loadTree()} />;
+  if (treeQuery.isLoading) return <TreeViewerSkeleton label={t('loading')} />;
+  if (treeQuery.error) return <TreeViewerError message={treeQuery.error.message || t('loadError')} retry={() => void treeQuery.refetch()} />;
 
   return (
     <section className={styles.viewer} aria-labelledby="tree-viewer-title">
@@ -288,10 +273,10 @@ export function TreeViewer({
               nodes={nodes}
               edges={edges}
               nodeTypes={nodeTypes}
-              onInit={(instance) => { flowRef.current = instance; setZoom(instance.getZoom()); }}
+              onInit={(instance) => { flowRef.current = instance; setStoredViewport(instance.getViewport()); }}
               onNodeClick={(_event, node) => selectMember(node.id)}
               onNodeDoubleClick={(_event, node) => openMember(node.id)}
-              onMoveEnd={(_event, viewport) => setZoom(viewport.zoom)}
+              onMoveEnd={(_event, viewport) => setStoredViewport(viewport)}
               minZoom={0.12}
               maxZoom={2.4}
               fitView

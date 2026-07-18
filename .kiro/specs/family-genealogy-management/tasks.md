@@ -373,15 +373,15 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Add PDF export button for reports
     - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.6_
 
-- [ ] 20. Implement state management and optimistic updates
-  - [ ] 20.1 Set up Zustand stores and React Query configuration
+- [x] 20. Implement state management and optimistic updates
+  - [x] 20.1 Set up Zustand stores and React Query configuration
     - Create `src/store/ui-store.ts`: theme, sidebar state, locale
     - Create `src/store/tree-ui-store.ts`: zoom, pan, selected node
     - Create `src/store/offline-store.ts`: pending mutations queue
     - Configure React Query provider with cache settings, refetch policies
     - _Requirements: 16.5, 16.8_
 
-  - [ ] 20.2 Implement optimistic update hooks with error rollback
+  - [x] 20.2 Implement optimistic update hooks with error rollback
     - Create custom hooks: `useMemberMutation`, `useRelationshipMutation`, `useEventMutation`
     - Implement optimistic update → API call → confirm or rollback pattern
     - On network failure: queue mutation in offline store for retry

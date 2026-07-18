@@ -28,6 +28,7 @@ import { MemberSearch } from '@/components/genealogy/member-search';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
+import { useUiStore } from '@/store/ui-store';
 import styles from './dashboard-shell.module.css';
 
 interface DashboardShellProps { children: React.ReactNode; }
@@ -53,8 +54,10 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const d = useTranslations('dashboard');
   const { data: session } = useSession();
   const { toast } = useToast();
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const collapsed = useUiStore((state) => state.sidebarCollapsed);
+  const setCollapsed = useUiStore((state) => state.setSidebarCollapsed);
+  const mobileOpen = useUiStore((state) => state.mobileSidebarOpen);
+  const setMobileOpen = useUiStore((state) => state.setMobileSidebarOpen);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const treeId = useMemo(() => {
@@ -63,16 +66,12 @@ export function DashboardShell({ children }: DashboardShellProps) {
   }, [pathname]);
 
   useEffect(() => {
-    setCollapsed(window.localStorage.getItem('kinship.sidebar-collapsed') === 'true');
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       const isTyping = target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'b' && !isTyping) {
         event.preventDefault();
-        setCollapsed((value) => {
-          window.localStorage.setItem('kinship.sidebar-collapsed', String(!value));
-          return !value;
-        });
+        useUiStore.getState().toggleSidebar();
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !isTyping) {
         event.preventDefault();
@@ -86,7 +85,6 @@ export function DashboardShell({ children }: DashboardShellProps) {
 
   const setSidebarCollapsed = (value: boolean) => {
     setCollapsed(value);
-    window.localStorage.setItem('kinship.sidebar-collapsed', String(value));
   };
 
   const getHref = (key: NavItem['key']) => {
