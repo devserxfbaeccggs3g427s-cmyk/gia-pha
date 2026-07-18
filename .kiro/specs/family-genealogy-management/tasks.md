@@ -280,14 +280,14 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Add RTL text direction support for future language expansion
     - _Requirements: 10.3, 10.4, 10.5_
 
-- [ ] 15. Implement UI shell, layout, and navigation
-  - [ ] 15.1 Set up shadcn/ui components and design system
+- [x] 15. Implement UI shell, layout, and navigation
+  - [x] 15.1 Set up shadcn/ui components and design system
     - Install and configure shadcn/ui with custom theme (colors, typography, spacing)
     - Implement dark mode and light mode with system preference auto-detection
     - Create base UI components: Button, Input, Select, Dialog, Toast, Card, Skeleton
     - _Requirements: 13.1, 13.2_
 
-  - [ ] 15.2 Create responsive layout system with navigation
+  - [x] 15.2 Create responsive layout system with navigation
     - Implement `src/app/[locale]/(dashboard)/layout.tsx` with sidebar navigation
     - Create responsive breakpoints: mobile (< 768px), tablet (768-1024px), desktop (> 1024px)
     - Implement breadcrumb navigation component
@@ -295,7 +295,7 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Support keyboard navigation and WCAG 2.1 Level AA
     - _Requirements: 5.1, 5.4, 13.3, 13.5, 13.6_
 
-  - [ ] 15.3 Implement loading states and animations
+  - [x] 15.3 Implement loading states and animations
     - Create loading indicators and skeleton screens for operations > 1 second
     - Implement smooth animations and transitions at 60fps
     - _Requirements: 13.4, 13.5_

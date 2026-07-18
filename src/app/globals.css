@@ -1,21 +1,101 @@
-:root {
-  color-scheme: light dark;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --background: 48 33% 97%;
+    --foreground: 150 23% 12%;
+    --card: 48 30% 99%;
+    --card-foreground: 150 23% 12%;
+    --popover: 48 30% 99%;
+    --popover-foreground: 150 23% 12%;
+    --primary: 153 47% 23%;
+    --primary-foreground: 48 33% 98%;
+    --secondary: 145 18% 91%;
+    --secondary-foreground: 153 40% 20%;
+    --muted: 45 17% 92%;
+    --muted-foreground: 145 8% 42%;
+    --accent: 144 25% 90%;
+    --accent-foreground: 153 45% 20%;
+    --destructive: 6 69% 49%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 140 13% 86%;
+    --input: 140 13% 81%;
+    --ring: 153 42% 34%;
+    --radius: 0.8rem;
+    --sidebar: 151 34% 14%;
+    --sidebar-foreground: 135 16% 88%;
+    --sidebar-muted: 148 21% 23%;
+    --sidebar-accent: 143 36% 72%;
+    --gold: 38 56% 56%;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --background: 150 18% 8%;
+    --foreground: 48 22% 92%;
+    --card: 150 17% 11%;
+    --card-foreground: 48 22% 92%;
+    --popover: 150 18% 12%;
+    --popover-foreground: 48 22% 92%;
+    --primary: 143 37% 64%;
+    --primary-foreground: 153 45% 12%;
+    --secondary: 150 15% 17%;
+    --secondary-foreground: 140 16% 88%;
+    --muted: 150 14% 16%;
+    --muted-foreground: 140 8% 62%;
+    --accent: 150 20% 19%;
+    --accent-foreground: 140 22% 88%;
+    --destructive: 5 61% 48%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 150 12% 21%;
+    --input: 150 11% 27%;
+    --ring: 143 37% 56%;
+    --sidebar: 151 27% 7%;
+    --sidebar-foreground: 135 13% 83%;
+    --sidebar-muted: 150 17% 14%;
+    --sidebar-accent: 143 37% 64%;
+    --gold: 38 54% 62%;
+  }
+
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    min-width: 320px;
+    background: hsl(var(--background));
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    min-height: 100vh;
+    margin: 0;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.22);
+  }
+
+  :focus-visible {
+    outline-color: hsl(var(--ring));
+  }
 }
 
-* {
-  box-sizing: border-box;
-}
+@layer utilities {
+  .font-display {
+    font-family: Georgia, "Times New Roman", serif;
+  }
 
-body {
-  margin: 0;
-  font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  .text-balance {
+    text-wrap: balance;
+  }
 }
 
 .locale-switcher-slot {
@@ -29,9 +109,31 @@ bdi[translate="no"] {
   unicode-bidi: isolate;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 @media (max-width: 480px) {
   .locale-switcher-slot {
     inset-block-start: 14px;
     inset-inline-end: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }

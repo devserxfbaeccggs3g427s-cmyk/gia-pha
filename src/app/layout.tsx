@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
-import { AuthProvider } from '@/components/auth/auth-provider';
+import { AppProviders } from '@/components/providers/app-providers';
 import { getTextDirection, isSupportedLocale } from '@/i18n/config';
 import './globals.css';
 
@@ -19,7 +19,7 @@ export default function RootLayout({
 
   return (
     <html lang={locale} dir={getTextDirection(locale)} suppressHydrationWarning>
-      <body><AuthProvider>{children}</AuthProvider></body>
+      <body><AppProviders>{children}</AppProviders></body>
     </html>
   );
 }

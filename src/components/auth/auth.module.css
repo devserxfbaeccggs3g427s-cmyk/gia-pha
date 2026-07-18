@@ -273,6 +273,37 @@
   }
 }
 
+:global(.dark) .page {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+:global(.dark) .panel {
+  background: hsl(var(--background));
+}
+
+:global(.dark) .subtitle,
+:global(.dark) .footnote,
+:global(.dark) .passwordHint {
+  color: hsl(var(--muted-foreground));
+}
+
+:global(.dark) .input,
+:global(.dark) .oauthButton {
+  border-color: hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
+:global(.dark) .divider {
+  color: hsl(var(--muted-foreground));
+}
+
+:global(.dark) .divider::before,
+:global(.dark) .divider::after {
+  background: hsl(var(--border));
+}
+
 @media (max-width: 480px) {
   .visual {
     min-height: 250px;
@@ -294,4 +325,3 @@
     transition: none;
   }
 }
-
