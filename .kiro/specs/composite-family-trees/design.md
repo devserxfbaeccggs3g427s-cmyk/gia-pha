@@ -1,34 +1,36 @@
 # Design Document: Composite Family Trees (MVP)
 
-## Status and Dependencies
+## Trạng thái và Phụ thuộc
 
-**READY FOR IMPLEMENTATION**
+**SẴN SÀNG TRIỂN KHAI**
 
-This design extends `../family-genealogy-management/design.md`. The existing
-standalone data model, canonical relationship direction, generation rules,
-RBAC, backup, PWA and export behavior remain authoritative unless this document
-explicitly adds composite behavior.
+Tài liệu này mở rộng `../family-genealogy-management/design.md`. Mọi hành vi
+hiện tại của `Standalone_Tree` — data model, chiều canonical của quan hệ, quy
+tắc generation, RBAC, backup, PWA và export — vẫn là tham chiếu gốc trừ khi
+tài liệu này thêm hành vi composite một cách tường minh.
 
-## Design Goals
+Các yêu cầu nghiệp vụ chi tiết nằm trong `requirements.md` cùng thư mục.
 
-1. Compose many standalone trees without copying their domain records.
-2. Keep exactly one editable source of truth for every source record.
-3. Make identity linking explicit, reversible and auditable.
-4. Enforce source permissions at read time; composite membership never grants
-   transitive source access.
-5. Present a normalized graph compatible with existing read features.
-6. Preserve current behavior and storage layout for all existing trees.
+## Mục tiêu Thiết kế
 
-## Non-Goals
+1. Tổng hợp nhiều `Standalone_Tree` mà không sao chép bản ghi domain.
+2. Giữ đúng một nguồn sự thật có thể chỉnh sửa cho mỗi bản ghi nguồn.
+3. Liên kết danh tính phải tường minh, có thể hoàn tác và có audit trail.
+4. Kiểm tra quyền nguồn tại thời điểm đọc; thành viên composite **không** được
+   quyền truy cập nguồn theo kiểu bắc cầu.
+5. Trình bày đồ thị đã chuẩn hóa tương thích với toàn bộ tính năng đọc hiện có.
+6. Giữ nguyên hành vi và layout lưu trữ hiện tại của tất cả tree hiện có.
 
-- Branch extraction and materialization
-- Bidirectional synchronization
-- Direct Member/Event/Media mutation through a composite
-- Automatic identity confirmation
+## Ngoài Phạm vi
+
+- Tách nhánh (Branch Extraction) và materialization
+- Đồng bộ hai chiều giữa các `Source_Tree`
+- Sửa `Member`/`Event`/`Media` trực tiếp qua composite
+- Tự động xác nhận danh tính
 - Nested composites
-- Field-level conflict resolution
+- Giải quyết conflict theo từng field
 
-These capabilities belong to `../composite-family-trees-advanced`.
+Các tính năng trên thuộc `../composite-family-trees-advanced`.
 
 ## Key Decisions
 
