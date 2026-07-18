@@ -253,8 +253,8 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Validate share link access in middleware
     - _Requirements: 14.3_
 
-- [ ] 13. Implement Report and Statistics service
-  - [ ] 13.1 Create ReportService with statistics and charts
+- [x] 13. Implement Report and Statistics service
+  - [x] 13.1 Create ReportService with statistics and charts
     - Implement `src/lib/services/report-service.ts` with: getStatistics, getBranchStatistics, getGrowthTimeline
     - Create API route: `src/app/api/reports/[treeId]/statistics/route.ts`
     - Calculate: total members, generations count, gender distribution, age distribution, geographic distribution
