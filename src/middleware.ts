@@ -1,17 +1,17 @@
 import { getToken } from 'next-auth/jwt';
+import createIntlMiddleware from 'next-intl/middleware';
 import { NextRequest, NextResponse } from 'next/server';
 import { AUTH_SECRET } from '@/lib/auth/constants';
 import { ShareTokenError, verifySignedShareToken } from '@/lib/auth/share-token';
+import { isSupportedLocale } from '@/i18n/config';
+import { routing } from '@/i18n/routing';
 
 const PUBLIC_PATHS = [
   '/api/auth',
-  '/vi/login',
-  '/vi/register',
-  '/en/login',
-  '/en/register',
   '/api/cron/backups',
   '/share/unavailable'
 ];
+const handleIntlRouting = createIntlMiddleware(routing);
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0].trim();
@@ -49,13 +49,31 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       return NextResponse.redirect(unavailableUrl);
     }
   }
+
+  if (pathname === '/share/unavailable' || pathname.startsWith('/share/unavailable/')) {
+    const response = NextResponse.next();
+    setSecurityHeaders(response);
+    return response;
+  }
+
+  const isApiPath = pathname === '/api' || pathname.startsWith('/api/');
+  const locale = getPathLocale(pathname);
+
+  // Locale negotiation happens before authentication so bare URLs are routed
+  // consistently and the subsequent auth redirect can preserve that locale.
+  if (!isApiPath && !locale) {
+    const response = handleIntlRouting(request);
+    setSecurityHeaders(response);
+    return response;
+  }
+
   const isPublic = PUBLIC_PATHS.some(
     (publicPath) => pathname === publicPath || pathname.startsWith(`${publicPath}/`)
-  );
+  ) || isLocalizedAuthPath(pathname);
 
   let response: NextResponse;
   if (isPublic) {
-    response = NextResponse.next();
+    response = isApiPath ? NextResponse.next() : handleIntlRouting(request);
   } else {
     if (!AUTH_SECRET) {
       return NextResponse.json(
@@ -74,17 +92,25 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         );
       }
 
-      const locale = pathname.startsWith('/en') ? 'en' : 'vi';
-      const loginUrl = new URL(`/${locale}/login`, request.url);
+      const loginUrl = new URL(`/${locale ?? routing.defaultLocale}/login`, request.url);
       loginUrl.searchParams.set('callbackUrl', `${pathname}${request.nextUrl.search}`);
       return NextResponse.redirect(loginUrl);
     }
 
-    response = NextResponse.next();
+    response = isApiPath ? NextResponse.next() : handleIntlRouting(request);
   }
 
   setSecurityHeaders(response);
   return response;
+}
+
+function getPathLocale(pathname: string): 'vi' | 'en' | null {
+  const segment = pathname.split('/')[1];
+  return isSupportedLocale(segment) ? segment : null;
+}
+
+function isLocalizedAuthPath(pathname: string): boolean {
+  return /^\/(?:vi|en)\/(?:login|register)\/?$/.test(pathname);
 }
 
 function getShareToken(pathname: string): string | null {

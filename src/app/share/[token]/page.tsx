@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { OriginalLanguageText } from '@/components/i18n/original-language-text';
 import type { Member } from '@/data/types';
 import { ShareLinkServiceError, shareLinkService } from '@/lib/services/share-link-service';
 import styles from './share.module.css';
@@ -28,8 +29,8 @@ export default async function SharedTreePage({ params }: { params: { token: stri
       <section className={styles.hero}>
         <div>
           <div className={styles.eyebrow}><span /> Bản chia sẻ chỉ xem</div>
-          <h1>{data.tree.name}</h1>
-          {data.tree.description ? <p className={styles.description}>{data.tree.description}</p> : null}
+          <h1><OriginalLanguageText>{data.tree.name}</OriginalLanguageText></h1>
+          {data.tree.description ? <p className={styles.description}><OriginalLanguageText>{data.tree.description}</OriginalLanguageText></p> : null}
         </div>
         <div className={styles.expiration}>
           <span>Liên kết có hiệu lực đến</span>
@@ -61,7 +62,7 @@ export default async function SharedTreePage({ params }: { params: { token: stri
                     <span>{member.generation === undefined ? 'Chưa xác định thế hệ' : `Thế hệ ${member.generation + 1}`}</span>
                     <i data-alive={member.isAlive}>{member.isAlive ? 'Còn sống' : 'Đã mất'}</i>
                   </div>
-                  <h3>{member.fullName}</h3>
+                  <h3><OriginalLanguageText>{member.fullName}</OriginalLanguageText></h3>
                   <p>{member.occupation || member.placeOfBirth || 'Thông tin đang được cập nhật'}</p>
                   <div className={styles.life}>{formatLife(member)}</div>
                 </div>
@@ -77,9 +78,9 @@ export default async function SharedTreePage({ params }: { params: { token: stri
           <div className={styles.list}>
             {canonicalRelationships(data.relationships).slice(0, 12).map((relationship) => (
               <div className={styles.listItem} key={relationship.id}>
-                <div><strong>{memberById.get(relationship.sourceMemberId)?.fullName ?? 'Không xác định'}</strong><span>{relationshipLabel(relationship.type)}</span></div>
+                <div><strong><OriginalLanguageText>{memberById.get(relationship.sourceMemberId)?.fullName ?? 'Không xác định'}</OriginalLanguageText></strong><span>{relationshipLabel(relationship.type)}</span></div>
                 <b aria-hidden="true">→</b>
-                <strong>{memberById.get(relationship.targetMemberId)?.fullName ?? 'Không xác định'}</strong>
+                <strong><OriginalLanguageText>{memberById.get(relationship.targetMemberId)?.fullName ?? 'Không xác định'}</OriginalLanguageText></strong>
               </div>
             ))}
             {!data.relationships.length ? <EmptyState message="Chưa có mối quan hệ." compact /> : null}

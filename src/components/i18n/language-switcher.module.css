@@ -1,0 +1,59 @@
+.switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 9px 0 11px;
+  border: 1px solid rgb(29 76 55 / 16%);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 88%);
+  color: #264c39;
+  box-shadow: 0 8px 24px rgb(29 76 55 / 7%);
+  backdrop-filter: blur(12px);
+}
+
+.icon {
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.select {
+  max-width: 130px;
+  border: 0;
+  padding: 0 20px 0 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  outline: none;
+  cursor: pointer;
+}
+
+.select:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.switcher:focus-within {
+  border-color: #337052;
+  box-shadow: 0 0 0 4px rgb(51 112 82 / 12%);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switcher {
+    scroll-behavior: auto;
+  }
+}

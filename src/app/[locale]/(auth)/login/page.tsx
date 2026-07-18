@@ -1,19 +1,22 @@
 import type { Metadata } from 'next';
+import { getTranslations } from 'next-intl/server';
 import { LoginForm } from '@/components/auth/login-form';
-
-export const metadata: Metadata = {
-  title: 'Đăng nhập | Quản lý gia phả'
-};
+import { isSupportedLocale } from '@/i18n/config';
 
 interface LoginPageProps {
   params: { locale: string };
   searchParams: { callbackUrl?: string; verified?: string; error?: string };
 }
 
+export async function generateMetadata({ params }: LoginPageProps): Promise<Metadata> {
+  if (!isSupportedLocale(params.locale)) return {};
+  const t = await getTranslations({ locale: params.locale, namespace: 'auth.login' });
+  return { title: t('metaTitle') };
+}
+
 export default function LoginPage({ params, searchParams }: LoginPageProps) {
   return (
     <LoginForm
-      locale={params.locale === 'en' ? 'en' : 'vi'}
       callbackUrl={searchParams.callbackUrl}
       emailVerified={searchParams.verified === '1'}
       verificationError={searchParams.error === 'INVALID_TOKEN'}
@@ -24,4 +27,3 @@ export default function LoginPage({ params, searchParams }: LoginPageProps) {
     />
   );
 }
-

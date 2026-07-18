@@ -265,8 +265,8 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Response time under 3 seconds for < 1000 members
     - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.6_
 
-- [ ] 14. Set up Internationalization (i18n)
-  - [ ] 14.1 Configure next-intl with locale routing
+- [x] 14. Set up Internationalization (i18n)
+  - [x] 14.1 Configure next-intl with locale routing
     - Set up `src/app/[locale]/layout.tsx` with next-intl provider
     - Configure middleware for locale detection and routing
     - Create translation files: `src/messages/vi.json`, `src/messages/en.json`
@@ -274,7 +274,7 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Support language switch without page reload (< 500ms)
     - _Requirements: 10.1, 10.2_
 
-  - [ ] 14.2 Implement locale-aware formatting and RTL support
+  - [x] 14.2 Implement locale-aware formatting and RTL support
     - Format dates, numbers, and currency according to selected locale
     - Ensure member data (names, biographies) remain in original language regardless of UI locale
     - Add RTL text direction support for future language expansion

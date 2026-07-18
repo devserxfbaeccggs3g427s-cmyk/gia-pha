@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { AuthProvider } from '@/components/auth/auth-provider';
+import { getTextDirection, isSupportedLocale } from '@/i18n/config';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -12,8 +14,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const requestLocale = headers().get('x-next-intl-locale');
+  const locale = isSupportedLocale(requestLocale) ? requestLocale : 'vi';
+
   return (
-    <html lang="vi">
+    <html lang={locale} dir={getTextDirection(locale)} suppressHydrationWarning>
       <body><AuthProvider>{children}</AuthProvider></body>
     </html>
   );

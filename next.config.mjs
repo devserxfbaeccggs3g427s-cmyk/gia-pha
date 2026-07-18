@@ -1,3 +1,5 @@
+import createNextIntlPlugin from 'next-intl/plugin';
+
 /** @type {import('next').NextConfig} */
 const allowedDevOrigins = new Set(['localhost', '127.0.0.1']);
 
@@ -16,4 +18,6 @@ const nextConfig = {
   allowedDevOrigins: [...allowedDevOrigins]
 };
 
-export default nextConfig;
+const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
+
+export default withNextIntl(nextConfig);

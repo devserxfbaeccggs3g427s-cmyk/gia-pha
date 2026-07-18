@@ -17,3 +17,21 @@ body {
     "Segoe UI",
     sans-serif;
 }
+
+.locale-switcher-slot {
+  position: fixed;
+  z-index: 20;
+  inset-block-start: 20px;
+  inset-inline-end: 22px;
+}
+
+bdi[translate="no"] {
+  unicode-bidi: isolate;
+}
+
+@media (max-width: 480px) {
+  .locale-switcher-slot {
+    inset-block-start: 14px;
+    inset-inline-end: 14px;
+  }
+}

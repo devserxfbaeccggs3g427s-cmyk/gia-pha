@@ -1,5 +1,62 @@
 {
   "app": {
-    "name": "Family Genealogy Management"
+    "name": "Family Genealogy Management",
+    "description": "Preserve your family trees, members, relationships, events, and media."
+  },
+  "common": {
+    "brand": "Kinship",
+    "loading": "Loading…",
+    "language": "Language",
+    "switchLanguage": "Switch interface language",
+    "vietnamese": "Tiếng Việt",
+    "english": "English"
+  },
+  "auth": {
+    "login": {
+      "metaTitle": "Sign in | Family Genealogy Management",
+      "eyebrow": "Family legacy",
+      "visualTitle": "Every generation has a story.",
+      "visualText": "Preserve memories, connect relatives, and pass your family history on to generations to come.",
+      "title": "Welcome back",
+      "subtitle": "Sign in to continue your family journey.",
+      "email": "Email address",
+      "password": "Password",
+      "submit": "Sign in",
+      "submitting": "Authenticating…",
+      "or": "or continue with",
+      "noAccount": "New here?",
+      "register": "Create an account",
+      "verified": "Your email is verified. You can now sign in.",
+      "invalidToken": "The verification link is invalid or has expired.",
+      "errors": {
+        "invalid": "The email or password is incorrect.",
+        "locked": "Your account is locked for 15 minutes after 5 failed sign-in attempts.",
+        "unverified": "Please verify your email before signing in.",
+        "generic": "Unable to sign in right now. Please try again."
+      }
+    },
+    "register": {
+      "metaTitle": "Create account | Family Genealogy Management",
+      "eyebrow": "Start today",
+      "visualTitle": "Preserve what makes your family unique.",
+      "visualText": "Create a private place for the people, stories, and milestones that matter.",
+      "title": "Create your account",
+      "subtitle": "Start building your family's secure genealogy.",
+      "name": "Full name",
+      "email": "Email address",
+      "password": "Password",
+      "passwordHint": "At least 12 characters with uppercase, lowercase, number, and special character.",
+      "submit": "Create account",
+      "submitting": "Creating account…",
+      "hasAccount": "Already have an account?",
+      "login": "Sign in",
+      "successVerification": "Your account is ready. Check your email and verify it before signing in.",
+      "successReady": "Your account is ready. You can sign in now.",
+      "errors": {
+        "duplicate": "This email is already registered.",
+        "invalid": "Please check your details and password strength.",
+        "generic": "Unable to create your account right now. Please try again."
+      }
+    }
   }
 }

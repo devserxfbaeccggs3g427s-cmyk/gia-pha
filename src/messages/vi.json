@@ -1,5 +1,62 @@
 {
   "app": {
-    "name": "Quản lý gia phả"
+    "name": "Quản lý gia phả",
+    "description": "Gìn giữ cây gia phả, thành viên, mối quan hệ, sự kiện và tư liệu của gia đình."
+  },
+  "common": {
+    "brand": "Gia Phả",
+    "loading": "Đang tải…",
+    "language": "Ngôn ngữ",
+    "switchLanguage": "Chuyển ngôn ngữ giao diện",
+    "vietnamese": "Tiếng Việt",
+    "english": "English"
+  },
+  "auth": {
+    "login": {
+      "metaTitle": "Đăng nhập | Quản lý gia phả",
+      "eyebrow": "Di sản gia đình",
+      "visualTitle": "Mỗi thế hệ, một câu chuyện.",
+      "visualText": "Gìn giữ ký ức, kết nối người thân và trao lại lịch sử gia đình cho những thế hệ mai sau.",
+      "title": "Chào mừng trở lại",
+      "subtitle": "Đăng nhập để tiếp tục hành trình gia đình của bạn.",
+      "email": "Địa chỉ email",
+      "password": "Mật khẩu",
+      "submit": "Đăng nhập",
+      "submitting": "Đang xác thực…",
+      "or": "hoặc tiếp tục với",
+      "noAccount": "Chưa có tài khoản?",
+      "register": "Tạo tài khoản",
+      "verified": "Email đã được xác nhận. Bạn có thể đăng nhập ngay bây giờ.",
+      "invalidToken": "Liên kết xác nhận không hợp lệ hoặc đã hết hạn.",
+      "errors": {
+        "invalid": "Email hoặc mật khẩu không chính xác.",
+        "locked": "Tài khoản đã bị khóa trong 15 phút do đăng nhập sai quá 5 lần.",
+        "unverified": "Vui lòng xác nhận email trước khi đăng nhập.",
+        "generic": "Không thể đăng nhập lúc này. Vui lòng thử lại."
+      }
+    },
+    "register": {
+      "metaTitle": "Đăng ký | Quản lý gia phả",
+      "eyebrow": "Bắt đầu từ hôm nay",
+      "visualTitle": "Gìn giữ những điều làm nên gia đình.",
+      "visualText": "Tạo không gian riêng tư để lưu giữ con người, câu chuyện và những cột mốc đáng nhớ.",
+      "title": "Tạo tài khoản",
+      "subtitle": "Bắt đầu xây dựng gia phả an toàn của gia đình bạn.",
+      "name": "Họ và tên",
+      "email": "Địa chỉ email",
+      "password": "Mật khẩu",
+      "passwordHint": "Tối thiểu 12 ký tự, gồm chữ hoa, chữ thường, số và ký tự đặc biệt.",
+      "submit": "Tạo tài khoản",
+      "submitting": "Đang tạo tài khoản…",
+      "hasAccount": "Đã có tài khoản?",
+      "login": "Đăng nhập",
+      "successVerification": "Tài khoản đã được tạo. Hãy kiểm tra email để xác nhận trước khi đăng nhập.",
+      "successReady": "Tài khoản đã được tạo. Bạn có thể đăng nhập ngay.",
+      "errors": {
+        "duplicate": "Email này đã được sử dụng.",
+        "invalid": "Vui lòng kiểm tra lại thông tin và độ mạnh mật khẩu.",
+        "generic": "Không thể tạo tài khoản lúc này. Vui lòng thử lại."
+      }
+    }
   }
 }
