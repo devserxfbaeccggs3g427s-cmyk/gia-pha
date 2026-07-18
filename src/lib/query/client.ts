@@ -5,6 +5,10 @@ export function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: {
+        // Run the initial request once while offline, then serve the last
+        // successful result from React Query/SW cache until the connection
+        // returns. Retries are paused by TanStack Query while offline.
+        networkMode: 'offlineFirst',
         staleTime: 30_000,
         gcTime: 10 * 60_000,
         retry: (failureCount, error) => failureCount < 2 && isRetryableQueryError(error),

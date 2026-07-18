@@ -388,8 +388,8 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - On Blob error (rate limit, storage full): show specific error, keep pending mutation
     - _Requirements: 16.5, 16.6_
 
-- [ ] 21. Implement PWA and offline support
-  - [ ] 21.1 Configure Progressive Web App
+- [x] 21. Implement PWA and offline support
+  - [x] 21.1 Configure Progressive Web App
     - Create `public/manifest.json` with app metadata, icons, theme colors
     - Implement service worker (`public/sw.js`) for asset caching and offline support
     - Cache critical app shell and previously viewed data

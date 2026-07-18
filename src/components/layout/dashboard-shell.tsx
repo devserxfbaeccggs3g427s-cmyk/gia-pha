@@ -167,7 +167,10 @@ export function DashboardShell({ children }: DashboardShellProps) {
             <div className={styles.profileWrap}>
               <details>
                 <summary className={styles.profileTrigger} aria-label={t('profile')}><span className={styles.avatar}>{initials}</span><span className={styles.userInfo}><span className={styles.userName}>{displayName}</span></span></summary>
-                <div className={styles.profileMenu}><button onClick={() => void signOut({ callbackUrl: `/${locale}/login` })}><X className="size-4" aria-hidden="true" />{t('signOut')}</button></div>
+                <div className={styles.profileMenu}><button onClick={() => {
+                  navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_PRIVATE_CACHES' });
+                  void signOut({ callbackUrl: `/${locale}/login` });
+                }}><X className="size-4" aria-hidden="true" />{t('signOut')}</button></div>
               </details>
             </div>
           </div>

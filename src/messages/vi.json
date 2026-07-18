@@ -25,7 +25,10 @@
     "keyboardShortcut": "Phím tắt",
     "commandPalette": "Đi tới",
     "commandPaletteHint": "Tìm nhanh một trang",
-    "noResults": "Không tìm thấy kết quả"
+    "noResults": "Không tìm thấy kết quả",
+    "offline": "Bạn đang ngoại tuyến · Dữ liệu đã cache vẫn khả dụng",
+    "pendingChanges": "{count, plural, =1 {1 thay đổi đang chờ đồng bộ} other {# thay đổi đang chờ đồng bộ}}",
+    "syncingChanges": "Đang đồng bộ thay đổi…"
   },
   "navigation": {
     "workspace": "Không gian gia đình",

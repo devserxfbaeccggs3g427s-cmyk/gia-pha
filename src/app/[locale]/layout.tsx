@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { LocaleDocumentAttributes } from '@/components/i18n/locale-document-attributes';
 import { DEFAULT_TIME_ZONE, formats, isSupportedLocale } from '@/i18n/config';
 import { routing, type AppLocale } from '@/i18n/routing';
+import { OfflineIndicator } from '@/components/pwa/offline-indicator';
 
 interface LocaleLayoutProps {
   children: React.ReactNode;
@@ -39,6 +40,7 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
       timeZone={DEFAULT_TIME_ZONE}
     >
       <LocaleDocumentAttributes locale={params.locale} />
+      <OfflineIndicator />
       {children}
     </NextIntlClientProvider>
   );

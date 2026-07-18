@@ -25,7 +25,10 @@
     "keyboardShortcut": "Keyboard shortcut",
     "commandPalette": "Go to",
     "commandPaletteHint": "Quickly find a page",
-    "noResults": "No results found"
+    "noResults": "No results found",
+    "offline": "You are offline · Cached data is still available",
+    "pendingChanges": "{count, plural, =1 {1 change waiting to sync} other {# changes waiting to sync}}",
+    "syncingChanges": "Syncing changes…"
   },
   "navigation": {
     "workspace": "Family workspace",
