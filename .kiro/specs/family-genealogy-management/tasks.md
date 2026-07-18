@@ -407,14 +407,14 @@ Triển khai ứng dụng quản lý gia phả sử dụng Next.js 14+ App Route
     - Target FCP < 1.5s on 4G, Lighthouse Performance >= 90
     - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5, 15.6, 5.3_
 
-- [ ] 23. Implement Import/Export UI and integration
-  - [ ] 23.1 Create Import UI with preview
+- [x] 23. Implement Import/Export UI and integration
+  - [x] 23.1 Create Import UI with preview
     - Implement file upload for GEDCOM, JSON, CSV formats
     - Show parsed data preview before confirming import
     - Display per-line error report for invalid files
     - _Requirements: 9.1, 9.2, 9.6_
 
-  - [ ] 23.2 Create Export UI with format selection and print preview
+  - [x] 23.2 Create Export UI with format selection and print preview
     - Implement export dialog with format options (GEDCOM, JSON, PDF, PNG, SVG)
     - Implement print preview with paper size selection (A4, A3, A2, A1)
     - Support customization: display info, colors, fonts, orientation

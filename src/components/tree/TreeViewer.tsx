@@ -46,6 +46,7 @@ import { buildTreeLayout, type TreeDisplayMode, type TreeLayoutMode } from './tr
 import { useTreeUiStore } from '@/store/tree-ui-store';
 import { apiRequest } from '@/lib/api/mutations';
 import { queryKeys } from '@/lib/query/keys';
+import { ImportExportActions } from '@/components/genealogy/import-export-dialog';
 import styles from './tree-viewer.module.css';
 import 'reactflow/dist/style.css';
 
@@ -215,10 +216,13 @@ export function TreeViewer({
           <h1 id="tree-viewer-title">{data?.name || t('title')}</h1>
           <p>{data?.description || t('description')}</p>
         </div>
-        <div className={styles.stats} aria-label={t('overview')}>
-          <span><UsersRound aria-hidden="true" /><strong>{members.length}</strong>{t('members')}</span>
-          <span><Rows3 aria-hidden="true" /><strong>{generationCount}</strong>{t('generations')}</span>
-          {virtualized && <span className={styles.optimized}><CircleDotDashed aria-hidden="true" />{t('optimized')}</span>}
+        <div className="flex flex-wrap items-center justify-end gap-4">
+          <div className={styles.stats} aria-label={t('overview')}>
+            <span><UsersRound aria-hidden="true" /><strong>{members.length}</strong>{t('members')}</span>
+            <span><Rows3 aria-hidden="true" /><strong>{generationCount}</strong>{t('generations')}</span>
+            {virtualized && <span className={styles.optimized}><CircleDotDashed aria-hidden="true" />{t('optimized')}</span>}
+          </div>
+          <ImportExportActions treeId={treeId} />
         </div>
       </header>
 
