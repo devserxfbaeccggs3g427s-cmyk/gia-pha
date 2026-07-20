@@ -36,13 +36,13 @@ stable.
   - [x]* 2.5 Test stale revision rejection and concurrent mutation preservation
   - _Requirements: 1.2, 7.7, 11.1, 12.2, 12.7_
 
-- [ ] 3. Extend TreeService and RBAC for composite metadata
-  - [ ] 3.1 Support `kind=COMPOSITE` creation and preserve standalone as the
+- [x] 3. Extend TreeService and RBAC for composite metadata
+  - [x] 3.1 Support `kind=COMPOSITE` creation and preserve standalone as the
     default create behavior
-  - [ ] 3.2 Reject composite-as-source, self-reference and more than 20 sources
-  - [ ] 3.3 Add composite configuration permissions; only composite owner/Admin
+  - [x] 3.2 Reject composite-as-source, self-reference and more than 20 sources
+  - [x] 3.3 Add composite configuration permissions; only composite owner/Admin
     may mutate configuration in MVP
-  - [ ] 3.4 Implement independent source READ checks and source ADMIN consent for
+  - [x] 3.4 Implement independent source READ checks and source ADMIN consent for
     composite sharing
   - [ ]* 3.5 Add permission non-escalation and legacy RBAC regression tests
   - _Requirements: 1, 2.1, 7, 12.6_
