@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import {
   eventTypeSchema,
+  familyTreeKindSchema,
   genderSchema,
   marriageStatusSchema,
   relationTypeSchema,
@@ -114,6 +115,8 @@ const albumSchema = z.object({
 
 const treeSchema = z.object({
   id,
+  /** Present in trees created or read after composite-tree support was added. */
+  kind: familyTreeKindSchema.optional(),
   name: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
   ownerId: id,

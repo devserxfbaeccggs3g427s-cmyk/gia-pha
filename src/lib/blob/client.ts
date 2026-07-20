@@ -37,7 +37,20 @@ export const BLOB_PATHS = {
   backup: (treeId: string, timestamp: string) => `backups/${treeId}/${timestamp}.json`,
   backupPrefix: (treeId: string) => `backups/${treeId}/`,
   shareLinks: (treeId: string) => `data/trees/${treeId}/share-links.json`,
-  shareLink: (token: string) => `share-links/${token}.json`
+  shareLink: (token: string) => `share-links/${token}.json`,
+  // ── Composite tree paths ─────────────────────────────────────────────────
+  /** Primary config blob for a CompositeTree. This is the single source of
+   *  truth for all composite configuration; source tree blobs are never
+   *  written from composite operations. */
+  compositeConfig: (treeId: string) => `data/trees/${treeId}/composite-config.json`,
+  /** Append-only audit log for all composite config mutations. */
+  compositeChangeLogs: (treeId: string) => `data/trees/${treeId}/composite-change-logs.json`,
+  /** Disposable resolved manifest keyed by audience hash.  Must be treated as
+   *  a cache; it is not a durable backup of domain data. */
+  compositeManifest: (treeId: string, audienceHash: string) =>
+    `cache/trees/${treeId}/resolved/${audienceHash}.json`,
+  /** Prefix used to list and bulk-delete all resolved manifests for a tree. */
+  compositeManifestPrefix: (treeId: string) => `cache/trees/${treeId}/resolved/`
 } as const;
 
 export interface BlobMetadata {

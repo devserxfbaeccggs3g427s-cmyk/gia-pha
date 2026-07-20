@@ -17,7 +17,7 @@ describe('Feature: family-genealogy-management, import/export properties', () =>
   it('Property 12: JSON export/import preserves every generated tree data field', async () => {
     await fc.assert(fc.asyncProperty(fc.integer({ min: 0, max: 8 }), async (count) => {
       const tree: FamilyTree = {
-        id: 'property-tree', name: 'Property Tree', ownerId: 'owner', memberships: [{ userId: 'owner', role: 'ADMIN', createdAt: '2024-01-01T00:00:00.000Z' }],
+        id: 'property-tree', kind: 'STANDALONE', name: 'Property Tree', ownerId: 'owner', memberships: [{ userId: 'owner', role: 'ADMIN', createdAt: '2024-01-01T00:00:00.000Z' }],
         createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z'
       };
       const members: Member[] = Array.from({ length: count }, (_, index) => ({

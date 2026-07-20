@@ -34,6 +34,9 @@ export function buildFamilyTree(overrides: Partial<FamilyTree> = {}): FamilyTree
 
   return {
     id: testId('tree'),
+    // Writers always set kind; the read boundary normalises absent kind to
+    // STANDALONE.  Tests that write-then-read must include kind to match.
+    kind: 'STANDALONE',
     name: 'Test Family Tree',
     ownerId,
     memberships: [

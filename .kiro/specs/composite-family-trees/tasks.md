@@ -23,17 +23,17 @@ stable.
   - [x]* 1.5 Add schema and backward-compatibility unit/property tests
   - _Requirements: 1.1, 1.2, 5.2, 12.1_
 
-- [ ] 2. Implement composite Blob storage and optimistic config concurrency
-  - [ ] 2.1 Add blob paths and typed readers/writers for composite config,
+- [x] 2. Implement composite Blob storage and optimistic config concurrency
+  - [x] 2.1 Add blob paths and typed readers/writers for composite config,
     composite audit log and disposable resolved manifests
-  - [ ] 2.2 Create empty config atomically enough for the existing storage model;
+  - [x] 2.2 Create empty config atomically enough for the existing storage model;
     roll back tree metadata if config creation fails
-  - [ ] 2.3 Implement revision-aware config mutations; if Vercel Blob cannot
+  - [x] 2.3 Implement revision-aware config mutations; if Vercel Blob cannot
     provide atomic conditional overwrite, use append-only mutations plus a
     deterministic fold and document compaction
-  - [ ] 2.4 Ensure deletion removes only composite-owned blobs and never source
+  - [x] 2.4 Ensure deletion removes only composite-owned blobs and never source
     paths
-  - [ ]* 2.5 Test stale revision rejection and concurrent mutation preservation
+  - [x]* 2.5 Test stale revision rejection and concurrent mutation preservation
   - _Requirements: 1.2, 7.7, 11.1, 12.2, 12.7_
 
 - [ ] 3. Extend TreeService and RBAC for composite metadata

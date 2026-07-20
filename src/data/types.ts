@@ -347,3 +347,48 @@ export interface ResolvedTreeData {
   configRevision: number;
   stale: boolean;
 }
+
+/**
+ * Discriminated action codes for the composite config audit log
+ * (composite-change-logs.json).
+ *
+ * Each code corresponds to one class of CompositeTreeConfig mutation.
+ * No living-person sensitive fields (name, phone, email, etc.) are stored in
+ * audit entries; only structural config identifiers are captured.
+ */
+export type CompositeAuditAction =
+  | 'CONFIG_CREATED'
+  | 'SOURCE_ADDED'
+  | 'SOURCE_UPDATED'
+  | 'SOURCE_REMOVED'
+  | 'IDENTITY_GROUP_UPSERTED'
+  | 'IDENTITY_GROUP_REMOVED'
+  | 'CROSS_TREE_RELATIONSHIP_CREATED'
+  | 'CROSS_TREE_RELATIONSHIP_DELETED'
+  | 'CONFIG_PUBLISHED';
+
+/**
+ * One entry in the composite audit log (composite-change-logs.json).
+ *
+ * The log is append-only from the store's perspective. Each successful config
+ * mutation appends one entry. The log can be used to reconstruct the history
+ * of a composite configuration and to support undo operations.
+ *
+ * Fields must NOT contain living-person sensitive data such as member names,
+ * dates of birth, phone numbers or email addresses.
+ */
+export interface CompositeAuditEntry {
+  id: string;
+  compositeTreeId: string;
+  actorId: string;
+  action: CompositeAuditAction;
+  /** Revision of the CompositeTreeConfig after this mutation. */
+  revision: number;
+  /** Structural summary of the config state before the mutation. */
+  previousData?: Record<string, unknown>;
+  /** Structural summary of the config state after the mutation. */
+  newData?: Record<string, unknown>;
+  /** The SourceReference most directly affected by this action, if applicable. */
+  sourceReference?: SourceReference;
+  timestamp: string;
+}
