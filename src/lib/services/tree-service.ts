@@ -1,16 +1,16 @@
 import { nanoid } from 'nanoid';
-import { createTreeSchema, updateTreeSchema } from '@/data/schemas';
+import { createCompositeTreeInputSchema, createTreeSchema, updateTreeSchema } from '@/data/schemas';
 import { createInitialTree } from '@/data/seed';
-import type { FamilyTree, Member, Relationship } from '@/data/types';
+import type { CompositeTreeConfig, FamilyTree, FamilyTreeKind, Member, Relationship, ShareLink } from '@/data/types';
 import {
   getAncestryPath as findAncestryPath,
   getAncestrySubgraph as findAncestrySubgraph,
   type AncestrySubgraph
 } from '@/lib/algorithms/ancestry';
 import { calculateGenerations as calculateGenerationMap, type GenerationMap } from '@/lib/algorithms/generation';
-import { BLOB_PATHS, deleteBlobs } from '@/lib/blob/client';
+import { BLOB_PATHS, deleteBlobs, listBlobs, readBlob } from '@/lib/blob/client';
 import { getMediaMetadata, getMembers, getRelationships, getTrees } from '@/lib/blob/readers';
-import { putTrees } from '@/lib/blob/writers';
+import { putCompositeConfig, putTrees } from '@/lib/blob/writers';
 
 export interface FamilyTreeFull extends FamilyTree {
   members: Member[];
@@ -30,6 +30,10 @@ export class TreeServiceError extends Error {
 export class TreeService {
   async createTree(userId: string, data: unknown): Promise<FamilyTree> {
     assertIdentifier(userId, 'userId');
+    const raw = data as Record<string, unknown> | null | undefined;
+    if (raw && typeof raw === 'object' && raw['kind'] === 'COMPOSITE') {
+      return this.createCompositeTree(userId, data);
+    }
     const input = createTreeSchema.parse(data);
     const trees = await getTrees();
     const now = new Date().toISOString();
@@ -42,6 +46,41 @@ export class TreeService {
     });
 
     await putTrees([...trees, tree]);
+    return tree;
+  }
+
+  async createCompositeTree(userId: string, data: unknown): Promise<FamilyTree> {
+    assertIdentifier(userId, 'userId');
+    const input = createCompositeTreeInputSchema.parse(data);
+    const trees = await getTrees();
+    const now = new Date().toISOString();
+    const treeId = nanoid();
+
+    const tree: FamilyTree = {
+      id: treeId,
+      kind: 'COMPOSITE' as FamilyTreeKind,
+      name: input.name,
+      ...(input.description !== undefined ? { description: input.description } : {}),
+      ownerId: userId,
+      memberships: [{ userId, role: 'ADMIN', createdAt: now }],
+      createdAt: now,
+      updatedAt: now
+    };
+
+    const emptyConfig: CompositeTreeConfig = {
+      treeId,
+      schemaVersion: 1,
+      revision: 0,
+      sources: [],
+      identityGroups: [],
+      crossTreeRelationships: [],
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await putCompositeConfig(treeId, emptyConfig);
+    await putTrees([...trees, tree]);
+
     return tree;
   }
 
@@ -85,23 +124,40 @@ export class TreeService {
   async deleteTree(treeId: string): Promise<void> {
     assertIdentifier(treeId, 'treeId');
     const trees = await getTrees();
-    if (!trees.some((candidate) => candidate.id === treeId)) {
+    const tree = trees.find((candidate) => candidate.id === treeId);
+    if (!tree) {
       throw new TreeServiceError('NOT_FOUND', 'Family tree not found');
     }
-    const media = await getMediaMetadata(treeId);
+    const effectiveKind = tree.kind ?? 'STANDALONE';
 
     // Remove the discoverable tree first. If cleanup is interrupted, only
     // unreachable orphan blobs remain; a tree never points to partial data.
     await putTrees(trees.filter((candidate) => candidate.id !== treeId));
-    await deleteBlobs([
-      BLOB_PATHS.members(treeId),
-      BLOB_PATHS.relationships(treeId),
-      BLOB_PATHS.events(treeId),
-      BLOB_PATHS.mediaMetadata(treeId),
-      BLOB_PATHS.albums(treeId),
-      BLOB_PATHS.changeLogs(treeId),
-      ...media.flatMap((item) => [item.blobUrl, ...(item.thumbnailUrl ? [item.thumbnailUrl] : [])])
-    ]);
+
+    if (effectiveKind === 'COMPOSITE') {
+      const [manifests, shareLinks] = await Promise.all([
+        listBlobs(BLOB_PATHS.compositeManifestPrefix(treeId)),
+        readBlob<ShareLink[]>(BLOB_PATHS.shareLinks(treeId))
+      ]);
+      await deleteBlobs([
+        BLOB_PATHS.compositeConfig(treeId),
+        BLOB_PATHS.compositeChangeLogs(treeId),
+        BLOB_PATHS.shareLinks(treeId),
+        ...(shareLinks ?? []).map((link) => BLOB_PATHS.shareLink(link.token)),
+        ...manifests.map((manifest) => manifest.pathname)
+      ]);
+    } else {
+      const media = await getMediaMetadata(treeId);
+      await deleteBlobs([
+        BLOB_PATHS.members(treeId),
+        BLOB_PATHS.relationships(treeId),
+        BLOB_PATHS.events(treeId),
+        BLOB_PATHS.mediaMetadata(treeId),
+        BLOB_PATHS.albums(treeId),
+        BLOB_PATHS.changeLogs(treeId),
+        ...media.flatMap((item) => [item.blobUrl, ...(item.thumbnailUrl ? [item.thumbnailUrl] : [])])
+      ]);
+    }
   }
 
   async getTreeWithMembers(treeId: string): Promise<FamilyTreeFull> {
@@ -161,6 +217,7 @@ export const treeService = new TreeService();
 export default treeService;
 
 export const createTree = treeService.createTree.bind(treeService);
+export const createCompositeTree = treeService.createCompositeTree.bind(treeService);
 export const listTreesForUser = treeService.listTreesForUser.bind(treeService);
 export const getTree = treeService.getTree.bind(treeService);
 export const updateTree = treeService.updateTree.bind(treeService);

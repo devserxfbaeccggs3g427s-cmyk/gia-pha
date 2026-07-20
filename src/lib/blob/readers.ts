@@ -1,5 +1,5 @@
-import { familyTreeSchema } from '@/data/schemas';
-import type { Album, ChangeLog, Event, FamilyTree, MediaMetadata, Member, Relationship, User } from '@/data/types';
+import { compositeTreeConfigSchema, familyTreeSchema } from '@/data/schemas';
+import type { Album, ChangeLog, CompositeTreeConfig, Event, FamilyTree, MediaMetadata, Member, Relationship, User } from '@/data/types';
 import { normalizeRelationships } from '@/lib/algorithms/relationship-normalization';
 import { BLOB_PATHS, readBlob } from './client';
 import { putRelationships } from './writers';
@@ -42,4 +42,10 @@ export async function getAlbums(treeId: string): Promise<Album[]> {
 
 export async function getChangeLogs(treeId: string): Promise<ChangeLog[]> {
   return (await readBlob<ChangeLog[]>(BLOB_PATHS.changeLogs(treeId))) ?? [];
+}
+
+export async function getCompositeConfig(treeId: string): Promise<CompositeTreeConfig | null> {
+  const raw = await readBlob<unknown>(BLOB_PATHS.compositeConfig(treeId));
+  if (raw === null) return null;
+  return compositeTreeConfigSchema.parse(raw);
 }

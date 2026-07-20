@@ -37,7 +37,12 @@ export const BLOB_PATHS = {
   backup: (treeId: string, timestamp: string) => `backups/${treeId}/${timestamp}.json`,
   backupPrefix: (treeId: string) => `backups/${treeId}/`,
   shareLinks: (treeId: string) => `data/trees/${treeId}/share-links.json`,
-  shareLink: (token: string) => `share-links/${token}.json`
+  shareLink: (token: string) => `share-links/${token}.json`,
+  compositeConfig: (treeId: string) => `data/trees/${treeId}/composite-config.json`,
+  compositeChangeLogs: (treeId: string) => `data/trees/${treeId}/composite-change-logs.json`,
+  compositeManifestPrefix: (treeId: string) => `cache/trees/${treeId}/resolved/`,
+  compositeManifest: (treeId: string, audienceHash: string) =>
+    `cache/trees/${treeId}/resolved/${audienceHash}.json`
 } as const;
 
 export interface BlobMetadata {
