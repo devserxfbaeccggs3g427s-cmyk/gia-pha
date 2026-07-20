@@ -5,12 +5,14 @@ import {
   crossTreeRelationshipInputSchema,
   identityGroupInputSchema,
   sourceReferenceKey,
+  sourceScopeInputSchema,
   updateSourceInputSchema
 } from '@/data/schemas';
 import type {
   AddSourceInput,
   CrossTreeRelationshipInput,
   IdentityGroupInput,
+  SourceScopeInput,
   UpdateSourceInput
 } from '@/data/schemas';
 import type {
@@ -19,9 +21,11 @@ import type {
   CompositeSource,
   CompositeTreeConfig,
   FamilyTree,
-  FamilyTreeKind
+  FamilyTreeKind,
+  SourcePreview
 } from '@/data/types';
-import { getCompositeConfig, getTrees } from '@/lib/blob/readers';
+import { getCompositeConfig, getEvents, getMediaMetadata, getMembers, getRelationships, getTrees } from '@/lib/blob/readers';
+import { resolveSourceScope } from '@/lib/algorithms/source-scope';
 import { putCompositeConfig } from '@/lib/blob/writers';
 import {
   canAccessTree,
@@ -77,6 +81,31 @@ export class CompositeConfigService {
       );
     }
     return config;
+  }
+
+  async previewSource(treeId: string, actorId: string, input: unknown): Promise<SourcePreview> {
+    assertIdentifier(treeId, 'treeId');
+    assertIdentifier(actorId, 'actorId');
+    await requireCompositeAdminPermission(treeId, actorId);
+    const parsed: SourceScopeInput = sourceScopeInputSchema.parse(input);
+    await requireSourceReadPermission(parsed.sourceTreeId, actorId);
+
+    const [members, relationships, events, mediaMetadata] = await Promise.all([
+      getMembers(parsed.sourceTreeId),
+      getRelationships(parsed.sourceTreeId),
+      getEvents(parsed.sourceTreeId),
+      getMediaMetadata(parsed.sourceTreeId)
+    ]);
+    const result = resolveSourceScope(members, relationships, events, mediaMetadata, parsed);
+
+    return {
+      sourceTreeId: parsed.sourceTreeId,
+      memberCount: result.members.length,
+      relationshipCount: result.relationships.length,
+      eventCount: result.events.length,
+      mediaCount: result.mediaMetadata.length,
+      warnings: result.warnings
+    };
   }
 
   /**

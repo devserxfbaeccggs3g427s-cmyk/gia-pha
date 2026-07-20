@@ -47,13 +47,13 @@ stable.
   - [ ]* 3.5 Add permission non-escalation and legacy RBAC regression tests
   - _Requirements: 1, 2.1, 7, 12.6_
 
-- [ ] 4. Implement source scope and preview algorithms
-  - [ ] 4.1 Implement FULL_TREE, DESCENDANTS and SELECTED_MEMBERS membership
+- [x] 4. Implement source scope and preview algorithms
+  - [x] 4.1 Implement FULL_TREE, DESCENDANTS and SELECTED_MEMBERS membership
     resolution using canonical parent→child edges
-  - [ ] 4.2 Implement optional direct-spouse context without unintended ancestry
+  - [x] 4.2 Implement optional direct-spouse context without unintended ancestry
     traversal
-  - [ ] 4.3 Filter relationships and compute Event/Media preview counts
-  - [ ] 4.4 Return warnings for invalid, missing or out-of-scope anchors
+  - [x] 4.3 Filter relationships and compute Event/Media preview counts
+  - [x] 4.4 Return warnings for invalid, missing or out-of-scope anchors
   - _Requirements: 2, 5.1_
 
 - [ ] 5. Implement identity suggestion and confirmation

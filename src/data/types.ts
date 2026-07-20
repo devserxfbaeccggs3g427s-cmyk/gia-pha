@@ -335,6 +335,19 @@ export interface CompositeWarning {
   entityId?: string;
 }
 
+export interface SourcePreview {
+  sourceTreeId: string;
+  memberCount: number;
+  relationshipCount: number;
+  eventCount: number;
+  mediaCount: number;
+  warnings: Array<{
+    code: 'INVALID_SCOPE' | 'INVALID_REFERENCE' | 'REFERENCE_OUT_OF_SCOPE';
+    message: string;
+    entityId?: string;
+  }>;
+}
+
 export interface ResolvedTreeData {
   tree: FamilyTree;
   members: VirtualMember[];
