@@ -1,17 +1,5 @@
-import { compositeTreeConfigSchema } from '@/data/schemas';
-import { familyTreeSchema } from '@/data/schemas';
-import type {
-  Album,
-  ChangeLog,
-  CompositeAuditEntry,
-  CompositeTreeConfig,
-  Event,
-  FamilyTree,
-  MediaMetadata,
-  Member,
-  Relationship,
-  User,
-} from '@/data/types';
+import { compositeTreeConfigSchema, familyTreeSchema } from '@/data/schemas';
+import type { Album, ChangeLog, CompositeTreeConfig, Event, FamilyTree, MediaMetadata, Member, Relationship, User } from '@/data/types';
 import { normalizeRelationships } from '@/lib/algorithms/relationship-normalization';
 import { BLOB_PATHS, readBlob } from './client';
 import { putRelationships } from './writers';
@@ -56,21 +44,8 @@ export async function getChangeLogs(treeId: string): Promise<ChangeLog[]> {
   return (await readBlob<ChangeLog[]>(BLOB_PATHS.changeLogs(treeId))) ?? [];
 }
 
-/**
- * Read and Zod-validate the CompositeTreeConfig blob.
- * Returns null when the blob does not exist (config has not been initialized).
- * Throws a Zod error when the stored JSON fails schema validation.
- */
 export async function getCompositeConfig(treeId: string): Promise<CompositeTreeConfig | null> {
   const raw = await readBlob<unknown>(BLOB_PATHS.compositeConfig(treeId));
   if (raw === null) return null;
   return compositeTreeConfigSchema.parse(raw);
-}
-
-/**
- * Read the composite audit log for a tree.
- * Returns an empty array when the blob does not exist.
- */
-export async function getCompositeAuditLog(treeId: string): Promise<CompositeAuditEntry[]> {
-  return (await readBlob<CompositeAuditEntry[]>(BLOB_PATHS.compositeChangeLogs(treeId))) ?? [];
 }

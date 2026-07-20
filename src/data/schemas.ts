@@ -525,11 +525,11 @@ export const compositeTreeConfigSchema = z.object({
   });
 });
 
-function sourceReferenceKey(reference: z.infer<typeof sourceReferenceSchema>): string {
+export function sourceReferenceKey(reference: z.infer<typeof sourceReferenceSchema>): string {
   return `${reference.treeId}\u0000${reference.memberId}`;
 }
 
-function compositeRelationshipKey(relationship: {
+export function compositeRelationshipKey(relationship: {
   source: z.infer<typeof sourceReferenceSchema>;
   target: z.infer<typeof sourceReferenceSchema>;
   type: z.infer<typeof relationTypeSchema>;
