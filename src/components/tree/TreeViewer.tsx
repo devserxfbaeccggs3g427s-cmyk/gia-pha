@@ -38,7 +38,7 @@ import {
 } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
-import type { FamilyTree, Member, Relationship } from '@/data/types';
+import type { CompositeWarning, FamilyTree, Member, Relationship, ResolvedSourceManifest, VirtualMember } from '@/data/types';
 import { getAncestrySubgraph, getCanonicalParentChildEdges, type AncestrySubgraph } from '@/lib/algorithms/ancestry';
 import { calculateGenerations } from '@/lib/algorithms/generation';
 import { MemberNode, getMemberColorScheme, formatLifeYears, type MemberNodeData, type MemberSummary } from './MemberCard';
@@ -68,9 +68,13 @@ const EMPTY_ANCESTRY_SUBGRAPH: AncestrySubgraph = {
   spouseEdges: []
 };
 
-interface TreeViewerData extends FamilyTree {
-  members: Member[];
+interface TreeViewerData {
+  tree: FamilyTree;
+  members: VirtualMember[];
   relationships: Relationship[];
+  sourceManifest: ResolvedSourceManifest[];
+  warnings: CompositeWarning[];
+  stale: boolean;
 }
 
 interface RelationshipCounts {
@@ -222,8 +226,8 @@ export function TreeViewer({
       <header className={styles.header}>
         <div className={styles.heading}>
           <span className={styles.eyebrow}><Leaf aria-hidden="true" />{t('eyebrow')}</span>
-          <h1 id="tree-viewer-title">{data?.name || t('title')}</h1>
-          <p>{data?.description || t('description')}</p>
+          <h1 id="tree-viewer-title">{data?.tree.name || t('title')}</h1>
+          <p>{data?.tree.description || t('description')}</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-4">
           <div className={styles.stats} aria-label={t('overview')}>
@@ -235,6 +239,7 @@ export function TreeViewer({
         </div>
       </header>
 
+      {(data?.warnings.length || data?.stale || data?.sourceManifest.some((source) => source.status === 'UNAVAILABLE')) ? <div className="grid gap-2 px-4 pb-4 sm:grid-cols-3"><TreeStatusPanel title={t('conflicts')} messages={data.warnings.filter((warning) => warning.code === 'IDENTITY_CONFLICT' || warning.code === 'UNRESOLVED_IDENTITY').map((warning) => warning.message)} /><TreeStatusPanel title={t('staleSources')} messages={data.warnings.filter((warning) => warning.code === 'STALE_SOURCE').map((warning) => warning.message)} /><TreeStatusPanel title={t('unavailableSources')} messages={data.sourceManifest.filter((source) => source.status === 'UNAVAILABLE').map((source) => source.sourceTreeId)} /></div> : null}
       <div className={styles.workspace}>
         <div className={styles.toolbar} role="toolbar" aria-label={t('viewControls')}>
           <div className={styles.segmented} aria-label={t('layout')}>
@@ -352,6 +357,11 @@ export function TreeViewer({
       <p className={styles.help}><BadgeInfo aria-hidden="true" />{t('interactionHint')}</p>
     </section>
   );
+}
+
+function TreeStatusPanel({ title, messages }: { title: string; messages: string[] }) {
+  if (messages.length === 0) return null;
+  return <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:bg-amber-950/20 dark:text-amber-100"><strong>{title}</strong><ul className="mt-1 list-disc pl-4">{messages.map((message, index) => <li key={`${message}-${index}`}>{message}</li>)}</ul></div>;
 }
 
 function ModeButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {

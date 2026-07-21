@@ -8,7 +8,7 @@ import {
   type AncestrySubgraph
 } from '@/lib/algorithms/ancestry';
 import { calculateGenerations as calculateGenerationMap, type GenerationMap } from '@/lib/algorithms/generation';
-import { BLOB_PATHS, deleteBlobs, listBlobs, readBlob } from '@/lib/blob/client';
+import { BLOB_PATHS, deleteBlob, deleteBlobs, listBlobs, readBlob } from '@/lib/blob/client';
 import { getMediaMetadata, getMembers, getRelationships, getTrees } from '@/lib/blob/readers';
 import { putCompositeConfig, putTrees } from '@/lib/blob/writers';
 
@@ -51,6 +51,9 @@ export class TreeService {
 
   async createCompositeTree(userId: string, data: unknown): Promise<FamilyTree> {
     assertIdentifier(userId, 'userId');
+    if (process.env.COMPOSITE_TREES_ENABLED === 'false') {
+      throw new TreeServiceError('INVALID_INPUT', 'Composite family trees are not enabled');
+    }
     const input = createCompositeTreeInputSchema.parse(data);
     const trees = await getTrees();
     const now = new Date().toISOString();
@@ -79,7 +82,16 @@ export class TreeService {
     };
 
     await putCompositeConfig(treeId, emptyConfig);
-    await putTrees([...trees, tree]);
+    try {
+      await putTrees([...trees, tree]);
+    } catch (error) {
+      try {
+        await deleteBlob(BLOB_PATHS.compositeConfig(treeId));
+      } catch (rollbackError) {
+        throw new AggregateError([error, rollbackError], 'Composite tree creation and config rollback failed');
+      }
+      throw error;
+    }
 
     return tree;
   }
@@ -135,8 +147,9 @@ export class TreeService {
     await putTrees(trees.filter((candidate) => candidate.id !== treeId));
 
     if (effectiveKind === 'COMPOSITE') {
-      const [manifests, shareLinks] = await Promise.all([
+      const [manifests, mutations, shareLinks] = await Promise.all([
         listBlobs(BLOB_PATHS.compositeManifestPrefix(treeId)),
+        listBlobs(BLOB_PATHS.compositeMutationPrefix(treeId)),
         readBlob<ShareLink[]>(BLOB_PATHS.shareLinks(treeId))
       ]);
       await deleteBlobs([
@@ -144,7 +157,8 @@ export class TreeService {
         BLOB_PATHS.compositeChangeLogs(treeId),
         BLOB_PATHS.shareLinks(treeId),
         ...(shareLinks ?? []).map((link) => BLOB_PATHS.shareLink(link.token)),
-        ...manifests.map((manifest) => manifest.pathname)
+         ...manifests.map((manifest) => manifest.pathname),
+         ...mutations.map((mutation) => mutation.pathname)
       ]);
     } else {
       const media = await getMediaMetadata(treeId);

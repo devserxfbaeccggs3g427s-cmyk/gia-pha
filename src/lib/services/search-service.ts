@@ -1,4 +1,4 @@
-import type { Gender, Member } from '@/data/types';
+import type { Gender, Member, SourceProvenance } from '@/data/types';
 import { getMembers } from '@/lib/blob/readers';
 import { normalizeVietnamese } from '@/lib/utils/vietnamese';
 
@@ -42,6 +42,7 @@ export interface SearchResult {
   matchedFields: SearchableMemberField[];
   /** Relevance score; higher values are returned first. */
   score: number;
+  provenance?: SourceProvenance[];
 }
 
 export interface AutocompleteItem {
@@ -96,6 +97,7 @@ export class SearchService {
         member,
         matchedFields: matches.map((match) => match.field),
         score: Math.max(...matches.map((match) => match.score)),
+        ...('provenance' in member ? { provenance: (member as Member & { provenance?: SourceProvenance[] }).provenance } : {}),
         sourceIndex
       });
     });

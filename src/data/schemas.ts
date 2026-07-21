@@ -294,6 +294,10 @@ export const updateSourceInputSchema = sourceScopeInputObjectSchema
 export const compositeSourceSchema = persistedSourceScopeSchema.extend({
   id: identifierSchema,
   sourceTreeId: identifierSchema,
+  sharingConsentedBy: identifierSchema.optional(),
+  sharingConsentedAt: z.string().datetime().optional(),
+  sharingConsentSourceVersion: z.string().optional(),
+  sourceVersion: z.string().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
 }).strict().superRefine(addSourceScopeIssues);

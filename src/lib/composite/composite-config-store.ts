@@ -13,10 +13,10 @@
  *       metadata if this step fails.
  *
  *  2.3  Revision-aware (optimistic compare-and-swap) config mutations.
- *       Because Vercel Blob uses last-write-wins overwrite semantics, the
- *       implementation re-reads the stored config immediately before the
- *       write so the stale detection window is as narrow as possible.
- *       Every successful mutation is appended to the audit log.
+ *       Every mutation is written once under a unique immutable blob path and
+ *       readers deterministically fold the log. Same-revision contenders are
+ *       ordered by timestamp then mutation ID; only the first valid contender
+ *       advances the revision and all others are retained as conflicts.
  *
  *  2.4  Deletion isolation: only composite-owned blobs are ever deleted
  *       (composite-config.json, composite-change-logs.json, and disposable
@@ -34,6 +34,7 @@ import type {
   SourceReference,
 } from '@/data/types';
 import { BLOB_PATHS, deleteBlobs, listBlobs } from '@/lib/blob/client';
+import { appendCompositeMutation, readFoldedCompositeConfig } from './composite-mutation-log';
 import { getCompositeAuditLog, getCompositeConfig } from '@/lib/blob/readers';
 import { putCompositeAuditLog, putCompositeConfig } from '@/lib/blob/writers';
 
@@ -277,8 +278,15 @@ export class CompositeConfigStore {
     }
     const validated = validationResult.data;
 
-    // Persist the new config (durable record of the mutation).
-    await putCompositeConfig(treeId, validated);
+    const record = await appendCompositeMutation({ treeId, expectedRevision, actorId, action: audit.action, sourceReferences: audit.sourceReference ? [audit.sourceReference] : [], previousConfig: current, nextConfig: validated, createdAt: now });
+    const folded = await readFoldedCompositeConfig(treeId);
+    if (!folded?.accepted.some((item) => item.id === record.id)) {
+      throw new CompositeConfigError('STALE_CONFIG_REVISION', `Mutation lost deterministic conflict resolution at revision ${expectedRevision}`);
+    }
+
+    // Compact: write the folded config as the new base so readers.getCompositeConfig()
+    // always sees the latest state via a direct blob read (no re-fold needed).
+    await putCompositeConfig(treeId, folded.config);
 
     // Append audit entry (best-effort after the durable write).
     await this.appendAuditEntry(treeId, {
@@ -323,9 +331,11 @@ export class CompositeConfigStore {
     const manifestBlobs = await listBlobs(BLOB_PATHS.compositeManifestPrefix(treeId));
     const manifestPaths = manifestBlobs.map((blob) => blob.pathname);
 
+    const mutationBlobs = await listBlobs(BLOB_PATHS.compositeMutationPrefix(treeId));
     await deleteBlobs([
       BLOB_PATHS.compositeConfig(treeId),
       BLOB_PATHS.compositeChangeLogs(treeId),
+      ...mutationBlobs.map((blob) => blob.pathname),
       ...manifestPaths,
     ]);
   }

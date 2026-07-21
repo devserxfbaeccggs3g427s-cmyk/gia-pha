@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from '@/i18n/navigation';
-import type { Gender, Member } from '@/data/types';
+import type { Gender, Member, SourceProvenance } from '@/data/types';
 import type { AutocompleteItem, SearchResult, SearchableMemberField } from '@/lib/services/search-service';
 import { Button } from '@/components/ui/button';
 import { DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -38,6 +38,7 @@ interface SearchFilters {
 interface DisplayResult {
   member: Pick<Member, 'id' | 'fullName'> & Partial<Pick<Member, 'nickname' | 'avatarMediaId' | 'avatarUrl' | 'gender' | 'generation' | 'dateOfBirth' | 'isAlive' | 'occupation' | 'placeOfBirth' | 'currentAddress'>>;
   matchedFields: SearchableMemberField[];
+  provenance?: SourceProvenance[];
 }
 
 const EMPTY_FILTERS: SearchFilters = {
@@ -255,7 +256,8 @@ export function MemberSearch({ treeId, onClose }: { treeId: string; onClose: () 
                       {(member.placeOfBirth || member.currentAddress) && <span className="inline-flex min-w-0 items-center gap-1"><MapPin className="size-3 shrink-0" aria-hidden="true" /><span className="max-w-52 truncate">{member.placeOfBirth || member.currentAddress}</span></span>}
                       {member.occupation && <span className="max-w-44 truncate">{member.occupation}</span>}
                     </span>
-                    {matchedFields.length > 0 && <span className="mt-1.5 flex flex-wrap gap-1">{matchedFields.map((field) => <span key={field} className="rounded-full bg-primary/8 px-2 py-0.5 text-[10px] font-semibold text-primary">{t(`matched.${field}`)}</span>)}</span>}
+                    {'provenance' in results[index] && results[index].provenance?.length ? <span className="mt-1.5 flex flex-wrap gap-1">{results[index].provenance!.map((source) => <span key={`${source.treeId}-${source.entityId}`} className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-950 dark:text-violet-200">{t('source', { tree: source.treeId })}</span>)}</span> : null}
+                  {matchedFields.length > 0 && <span className="mt-1.5 flex flex-wrap gap-1">{matchedFields.map((field) => <span key={field} className="rounded-full bg-primary/8 px-2 py-0.5 text-[10px] font-semibold text-primary">{t(`matched.${field}`)}</span>)}</span>}
                   </span>
                   <span className="grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors group-hover:bg-background group-hover:text-primary"><CheckCircle2 className="size-4" aria-hidden="true" /></span>
                 </button>
@@ -283,7 +285,7 @@ function normalizeResults(body: unknown): DisplayResult[] {
     if (!item || typeof item !== 'object') return [];
     if ('member' in item && item.member && typeof item.member === 'object') {
       const result = item as SearchResult;
-      return [{ member: result.member, matchedFields: result.matchedFields }];
+      return [{ member: result.member, matchedFields: result.matchedFields, provenance: result.provenance }];
     }
     if ('memberId' in item && 'fullName' in item) {
       const suggestion = item as AutocompleteItem;

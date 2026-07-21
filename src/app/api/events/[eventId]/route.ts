@@ -4,6 +4,8 @@ import { requireAuthenticatedUserId } from '@/lib/auth/guards';
 import { requireTreePermission } from '@/lib/auth/rbac';
 import { eventMediaRouteError } from '@/lib/services/event-media-api-errors';
 import { eventService } from '@/lib/services/event-service';
+import { requireStandaloneMutationTarget } from '@/lib/services/composite-mutation-guard';
+import { resolveTreeForUser } from '@/lib/services/tree-data-provider';
 
 export const runtime = 'nodejs';
 
@@ -30,7 +32,10 @@ export async function GET(request: Request, { params }: RouteContext): Promise<N
     const treeId = await findEventTree(request, params.eventId);
     if (!treeId) return notFound();
     await requireTreePermission(treeId, userId, 'READ');
-    return NextResponse.json(await eventService.getEventWithRelations(treeId, params.eventId));
+    const resolved = await resolveTreeForUser(treeId, userId);
+    const event = resolved.events.find((item) => item.id === params.eventId);
+    if (!event) return notFound();
+    return NextResponse.json({ event, members: resolved.members.filter((item) => event.memberIds.includes(item.id)), media: resolved.mediaMetadata.filter((item) => item.eventIds.includes(event.id)) });
   } catch (error) {
     return eventMediaRouteError(error, 'event');
   }
@@ -42,6 +47,7 @@ export async function PUT(request: Request, { params }: RouteContext): Promise<N
     const treeId = await findEventTree(request, params.eventId);
     if (!treeId) return notFound();
     await requireTreePermission(treeId, userId, 'UPDATE');
+    await requireStandaloneMutationTarget(treeId);
     return NextResponse.json(
       await eventService.updateEvent(treeId, params.eventId, await request.json(), userId)
     );
@@ -56,6 +62,7 @@ export async function DELETE(request: Request, { params }: RouteContext): Promis
     const treeId = await findEventTree(request, params.eventId);
     if (!treeId) return notFound();
     await requireTreePermission(treeId, userId, 'DELETE');
+    await requireStandaloneMutationTarget(treeId);
     await eventService.deleteEvent(treeId, params.eventId, userId);
     return new NextResponse(null, { status: 204 });
   } catch (error) {

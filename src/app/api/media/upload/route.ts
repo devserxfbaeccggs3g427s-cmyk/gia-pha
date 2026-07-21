@@ -4,6 +4,7 @@ import { requireTreePermission } from '@/lib/auth/rbac';
 import { eventMediaRouteError } from '@/lib/services/event-media-api-errors';
 import { MediaServiceError } from '@/lib/services/event-media-errors';
 import { mediaService } from '@/lib/services/media-service';
+import { requireStandaloneMutationTarget } from '@/lib/services/composite-mutation-guard';
 
 export const runtime = 'nodejs';
 
@@ -13,6 +14,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const form = await request.formData();
     const treeId = stringField(form, 'treeId') ?? new URL(request.url).searchParams.get('treeId');
     if (!treeId) throw new MediaServiceError('INVALID_INPUT', 'treeId là bắt buộc');
+    await requireStandaloneMutationTarget(treeId);
     await requireTreePermission(treeId, userId, 'CREATE');
 
     const file = form.get('file');

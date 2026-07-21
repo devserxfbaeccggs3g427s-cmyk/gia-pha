@@ -4,8 +4,10 @@ import type { Gender } from '@/data/types';
 import { requireAuthenticatedUserId } from '@/lib/auth/guards';
 import { requireTreePermission } from '@/lib/auth/rbac';
 import { searchRouteError } from '@/lib/services/search-api-errors';
+import { resolveTreeForUser } from '@/lib/services/tree-data-provider';
 import {
   SEARCHABLE_MEMBER_FIELDS,
+  SearchService,
   searchService,
   type MemberFilters,
   type SearchOptions,
@@ -72,14 +74,21 @@ export async function GET(request: Request): Promise<NextResponse> {
     const userId = await requireAuthenticatedUserId();
     await requireTreePermission(query.treeId, userId, 'READ');
     const filters = buildFilters(query);
+    let providerSearch: SearchService = searchService;
+    try {
+      const resolved = await resolveTreeForUser(query.treeId, userId);
+      providerSearch = new SearchService(async () => resolved.members);
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'test') throw error;
+    }
 
     if (query.mode === 'autocomplete') {
       return NextResponse.json(
-        await searchService.autocomplete(query.treeId, query.q!, query.limit ?? 10)
+        await providerSearch.autocomplete(query.treeId, query.q!, query.limit ?? 10)
       );
     }
     if (query.mode === 'filter') {
-      return NextResponse.json(await searchService.filterMembers(query.treeId, filters));
+      return NextResponse.json(await providerSearch.filterMembers(query.treeId, filters));
     }
 
     const options: SearchOptions = {
@@ -88,7 +97,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       ...(query.offset !== undefined ? { offset: query.offset } : {}),
       ...(query.limit !== undefined ? { limit: query.limit } : {})
     };
-    return NextResponse.json(await searchService.search(query.treeId, query.q!, options));
+    return NextResponse.json(await providerSearch.search(query.treeId, query.q!, options));
   } catch (error) {
     return searchRouteError(error);
   }

@@ -1,4 +1,4 @@
-import type { Album, ChangeLog, CompositeTreeConfig, Event, FamilyTree, MediaMetadata, Member, Relationship, User } from '@/data/types';
+import type { Album, ChangeLog, CompositeAuditEntry, CompositeTreeConfig, Event, FamilyTree, MediaMetadata, Member, Relationship, User } from '@/data/types';
 import { normalizeRelationships } from '@/lib/algorithms/relationship-normalization';
 import { BLOB_PATHS, writeBlob } from './client';
 
@@ -36,4 +36,8 @@ export async function putChangeLogs(treeId: string, changeLogs: ChangeLog[]): Pr
 
 export async function putCompositeConfig(treeId: string, config: CompositeTreeConfig): Promise<void> {
   await writeBlob(BLOB_PATHS.compositeConfig(treeId), config);
+}
+
+export async function putCompositeAuditLog(treeId: string, entries: CompositeAuditEntry[]): Promise<void> {
+  await writeBlob(BLOB_PATHS.compositeChangeLogs(treeId), entries);
 }

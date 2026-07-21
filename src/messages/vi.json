@@ -91,6 +91,13 @@
     "emptyTitle": "Chưa có gia phả nào",
     "emptyDescription": "Tạo gia phả đầu tiên để bắt đầu lưu giữ các thế hệ, mối quan hệ và kỷ niệm.",
     "create": "Tạo gia phả mới",
+    "createStandalone": "Tạo gia phả độc lập",
+    "createComposite": "Tạo gia phả tổng hợp",
+    "createCompositeTitle": "Tạo gia phả tổng hợp",
+    "createCompositeDescription": "Kết hợp các gia phả độc lập đã chọn mà không thay đổi dữ liệu nguồn.",
+    "compositeCreated": "Đã tạo gia phả tổng hợp",
+    "kinds": {"STANDALONE": "Độc lập", "COMPOSITE": "Tổng hợp"},
+    "filters": {"ALL": "Tất cả", "STANDALONE": "Độc lập", "COMPOSITE": "Tổng hợp"},
     "createTitle": "Tạo gia phả mới",
     "createDescription": "Tạo một không gian riêng để lưu giữ câu chuyện của gia đình.",
     "name": "Tên gia phả",
@@ -104,6 +111,9 @@
     "created": "Đã tạo gia phả",
     "retry": "Thử lại",
     "errors": {"generic": "Không thể tải hoặc tạo gia phả."}
+  },
+  "composite": {
+    "title": "Thiết lập gia phả tổng hợp", "details": "Thông tin", "sources": "Nguồn", "preview": "Xem trước", "identities": "Xác nhận danh tính", "relationships": "Liên kết", "validate": "Kiểm tra", "publish": "Xuất bản", "source": "Gia phả nguồn", "chooseSource": "Chọn gia phả độc lập", "addSource": "Thêm nguồn", "offline": "Không thể sửa cấu hình khi ngoại tuyến.", "error": "Không thể cập nhật gia phả tổng hợp.", "previewCounts": "{members} thành viên, {relationships} quan hệ, {events} sự kiện, {media} tệp", "noDescription": "Chưa có mô tả", "continue": "Tiếp tục", "scope": "Phạm vi", "fullTree": "Toàn bộ gia phả", "descendants": "Hậu duệ", "selectedMembers": "Thành viên đã chọn", "anchorIds": "Mã thành viên gốc", "memberIds": "Mã thành viên", "idsHint": "Các mã ngăn cách bằng dấu phẩy", "includeSpouses": "Gồm vợ/chồng", "includeEvents": "Gồm sự kiện", "includeMedia": "Gồm tư liệu", "openSource": "Mở gia phả nguồn", "continueIdentity": "Xem xét danh tính", "noSuggestions": "Không tìm thấy đề xuất danh tính.", "matchScore": "Điểm khớp {score}", "confirm": "Xác nhận", "reject": "Từ chối", "identityConfirmed": "Đã xác nhận hai hồ sơ là cùng một người.", "identityRejected": "Đã từ chối đề xuất đồng nhất danh tính.", "linkSource": "Điểm cha/nguồn", "linkTarget": "Điểm con/đích", "memberId": "Mã thành viên", "addLink": "Thêm liên kết xuyên cây", "valid": "Cấu hình hợp lệ và sẵn sàng xuất bản.", "invalid": "Cấu hình cần được xử lý.", "conflicts": "Xung đột danh tính", "staleSources": "Nguồn cũ", "unavailableSources": "Nguồn không khả dụng", "validateAgain": "Kiểm tra lại", "publishHint": "Xuất bản để người có quyền xem dữ liệu tổng hợp đã phân giải.", "publishedAt": "Đã xuất bản {date}", "scopeNames": {"FULL_TREE": "Toàn bộ gia phả", "DESCENDANTS": "Hậu duệ", "SELECTED_MEMBERS": "Thành viên đã chọn"}
   },
   "treeViewer": {
     "metaTitle": "Cây gia phả | Quản lý gia phả",
@@ -157,13 +167,17 @@
     "generationShort": "Đời {generation}",
     "generationFull": "Thế hệ thứ {generation}",
     "selectMember": "Chọn {name}",
-    "memberNodeLabel": "{name}, thế hệ {generation}, {status}"
+    "memberNodeLabel": "{name}, thế hệ {generation}, {status}",
+    "conflicts": "Xung đột danh tính",
+    "staleSources": "Nguồn cũ",
+    "unavailableSources": "Nguồn không khả dụng"
   },
   "membersPage": {
     "avatarFile": "Tải ảnh đại diện",
     "avatarUploadHint": "Hỗ trợ JPEG, PNG hoặc WebP, tối đa 10MB. Ảnh được quản lý trong Thư viện.",
     "metaTitle": "Thành viên | Quản lý gia phả",
     "detailMetaTitle": "Hồ sơ thành viên | Quản lý gia phả",
+    "source": {"title": "Bản ghi nguồn và nguồn gốc", "open": "Mở trong nguồn {tree}", "conflicts": "Các trường nguồn xung đột: {fields}"},
     "eyebrow": "Hồ sơ gia đình",
     "title": "Thành viên",
     "description": "Quản lý thông tin, câu chuyện và các mối liên kết của từng người trong gia phả.",
@@ -188,11 +202,11 @@
     "detail": {"birth": "Ngày sinh", "birthPlace": "Nơi sinh", "occupation": "Nghề nghiệp", "lifespan": "Tuổi thọ", "years": "tuổi", "story": "Câu chuyện", "storyHint": "Những điều gia đình muốn lưu lại.", "noStory": "Chưa có tiểu sử cho thành viên này.", "events": "Sự kiện tham gia", "eventsHint": "Các cột mốc có liên kết đến hồ sơ.", "noEvents": "Chưa có sự kiện nào."}
   },
   "eventsPage": {
-    "metaTitle": "Sự kiện | Quản lý gia phả", "eyebrow": "Dòng thời gian gia đình", "title": "Sự kiện & cột mốc", "description": "Lưu giữ những ngày đáng nhớ và kết nối chúng với người thân, hình ảnh và câu chuyện.", "count": "{count} sự kiện", "members": "{count} người tham gia", "media": "{count} tư liệu", "actions": {"add": "Tạo sự kiện", "cancel": "Hủy", "saving": "Đang lưu…", "save": "Lưu sự kiện", "retry": "Thử lại", "edit": "Chỉnh sửa", "delete": "Xóa", "view": "Xem chi tiết"},
+    "readOnly": "Sự kiện đã phân giải từ nguồn chỉ có thể xem", "metaTitle": "Sự kiện | Quản lý gia phả", "eyebrow": "Dòng thời gian gia đình", "title": "Sự kiện & cột mốc", "description": "Lưu giữ những ngày đáng nhớ và kết nối chúng với người thân, hình ảnh và câu chuyện.", "count": "{count} sự kiện", "members": "{count} người tham gia", "media": "{count} tư liệu", "actions": {"add": "Tạo sự kiện", "cancel": "Hủy", "saving": "Đang lưu…", "save": "Lưu sự kiện", "retry": "Thử lại", "edit": "Chỉnh sửa", "delete": "Xóa", "view": "Xem chi tiết"},
     "filters": {"all": "Tất cả", "upcoming": "Trong 7 ngày"}, "types": {"BIRTHDAY": "Sinh nhật", "WEDDING": "Đám cưới", "FUNERAL": "Tang lễ", "REUNION": "Họp mặt", "ANNIVERSARY": "Lễ kỷ niệm", "CUSTOM": "Tùy chỉnh"}, "upcoming": {"title": "Sắp diễn ra", "description": "Những dấu mốc trong 7 ngày tới.", "today": "Hôm nay", "days": "Còn {count} ngày"}, "empty": {"title": "Chưa có sự kiện", "description": "Tạo cột mốc đầu tiên để bắt đầu dòng thời gian gia đình."}, "createTitle": "Tạo sự kiện mới", "editTitle": "Chỉnh sửa sự kiện", "form": {"type": "Loại sự kiện", "title": "Tên sự kiện", "titlePlaceholder": "Ví dụ: Họp mặt đại gia đình 2025", "customType": "Tên loại tùy chỉnh", "date": "Ngày", "location": "Địa điểm", "locationPlaceholder": "Nhà thờ họ, thành phố…", "description": "Mô tả", "descriptionHint": "Thêm người tham gia và tư liệu để câu chuyện đầy đủ hơn.", "members": "Thành viên tham gia", "media": "Tư liệu đính kèm", "requiredTitle": "Vui lòng nhập tên sự kiện.", "requiredCustom": "Vui lòng nhập tên loại sự kiện tùy chỉnh."}, "detail": {"date": "Ngày", "location": "Địa điểm", "members": "Thành viên liên quan ({count})", "media": "Tư liệu ({count})", "noMembers": "Chưa có thành viên liên quan.", "noMedia": "Chưa có tư liệu đính kèm.", "noDescription": "Chưa có mô tả cho sự kiện này."}, "delete": {"confirmation": "Xóa sự kiện “{title}”?"}, "toasts": {"created": "Đã tạo sự kiện", "updated": "Đã cập nhật sự kiện", "deleted": "Đã xóa sự kiện", "failed": "Thao tác chưa hoàn tất"}, "errors": {"generic": "Không thể tải dữ liệu sự kiện."}
   },
   "mediaPage": {
-    "metaTitle": "Thư viện | Quản lý gia phả", "eyebrow": "Kho tư liệu gia đình", "title": "Thư viện media", "description": "Lưu giữ ảnh và tài liệu an toàn, sắp xếp theo album và kết nối với câu chuyện gia đình.", "count": "{count} tư liệu", "sortedByDate": "Mới nhất trước", "actions": {"upload": "Tải lên", "album": "Tạo album", "cancel": "Hủy", "remove": "Bỏ tệp", "retry": "Thử lại", "delete": "Xóa", "openOriginal": "Mở bản gốc"}, "filters": {"all": "Tất cả ({count})"}, "empty": {"title": "Thư viện đang chờ kỷ niệm đầu tiên", "description": "Tải ảnh JPEG, PNG, WebP hoặc tài liệu PDF tối đa 10MB để bắt đầu."}, "upload": {"title": "Tải tư liệu lên", "description": "Chọn nhiều tệp cùng lúc và gắn chúng với thành viên, sự kiện hoặc album.", "drop": "Kéo thả tệp vào đây hoặc bấm để chọn", "allowed": "JPEG, PNG, WebP hoặc PDF · tối đa 10MB mỗi tệp", "progress": "Đang tải lên", "uploading": "Đang tải…", "submit": "Bắt đầu tải lên"}, "form": {"members": "Gắn với thành viên", "events": "Gắn với sự kiện", "album": "Album", "noAlbum": "Không thuộc album", "takenAt": "Thời gian chụp", "caption": "Chú thích"}, "validation": {"type": "{name}: định dạng không được hỗ trợ.", "size": "{name}: kích thước vượt quá 10MB.", "empty": "Vui lòng chọn ít nhất một tệp."}, "album": {"title": "Tạo album ảnh", "description": "Nhóm những kỷ niệm theo chủ đề để tìm lại dễ dàng hơn.", "name": "Tên album", "about": "Mô tả", "create": "Tạo album"}, "delete": {"confirmation": "Xóa tư liệu “{name}”?"}, "toasts": {"uploaded": "Đã tải lên {count} tư liệu", "albumCreated": "Đã tạo album", "deleted": "Đã xóa tư liệu", "failed": "Thao tác chưa hoàn tất"}, "errors": {"generic": "Không thể tải dữ liệu thư viện."}
+    "readOnly": "Tư liệu đã phân giải từ nguồn chỉ có thể xem", "metaTitle": "Thư viện | Quản lý gia phả", "eyebrow": "Kho tư liệu gia đình", "title": "Thư viện media", "description": "Lưu giữ ảnh và tài liệu an toàn, sắp xếp theo album và kết nối với câu chuyện gia đình.", "count": "{count} tư liệu", "sortedByDate": "Mới nhất trước", "actions": {"upload": "Tải lên", "album": "Tạo album", "cancel": "Hủy", "remove": "Bỏ tệp", "retry": "Thử lại", "delete": "Xóa", "openOriginal": "Mở bản gốc"}, "filters": {"all": "Tất cả ({count})"}, "empty": {"title": "Thư viện đang chờ kỷ niệm đầu tiên", "description": "Tải ảnh JPEG, PNG, WebP hoặc tài liệu PDF tối đa 10MB để bắt đầu."}, "upload": {"title": "Tải tư liệu lên", "description": "Chọn nhiều tệp cùng lúc và gắn chúng với thành viên, sự kiện hoặc album.", "drop": "Kéo thả tệp vào đây hoặc bấm để chọn", "allowed": "JPEG, PNG, WebP hoặc PDF · tối đa 10MB mỗi tệp", "progress": "Đang tải lên", "uploading": "Đang tải…", "submit": "Bắt đầu tải lên"}, "form": {"members": "Gắn với thành viên", "events": "Gắn với sự kiện", "album": "Album", "noAlbum": "Không thuộc album", "takenAt": "Thời gian chụp", "caption": "Chú thích"}, "validation": {"type": "{name}: định dạng không được hỗ trợ.", "size": "{name}: kích thước vượt quá 10MB.", "empty": "Vui lòng chọn ít nhất một tệp."}, "album": {"title": "Tạo album ảnh", "description": "Nhóm những kỷ niệm theo chủ đề để tìm lại dễ dàng hơn.", "name": "Tên album", "about": "Mô tả", "create": "Tạo album"}, "delete": {"confirmation": "Xóa tư liệu “{name}”?"}, "toasts": {"uploaded": "Đã tải lên {count} tư liệu", "albumCreated": "Đã tạo album", "deleted": "Đã xóa tư liệu", "failed": "Thao tác chưa hoàn tất"}, "errors": {"generic": "Không thể tải dữ liệu thư viện."}
   },
   "memberSearch": {
     "eyebrow": "Tìm trong gia phả",
@@ -212,6 +226,7 @@
     "resultCount": "{count} kết quả phù hợp",
     "resultsLabel": "Danh sách thành viên tìm thấy",
     "selectHint": "Chọn để định vị trên cây",
+    "source": "Nguồn {tree}",
     "generation": "Đời {value}",
     "gender": {"MALE": "Nam", "FEMALE": "Nữ", "OTHER": "Khác"},
     "status": {"ALIVE": "Còn sống", "DECEASED": "Đã mất"},

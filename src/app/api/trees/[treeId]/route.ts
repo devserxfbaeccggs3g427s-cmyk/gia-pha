@@ -3,6 +3,7 @@ import { requireAuthenticatedUserId } from '@/lib/auth/guards';
 import { requireTreePermission } from '@/lib/auth/rbac';
 import { treeRouteError } from '@/lib/services/tree-api-errors';
 import { treeService } from '@/lib/services/tree-service';
+import { resolveTreeForUser } from '@/lib/services/tree-data-provider';
 
 export const runtime = 'nodejs';
 
@@ -14,7 +15,7 @@ export async function GET(_request: Request, { params }: RouteContext): Promise<
   try {
     const userId = await requireAuthenticatedUserId();
     await requireTreePermission(params.treeId, userId, 'READ');
-    return NextResponse.json(await treeService.getTreeWithMembers(params.treeId));
+    return NextResponse.json(await resolveTreeForUser(params.treeId, userId));
   } catch (error) {
     return treeRouteError(error);
   }

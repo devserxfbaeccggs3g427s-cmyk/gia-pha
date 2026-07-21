@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import { BlobStorageError } from '@/lib/blob/client';
 import { AuthenticationError } from '@/lib/auth/guards';
 import { MemberServiceError } from './member-service';
+import { CompositeConfigError } from './composite-config-service';
 
 export function memberRouteError(error: unknown): NextResponse {
   if (error instanceof AuthenticationError) {
@@ -28,6 +29,12 @@ export function memberRouteError(error: unknown): NextResponse {
     return NextResponse.json(
       { ok: false, error: { code: 'VALIDATION_ERROR', message: 'Request body phải là JSON hợp lệ' } },
       { status: 400 }
+    );
+  }
+  if (error instanceof CompositeConfigError && error.code === 'COMPOSITE_READ_ONLY') {
+    return NextResponse.json(
+      { ok: false, error: { code: error.code, message: 'Gia phả tổng hợp chỉ hiển thị dữ liệu từ các cây nguồn. Hãy mở cây nguồn phù hợp để thêm thành viên mới; thành viên sẽ tự động xuất hiện trong gia phả tổng hợp theo phạm vi đã cấu hình.' } },
+      { status: 422 }
     );
   }
   if (error instanceof MemberServiceError) {

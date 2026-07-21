@@ -1,6 +1,8 @@
 import sharp from 'sharp';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import type { Event, FamilyTree, MediaMetadata, Member, Relationship } from '@/data/types';
+import { resolveTreeForUser } from './tree-data-provider';
+import { getCompositeAuditLog, getCompositeConfig } from '@/lib/blob/readers';
 import { getCanonicalParentChildEdges } from '@/lib/algorithms/ancestry';
 import { calculateGenerations } from '@/lib/algorithms/generation';
 import { getAlbums, getEvents, getMediaMetadata, getMembers, getRelationships, getTrees } from '@/lib/blob/readers';
@@ -78,8 +80,8 @@ export class ExportServiceError extends Error {
 }
 
 export class ExportService {
-  async exportGEDCOM(treeId: string): Promise<Buffer> {
-    const data = await loadTreeData(treeId);
+  async exportGEDCOM(treeId: string, userId?: string): Promise<Buffer> {
+    const data = await loadTreeData(treeId, userId);
     const lines = [
       '0 HEAD',
       '1 SOUR FAMILY-GENEALOGY-MANAGEMENT',
@@ -88,7 +90,9 @@ export class ExportService {
       '2 VERS 5.5',
       '2 FORM LINEAGE-LINKED',
       '1 CHAR UTF-8',
-      `1 NOTE ${gedcomText(data.tree.name)}`
+      `1 DATE ${isoToGedcomDate(new Date().toISOString())}`,
+      `1 NOTE ${gedcomText(data.tree.name)}`,
+      `1 NOTE Exported ${new Date().toISOString()} with source attribution in member notes`
     ];
     const xrefByMember = new Map(data.members.map((member, index) => [member.id, `@I${index + 1}@`]));
     for (const member of data.members) {
@@ -99,6 +103,8 @@ export class ExportService {
       if (member.dateOfDeath || !member.isAlive) addGedcomEvent(lines, 'DEAT', member.dateOfDeath);
       if (member.occupation) lines.push(`1 OCCU ${gedcomText(member.occupation)}`);
       if (member.notes) addGedcomMultiline(lines, 'NOTE', member.notes);
+      const provenance = 'provenance' in member ? (member as Member & { provenance?: Array<{ treeId: string }> }).provenance : undefined;
+      if (provenance?.length) lines.push(`1 NOTE Sources: ${[...new Set(provenance.map((item) => item.treeId))].join(', ')}`);
     }
     const families = buildGedcomFamilies(data.members, data.relationships);
     families.forEach((family, index) => {
@@ -115,6 +121,14 @@ export class ExportService {
     return Buffer.from(`${lines.join('\r\n')}\r\n`, 'utf8');
   }
 
+  async exportCompositeJSON(treeId: string, userId: string): Promise<string> {
+    const [resolved, config, auditLog] = await Promise.all([resolveTreeForUser(treeId, userId), getCompositeConfig(treeId), getCompositeAuditLog(treeId)]);
+    if (!config) throw new ExportServiceError('INVALID_INPUT', 'Tree is not composite');
+    const authorizedSources = new Set(resolved.sourceManifest.filter((source) => source.status === 'ACTIVE').map((source) => source.sourceTreeId));
+    const safeConfig = { ...config, sources: config.sources.map((source) => authorizedSources.has(source.sourceTreeId) ? source : { ...source, anchorMemberIds: [], selectedMemberIds: [] }), identityGroups: config.identityGroups.map((group) => ({ ...group, references: group.references.filter((reference) => authorizedSources.has(reference.treeId)) })).filter((group) => group.references.length > 1), crossTreeRelationships: config.crossTreeRelationships.filter((relationship) => authorizedSources.has(relationship.source.treeId) && authorizedSources.has(relationship.target.treeId)) };
+    return JSON.stringify({ schema: 'family-genealogy-management/composite', version: 1, exportedAt: new Date().toISOString(), tree: { ...resolved.tree, ownerId: '', memberships: [] }, config: safeConfig, sourceManifest: resolved.sourceManifest, provenance: { members: resolved.members.map((item) => ({ id: item.id, provenance: item.provenance.filter((entry) => authorizedSources.has(entry.treeId)) })), relationships: resolved.relationships.map((item) => ({ id: item.id, provenance: item.provenance.filter((entry) => authorizedSources.has(entry.treeId)) })) }, auditLog: auditLog.map(({ actorId: _actorId, ...entry }) => entry) }, null, 2);
+  }
+
   async exportJSON(treeId: string): Promise<string> {
     const data = await loadTreeData(treeId);
     const document: FamilyTreeExportDocument = {
@@ -126,15 +140,15 @@ export class ExportService {
     return JSON.stringify(document, null, 2);
   }
 
-  async exportSVG(treeId: string, options: SVGOptions = {}): Promise<string> {
-    const data = await loadTreeData(treeId);
+  async exportSVG(treeId: string, options: SVGOptions = {}, userId?: string): Promise<string> {
+    const data = await loadTreeData(treeId, userId);
     return renderSvg(data.tree, createTreeLayout(data.members, data.relationships), normalizeOptions(options));
   }
 
-  async exportImage(treeId: string, options: ImageOptions = {}): Promise<Buffer> {
+  async exportImage(treeId: string, options: ImageOptions = {}, userId?: string): Promise<Buffer> {
     const normalized = normalizeOptions(options);
     if (normalized.dpi < 300) throw new ExportServiceError('INVALID_INPUT', 'PNG export requires at least 300 DPI');
-    const data = await loadTreeData(treeId);
+    const data = await loadTreeData(treeId, userId);
     const layout = createTreeLayout(data.members, data.relationships);
     const scale = normalized.dpi / 96;
     if (layout.width * scale * layout.height * scale > 160_000_000) {
@@ -154,9 +168,9 @@ export class ExportService {
     }
   }
 
-  async exportPDF(treeId: string, options: PDFOptions = {}): Promise<Buffer> {
+  async exportPDF(treeId: string, options: PDFOptions = {}, userId?: string): Promise<Buffer> {
     const normalized = normalizeOptions(options);
-    const data = await loadTreeData(treeId);
+    const data = await loadTreeData(treeId, userId);
     const layout = createTreeLayout(data.members, data.relationships);
     const pdf = await PDFDocument.create();
     pdf.setTitle(data.tree.name);
@@ -272,6 +286,7 @@ function renderSvg(tree: FamilyTree, layout: TreeLayout, options: NormalizedPrin
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.width}" height="${layout.height + 46}" viewBox="0 0 ${layout.width} ${layout.height + 46}" role="img" aria-labelledby="tree-title">`,
     `<title id="tree-title">${xml(tree.name)}</title>`,
+    `<metadata>Exported ${xml(new Date().toISOString())}; attribution preserved in resolved source provenance</metadata>`,
     `<rect width="100%" height="100%" fill="${colors.background}"/>`,
     `<text x="${layout.width / 2}" y="28" text-anchor="middle" font-family="${svgFont(options.font)}" font-size="20" font-weight="700" fill="${colors.text}">${xml(tree.name)}</text>`,
     `<g transform="translate(0 40)">`
@@ -446,13 +461,16 @@ function buildGedcomFamilies(members: Member[], relationships: Relationship[]): 
   });
 }
 
-async function loadTreeData(treeId: string): Promise<TreeData> {
+async function loadTreeData(treeId: string, userId?: string): Promise<TreeData> {
   if (!treeId?.trim()) throw new ExportServiceError('INVALID_INPUT', 'treeId is required');
   const tree = (await getTrees()).find((item) => item.id === treeId);
   if (!tree) throw new ExportServiceError('NOT_FOUND', 'Family tree not found');
-  const [members, relationships, events, mediaMetadata, albums] = await Promise.all([
-    getMembers(treeId), getRelationships(treeId), getEvents(treeId), getMediaMetadata(treeId), getAlbums(treeId)
-  ]);
+  if ((tree.kind ?? 'STANDALONE') === 'COMPOSITE') {
+    if (!userId) throw new ExportServiceError('INVALID_INPUT', 'userId is required for composite export');
+    const resolved = await resolveTreeForUser(treeId, userId);
+    return { tree: resolved.tree, members: resolved.members, relationships: resolved.relationships, events: resolved.events, mediaMetadata: resolved.mediaMetadata, albums: [] };
+  }
+  const [members, relationships, events, mediaMetadata, albums] = await Promise.all([getMembers(treeId), getRelationships(treeId), getEvents(treeId), getMediaMetadata(treeId), getAlbums(treeId)]);
   return { tree, members, relationships, events, mediaMetadata, albums };
 }
 

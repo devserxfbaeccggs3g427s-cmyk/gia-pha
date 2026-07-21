@@ -39,6 +39,8 @@ export const BLOB_PATHS = {
   shareLinks: (treeId: string) => `data/trees/${treeId}/share-links.json`,
   shareLink: (token: string) => `share-links/${token}.json`,
   compositeConfig: (treeId: string) => `data/trees/${treeId}/composite-config.json`,
+  compositeMutationPrefix: (treeId: string) => `data/trees/${treeId}/composite-mutations/`,
+  compositeMutation: (treeId: string, mutationId: string) => `data/trees/${treeId}/composite-mutations/${mutationId}.json`,
   compositeChangeLogs: (treeId: string) => `data/trees/${treeId}/composite-change-logs.json`,
   compositeManifestPrefix: (treeId: string) => `cache/trees/${treeId}/resolved/`,
   compositeManifest: (treeId: string, audienceHash: string) =>
@@ -95,12 +97,20 @@ export async function readBlob<T>(path: string): Promise<T | null> {
 }
 
 export async function writeBlob<T>(path: string, data: T): Promise<void> {
+  await writeJsonBlob(path, data, true);
+}
+
+export async function writeImmutableBlob<T>(path: string, data: T): Promise<void> {
+  await writeJsonBlob(path, data, false);
+}
+
+async function writeJsonBlob<T>(path: string, data: T, allowOverwrite: boolean): Promise<void> {
   await withBlobErrorHandling(async () => {
     assertBlobCredentials();
     await put(path, JSON.stringify(data, null, 2), {
       access: DATA_BLOB_ACCESS,
       addRandomSuffix: false,
-      allowOverwrite: true,
+      allowOverwrite,
       cacheControlMaxAge: 60,
       contentType: 'application/json; charset=utf-8'
     });

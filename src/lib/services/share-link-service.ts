@@ -1,10 +1,14 @@
 import { nanoid } from 'nanoid';
 import { createShareLinkSchema } from '@/data/schemas';
 import type { Event, FamilyTree, MediaMetadata, Member, Relationship, ShareLink } from '@/data/types';
+import { compositeResolver } from './composite-resolver';
+import { redactLivingDetails } from '@/lib/composite/composite-cache';
 import { AUTH_SECRET } from '@/lib/auth/constants';
 import { createSignedShareToken, ShareTokenError, verifySignedShareToken } from '@/lib/auth/share-token';
 import { BLOB_PATHS, deleteBlob, readBlob, writeBlob } from '@/lib/blob/client';
-import { getEvents, getMembers, getMediaMetadata, getRelationships, getTrees } from '@/lib/blob/readers';
+import { getCompositeConfig, getEvents, getMembers, getMediaMetadata, getRelationships, getTrees } from '@/lib/blob/readers';
+import { getUserTreeRole } from '@/lib/auth/rbac';
+import { requireCompositeFeature } from '@/lib/composite/feature-flags';
 
 const MAX_SHARE_LINK_LIFETIME_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -132,6 +136,18 @@ export class ShareLinkService {
     ]);
     const tree = trees.find((candidate) => candidate.id === link.treeId);
     if (!tree) throw new ShareLinkServiceError('TREE_NOT_FOUND', 'Family tree not found');
+
+    if ((tree.kind ?? 'STANDALONE') === 'COMPOSITE') {
+      requireCompositeFeature('sharing');
+      const config = await getCompositeConfig(tree.id);
+      if (!config) throw new ShareLinkServiceError('TREE_NOT_FOUND', 'Composite configuration not found');
+      const treeIndex = new Map(trees.map((candidate) => [candidate.id, candidate]));
+      const consented = config.sources.filter((source) => { const sourceTree = treeIndex.get(source.sourceTreeId); return Boolean(sourceTree && source.allowCompositeSharing && getUserTreeRole(sourceTree, tree.ownerId) === 'ADMIN'); });
+      if (consented.length !== config.sources.length) throw new ShareLinkServiceError('INVALID_INPUT', 'Every source Admin must consent before composite sharing');
+      const livingAllowed = new Set(consented.filter((source) => source.shareLivingDetails).map((source) => source.sourceTreeId));
+      const resolved = redactLivingDetails(await compositeResolver.resolveForUser(tree.id, tree.ownerId), livingAllowed);
+      return { tree: { ...resolved.tree, ownerId: '', memberships: [] }, members: resolved.members, relationships: resolved.relationships, events: resolved.events, mediaMetadata: resolved.mediaMetadata, shareLink: { permission: 'VIEW', expiresAt: link.expiresAt } };
+    }
 
     // Never expose ownership or membership details through a public link.
     const publicTree: FamilyTree = { ...tree, ownerId: '', memberships: [] };

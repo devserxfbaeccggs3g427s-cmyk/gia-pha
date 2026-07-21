@@ -21,15 +21,17 @@ export async function GET(request: Request, { params }: { params: { treeId: stri
     let contentType: string;
     let filename: string;
     if (format === 'gedcom' || format === 'ged') {
-      body = await exportService.exportGEDCOM(params.treeId); contentType = 'text/plain; charset=utf-8'; filename = `${params.treeId}.ged`;
+      body = await exportService.exportGEDCOM(params.treeId, userId); contentType = 'text/plain; charset=utf-8'; filename = `${params.treeId}.ged`;
+    } else if (format === 'composite-json') {
+      body = await exportService.exportCompositeJSON(params.treeId, userId); contentType = 'application/json; charset=utf-8'; filename = `${params.treeId}.composite.json`;
     } else if (format === 'json') {
       body = await exportService.exportJSON(params.treeId); contentType = 'application/json; charset=utf-8'; filename = `${params.treeId}.json`;
     } else if (format === 'pdf') {
-      body = await exportService.exportPDF(params.treeId, options); contentType = 'application/pdf'; filename = `${params.treeId}.pdf`;
+      body = await exportService.exportPDF(params.treeId, options, userId); contentType = 'application/pdf'; filename = `${params.treeId}.pdf`;
     } else if (format === 'png' || format === 'image') {
-      body = await exportService.exportImage(params.treeId, options); contentType = 'image/png'; filename = `${params.treeId}.png`;
+      body = await exportService.exportImage(params.treeId, options, userId); contentType = 'image/png'; filename = `${params.treeId}.png`;
     } else if (format === 'svg') {
-      body = await exportService.exportSVG(params.treeId, options); contentType = 'image/svg+xml; charset=utf-8'; filename = `${params.treeId}.svg`;
+      body = await exportService.exportSVG(params.treeId, options, userId); contentType = 'image/svg+xml; charset=utf-8'; filename = `${params.treeId}.svg`;
     } else {
       return NextResponse.json({ ok: false, error: { code: 'INVALID_INPUT', message: 'format must be GEDCOM, JSON, PDF, PNG, SVG, or preview' } }, { status: 400 });
     }

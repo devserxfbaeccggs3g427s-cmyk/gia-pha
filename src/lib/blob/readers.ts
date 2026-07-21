@@ -1,5 +1,5 @@
 import { compositeTreeConfigSchema, familyTreeSchema } from '@/data/schemas';
-import type { Album, ChangeLog, CompositeTreeConfig, Event, FamilyTree, MediaMetadata, Member, Relationship, User } from '@/data/types';
+import type { Album, ChangeLog, CompositeAuditEntry, CompositeTreeConfig, Event, FamilyTree, MediaMetadata, Member, Relationship, User } from '@/data/types';
 import { normalizeRelationships } from '@/lib/algorithms/relationship-normalization';
 import { BLOB_PATHS, readBlob } from './client';
 import { putRelationships } from './writers';
@@ -48,4 +48,22 @@ export async function getCompositeConfig(treeId: string): Promise<CompositeTreeC
   const raw = await readBlob<unknown>(BLOB_PATHS.compositeConfig(treeId));
   if (raw === null) return null;
   return compositeTreeConfigSchema.parse(raw);
+}
+
+export async function getTreeCollections(treeId: string): Promise<{ members: Member[]; relationships: Relationship[]; events: Event[]; mediaMetadata: MediaMetadata[] }> {
+  const [members, relationships, events, mediaMetadata] = await Promise.all([getMembers(treeId), getRelationships(treeId), getEvents(treeId), getMediaMetadata(treeId)]);
+  return { members, relationships, events, mediaMetadata };
+}
+
+export async function getTreeCollectionsBatch(treeIds: readonly string[], concurrency = 5): Promise<Map<string, Awaited<ReturnType<typeof getTreeCollections>>>> {
+  const result = new Map<string, Awaited<ReturnType<typeof getTreeCollections>>>();
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, concurrency), treeIds.length) }, async () => {
+    while (cursor < treeIds.length) { const treeId = treeIds[cursor++]; result.set(treeId, await getTreeCollections(treeId)); }
+  }));
+  return result;
+}
+
+export async function getCompositeAuditLog(treeId: string): Promise<CompositeAuditEntry[]> {
+  return (await readBlob<CompositeAuditEntry[]>(BLOB_PATHS.compositeChangeLogs(treeId))) ?? [];
 }

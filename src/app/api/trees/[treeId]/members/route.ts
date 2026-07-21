@@ -4,6 +4,8 @@ import { requireAuthenticatedUserId } from '@/lib/auth/guards';
 import { requireTreePermission } from '@/lib/auth/rbac';
 import { memberService } from '@/lib/services/member-service';
 import { memberRouteError } from '@/lib/services/member-api-errors';
+import { requireStandaloneMutationTarget } from '@/lib/services/composite-mutation-guard';
+import { resolveTreeForUser } from '@/lib/services/tree-data-provider';
 
 export const runtime = 'nodejs';
 
@@ -14,7 +16,7 @@ export async function GET(
   try {
     const userId = await requireAuthenticatedUserId();
     await requireTreePermission(params.treeId, userId, 'READ');
-    return NextResponse.json(await getMembers(params.treeId));
+    return NextResponse.json((await resolveTreeForUser(params.treeId, userId)).members);
   } catch (error) {
     return memberRouteError(error);
   }
@@ -27,6 +29,7 @@ export async function POST(
   try {
     const userId = await requireAuthenticatedUserId();
     await requireTreePermission(params.treeId, userId, 'CREATE');
+    await requireStandaloneMutationTarget(params.treeId);
     const member = await memberService.createMember(params.treeId, await request.json(), userId);
     return NextResponse.json(member, { status: 201 });
   } catch (error) {

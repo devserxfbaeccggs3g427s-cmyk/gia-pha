@@ -8,10 +8,12 @@ import {
   relationTypeSchema,
   treeRoleSchema
 } from '@/data/schemas';
-import type { Album, Event, FamilyTree, MediaMetadata, Member, Relationship } from '@/data/types';
+import type { Album, CompositeTreeConfig, Event, FamilyTree, MediaMetadata, Member, Relationship, ResolvedSourceManifest } from '@/data/types';
 import { parseGEDCOMContent } from '@/lib/algorithms/gedcom-parser';
 import { getAlbums, getEvents, getMediaMetadata, getMembers, getRelationships, getTrees } from '@/lib/blob/readers';
-import { putAlbums, putEvents, putMediaMetadata, putMembers, putRelationships } from '@/lib/blob/writers';
+import { putAlbums, putCompositeAuditLog, putCompositeConfig, putEvents, putMediaMetadata, putMembers, putRelationships, putTrees } from '@/lib/blob/writers';
+import { canAccessTree } from '@/lib/auth/rbac';
+import { requireCompositeFeature } from '@/lib/composite/feature-flags';
 import type {
   FamilyTreeExportDocument,
   ImportIssue,
@@ -184,6 +186,26 @@ export class ImportService {
       parsed.issues.push(errorIssue('"albums" must be an array', lineOfKey(content, 'albums'), 'albums'));
     }
     return validateParsed(parsed, content) as ParsedJSON;
+  }
+
+  async importCompositeJSON(file: Buffer | Uint8Array | string, userId: string): Promise<{ tree: FamilyTree; config: CompositeTreeConfig; sourceManifest: ResolvedSourceManifest[] }> {
+    requireCompositeFeature('import');
+    let value: Record<string, unknown>;
+    try { value = JSON.parse(stripBom(decodeFile(file))) as Record<string, unknown>; }
+    catch { throw new ImportServiceError('INVALID_IMPORT', 'COMPOSITE_JSON contains invalid JSON', [{ severity: 'ERROR', code: 'SYNTAX_ERROR', message: 'Malformed JSON', line: 1 }]); }
+    if (value.schema !== 'family-genealogy-management/composite' || value.version !== 1 || !isRecord(value.tree) || !isRecord(value.config)) throw new ImportServiceError('INVALID_IMPORT', 'Unsupported COMPOSITE_JSON document');
+    const trees = await getTrees();
+    const importedTree = treeSchema.parse(value.tree);
+    const rawConfig = value.config as unknown as CompositeTreeConfig;
+    const now = new Date().toISOString();
+    const treeId = nanoid();
+    const tree: FamilyTree = { ...importedTree, id: treeId, kind: 'COMPOSITE', ownerId: userId, memberships: [{ userId, role: 'ADMIN', createdAt: now }], createdAt: now, updatedAt: now };
+    const config: CompositeTreeConfig = { ...rawConfig, treeId, revision: 0, publishedAt: undefined, createdAt: now, updatedAt: now };
+    const sourceManifest = config.sources.map((source) => { const sourceTree = trees.find((candidate) => candidate.id === source.sourceTreeId); const available = Boolean(sourceTree && canAccessTree(sourceTree, userId, 'READ')); return { sourceTreeId: source.sourceTreeId, status: available ? 'ACTIVE' as const : 'UNAVAILABLE' as const, version: available ? sourceTree!.updatedAt : '', resolvedMemberCount: 0, ...(!available ? { warningCode: sourceTree ? 'SOURCE_FORBIDDEN' : 'SOURCE_UNAVAILABLE' } : {}) }; });
+    await putCompositeConfig(treeId, config);
+    await putCompositeAuditLog(treeId, []);
+    try { await putTrees([...trees, tree]); } catch (error) { throw new ImportServiceError('WRITE_FAILED', 'Composite references could not be imported'); }
+    return { tree, config, sourceManifest };
   }
 
   async parseCSV(file: Buffer | Uint8Array | string): Promise<ParsedCSV> {
@@ -710,6 +732,7 @@ export default importService;
 export const parseGEDCOM = importService.parseGEDCOM.bind(importService);
 export const parseJSON = importService.parseJSON.bind(importService);
 export const parseCSV = importService.parseCSV.bind(importService);
+export const importCompositeJSON = importService.importCompositeJSON.bind(importService);
 export const preview = importService.preview.bind(importService);
 export const execute = importService.execute.bind(importService);
 

@@ -4,6 +4,7 @@ import { requireTreePermission } from '@/lib/auth/rbac';
 import { eventMediaRouteError } from '@/lib/services/event-media-api-errors';
 import { mediaService } from '@/lib/services/media-service';
 import { findMediaTree } from '@/lib/services/media-route-utils';
+import { requireStandaloneMutationTarget } from '@/lib/services/composite-mutation-guard';
 
 export const runtime = 'nodejs';
 
@@ -29,6 +30,7 @@ export async function DELETE(request: Request, { params }: RouteContext): Promis
     const treeId = await findMediaTree(request, params.mediaId);
     if (!treeId) return notFound();
     await requireTreePermission(treeId, userId, 'DELETE');
+    await requireStandaloneMutationTarget(treeId);
     await mediaService.deleteMedia(treeId, params.mediaId, userId);
     return new NextResponse(null, { status: 204 });
   } catch (error) {

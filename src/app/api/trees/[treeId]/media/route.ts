@@ -3,6 +3,7 @@ import { requireAuthenticatedUserId } from '@/lib/auth/guards';
 import { requireTreePermission } from '@/lib/auth/rbac';
 import { eventMediaRouteError } from '@/lib/services/event-media-api-errors';
 import { mediaService } from '@/lib/services/media-service';
+import { resolveTreeForUser } from '@/lib/services/tree-data-provider';
 
 export const runtime = 'nodejs';
 
@@ -24,10 +25,11 @@ export async function GET(
         error: { code: 'VALIDATION_ERROR', message: 'Chỉ được dùng một bộ lọc memberId, eventId hoặc albumId' }
       }, { status: 400 });
     }
-    if (memberId) return NextResponse.json(await mediaService.getMediaForMember(params.treeId, memberId));
-    if (eventId) return NextResponse.json(await mediaService.getMediaForEvent(params.treeId, eventId));
-    if (albumId) return NextResponse.json(await mediaService.getMediaForAlbum(params.treeId, albumId));
-    return NextResponse.json(await mediaService.getMediaForTree(params.treeId));
+    const media = (await resolveTreeForUser(params.treeId, userId)).mediaMetadata;
+    if (memberId) return NextResponse.json(media.filter((item) => item.memberIds.includes(memberId)));
+    if (eventId) return NextResponse.json(media.filter((item) => item.eventIds.includes(eventId)));
+    if (albumId) return NextResponse.json(media.filter((item) => item.albumId === albumId));
+    return NextResponse.json(media);
   } catch (error) {
     return eventMediaRouteError(error, 'media');
   }

@@ -4,6 +4,7 @@ import { AuthenticationError } from '@/lib/auth/guards';
 import { AuthorizationError } from '@/lib/auth/rbac';
 import { BlobStorageError } from '@/lib/blob/client';
 import { EventServiceError, MediaServiceError } from './event-media-errors';
+import { CompositeConfigError } from './composite-config-service';
 
 export function eventMediaRouteError(error: unknown, resource: 'event' | 'media'): NextResponse {
   if (error instanceof AuthenticationError) {
@@ -11,6 +12,9 @@ export function eventMediaRouteError(error: unknown, resource: 'event' | 'media'
   }
   if (error instanceof AuthorizationError) {
     return failure(error.code === 'TREE_NOT_FOUND' ? 404 : 403, error.code, error.message);
+  }
+  if (error instanceof CompositeConfigError) {
+    return failure(error.code === 'COMPOSITE_READ_ONLY' ? 422 : 400, error.code, error.message);
   }
   if (error instanceof ZodError) {
     return NextResponse.json({

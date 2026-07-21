@@ -1,7 +1,8 @@
 import type { BackupSnapshot } from '@/data/types';
 import { BLOB_PATHS, deleteBlobs, listBlobs, readBlob, writeBlob } from '@/lib/blob/client';
-import { getEvents, getMembers, getMediaMetadata, getRelationships, getTrees } from '@/lib/blob/readers';
-import { putEvents, putMembers, putMediaMetadata, putRelationships } from '@/lib/blob/writers';
+import { getCompositeAuditLog, getCompositeConfig, getEvents, getMembers, getMediaMetadata, getRelationships, getTrees } from '@/lib/blob/readers';
+import { putCompositeAuditLog, putCompositeConfig, putEvents, putMembers, putMediaMetadata, putRelationships } from '@/lib/blob/writers';
+import { compositeResolver } from './composite-resolver';
 
 export const BACKUP_RETENTION_DAYS = 30;
 const BACKUP_RETENTION_MS = BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
@@ -93,7 +94,7 @@ export class BackupService {
       .sort((left, right) => right.timestamp.localeCompare(left.timestamp));
   }
 
-  async restoreFromBackup(treeId: string, timestamp: string): Promise<RestoreResult> {
+  async restoreFromBackup(treeId: string, timestamp: string, userId?: string): Promise<RestoreResult> {
     assertIdentifier(treeId, 'treeId');
     assertTimestamp(timestamp);
     await this.assertTreeExists(treeId);
@@ -106,12 +107,18 @@ export class BackupService {
 
     try {
       await this.writeSnapshotData(treeId, snapshot);
+      if (snapshot.compositeConfig) {
+        if (!userId) throw new BackupServiceError('INVALID_INPUT', 'userId is required to revalidate a composite restore');
+        const validation = await compositeResolver.validate(treeId, userId);
+        if (!validation.valid) throw new BackupServiceError('INVALID_BACKUP', 'Restored composite configuration failed full revalidation');
+      }
     } catch (error) {
       const rollback = await Promise.allSettled([
         putMembers(treeId, current.data.members),
         putRelationships(treeId, current.data.relationships),
         putEvents(treeId, current.data.events),
-        putMediaMetadata(treeId, current.data.mediaMetadata)
+        putMediaMetadata(treeId, current.data.mediaMetadata),
+        ...(current.compositeConfig ? [putCompositeConfig(treeId, current.compositeConfig), putCompositeAuditLog(treeId, current.compositeAuditLog ?? [])] : [])
       ]);
       const rollbackFailed = rollback.some((result) => result.status === 'rejected');
       throw new BackupServiceError(
@@ -149,12 +156,12 @@ export class BackupService {
   }
 
   private async captureSnapshot(treeId: string, timestamp: string): Promise<BackupSnapshot> {
-    const [members, relationships, events, mediaMetadata] = await Promise.all([
-      getMembers(treeId),
-      getRelationships(treeId),
-      getEvents(treeId),
-      getMediaMetadata(treeId)
-    ]);
+    const tree = (await getTrees()).find((item) => item.id === treeId)!;
+    if ((tree.kind ?? 'STANDALONE') === 'COMPOSITE') {
+      const [compositeConfig, compositeAuditLog] = await Promise.all([getCompositeConfig(treeId), getCompositeAuditLog(treeId)]);
+      return { treeId, timestamp, tree, ...(compositeConfig ? { compositeConfig } : {}), compositeAuditLog, sourceManifest: [], data: { members: [], relationships: [], events: [], mediaMetadata: [] } };
+    }
+    const [members, relationships, events, mediaMetadata] = await Promise.all([getMembers(treeId), getRelationships(treeId), getEvents(treeId), getMediaMetadata(treeId)]);
     return { treeId, timestamp, data: { members, relationships, events, mediaMetadata } };
   }
 
@@ -165,6 +172,11 @@ export class BackupService {
   }
 
   private async writeSnapshotData(treeId: string, snapshot: BackupSnapshot): Promise<void> {
+    if (snapshot.compositeConfig) {
+      await putCompositeConfig(treeId, { ...snapshot.compositeConfig, publishedAt: undefined, revision: snapshot.compositeConfig.revision + 1, updatedAt: new Date().toISOString() });
+      await putCompositeAuditLog(treeId, snapshot.compositeAuditLog ?? []);
+      return;
+    }
     // Keep the ordering deterministic. If any write fails, restoreFromBackup rolls all four files back.
     await putMembers(treeId, snapshot.data.members);
     await putRelationships(treeId, snapshot.data.relationships);

@@ -33,6 +33,13 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    const notify = () => window.dispatchEvent(new CustomEvent('composite-connectivity', { detail: { online: navigator.onLine, reauthorize: navigator.onLine } }));
+    window.addEventListener('online', notify);
+    window.addEventListener('offline', notify);
+    return () => { window.removeEventListener('online', notify); window.removeEventListener('offline', notify); };
+  }, []);
+
+  useEffect(() => {
     if (status === 'loading' || process.env.NODE_ENV !== 'production' || !('serviceWorker' in navigator)) return;
     // Private route/API caches must never survive a sign-out and be shown to
     // another account on the same device. The shell cache is intentionally

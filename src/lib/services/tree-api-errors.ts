@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import { AuthenticationError } from '@/lib/auth/guards';
 import { AuthorizationError } from '@/lib/auth/rbac';
 import { BlobStorageError } from '@/lib/blob/client';
+import { CompositeFeatureError } from '@/lib/composite/feature-flags';
 import { CompositeConfigError } from './composite-config-service';
 import { TreeServiceError } from './tree-service';
 
@@ -28,10 +29,16 @@ export function treeRouteError(error: unknown): NextResponse {
       { status }
     );
   }
+  if (error instanceof CompositeFeatureError) {
+    return NextResponse.json(
+      { ok: false, error: { code: error.code, message: error.message, details: { feature: error.feature } } },
+      { status: 404 }
+    );
+  }
   if (error instanceof CompositeConfigError) {
     const status = compositeConfigErrorStatus(error.code);
     return NextResponse.json(
-      { ok: false, error: { code: error.code, message: error.message } },
+      { ok: false, error: { code: error.code, message: error.message, ...(error.details ? { details: error.details } : {}) } },
       { status }
     );
   }

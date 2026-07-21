@@ -183,6 +183,10 @@ export interface ShareLink {
 export interface BackupSnapshot {
   treeId: string;
   timestamp: string;
+  tree?: FamilyTree;
+  compositeConfig?: CompositeTreeConfig;
+  compositeAuditLog?: CompositeAuditEntry[];
+  sourceManifest?: ResolvedSourceManifest[];
   data: {
     members: Member[];
     relationships: Relationship[];
@@ -211,6 +215,10 @@ export interface CompositeSource {
   includeMedia: boolean;
   allowCompositeSharing: boolean;
   shareLivingDetails: boolean;
+  sharingConsentedBy?: string;
+  sharingConsentedAt?: string;
+  sharingConsentSourceVersion?: string;
+  sourceVersion?: string;
   preferredLabel?: string;
   createdAt: string;
   updatedAt: string;
@@ -268,6 +276,8 @@ export interface VirtualMember extends Omit<Member, 'id' | 'treeId'> {
   sourceReferences: SourceReference[];
   preferredReference: SourceReference;
   provenance: SourceProvenance[];
+  fieldProvenance: Record<string, SourceProvenance[]>;
+  conflictingFields: string[];
   hasConflictingFields: boolean;
   isPlaceholder?: boolean;
 }
