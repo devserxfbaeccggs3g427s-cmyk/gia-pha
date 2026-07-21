@@ -1,6 +1,5 @@
-import { get } from '@vercel/blob';
 import { NextResponse } from 'next/server';
-import { withBlobErrorHandling } from '@/lib/blob/client';
+import { readBinaryBlob } from '@/lib/blob/client';
 import { requireAuthenticatedUserId } from '@/lib/auth/guards';
 import { requireTreePermission } from '@/lib/auth/rbac';
 import { eventMediaRouteError } from '@/lib/services/event-media-api-errors';
@@ -33,11 +32,8 @@ export async function GET(
         { status: 404 }
       );
     }
-    const blob = await withBlobErrorHandling(
-      () => get(url, { access: 'private' }),
-      `Read media "${params.mediaId}"`
-    );
-    if (!blob || blob.statusCode !== 200 || !blob.stream) {
+    const blob = await readBinaryBlob(url);
+    if (!blob) {
       return NextResponse.json(
         { ok: false, error: { code: 'NOT_FOUND', message: 'Media content not found' } },
         { status: 404 }
@@ -59,15 +55,15 @@ export async function GET(
     return new Response(body, {
       status: 200,
       headers: {
-        'Content-Type': renderWebp ? 'image/webp' : blob.blob.contentType,
-        'Content-Length': String(optimizedBody?.length ?? blob.blob.size),
+        'Content-Type': renderWebp ? 'image/webp' : blob.contentType,
+        'Content-Length': String(optimizedBody?.length ?? blob.size),
         'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(filename)}`,
         'Cache-Control': renderWebp
           ? 'private, max-age=86400, stale-while-revalidate=604800'
           : 'private, max-age=3600',
         ETag: renderWebp
-          ? variantEtag(blob.blob.etag, requestedWidth, requestedQuality)
-          : blob.blob.etag,
+          ? variantEtag(blob.etag, requestedWidth, requestedQuality)
+          : blob.etag,
         'X-Content-Type-Options': 'nosniff'
       }
     });

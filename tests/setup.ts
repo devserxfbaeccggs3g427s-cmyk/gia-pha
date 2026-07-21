@@ -1,65 +1,56 @@
 import { beforeEach, vi } from 'vitest';
 import { mockBlobStorage } from './utils/mock-blob-storage';
 
-vi.stubEnv('BLOB_READ_WRITE_TOKEN', 'test-blob-token');
+vi.stubEnv('SUPABASE_URL', 'https://supabase.test');
+vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key');
+vi.stubEnv('SUPABASE_STORAGE_BUCKET', 'genealogy');
 
-vi.mock('@vercel/blob', () => ({
-  list: vi.fn(async ({ prefix }: { prefix?: string } = {}) => ({
-    blobs: mockBlobStorage.list(prefix).map((blob) => ({
-      pathname: blob.pathname,
-      url: blob.url,
-      downloadUrl: blob.url,
-      size: blob.body.length,
-      uploadedAt: blob.uploadedAt,
-      contentType: blob.contentType
-    }))
-  })),
-  put: vi.fn(
-    async (
-      pathname: string,
-      body: string | Buffer | ArrayBuffer | Blob,
-      options?: {
-        contentType?: string;
-      }
-    ) => {
-      const normalized = typeof body === 'string'
-        ? body
-        : body instanceof Blob
-          ? new Uint8Array(await body.arrayBuffer())
-          : body instanceof ArrayBuffer
-            ? new Uint8Array(body)
-            : new Uint8Array(body);
-      return mockBlobStorage.put(pathname, normalized, options?.contentType);
-    }
-  ),
-  get: vi.fn(async (pathname: string) => {
-    const blob = mockBlobStorage.get(pathname) ?? mockBlobStorage.getByUrl(pathname);
-
-    if (!blob) {
-      return null;
-    }
-
-    return {
-      statusCode: 200,
-      stream: new Response(blob.body as unknown as BodyInit).body,
-      headers: new Headers({ 'content-type': blob.contentType }),
-      blob: {
-        url: blob.url,
-        downloadUrl: blob.url,
-        pathname: blob.pathname,
-        contentType: blob.contentType,
-        size: blob.body.length,
-        uploadedAt: blob.uploadedAt,
-        etag: 'mock-etag'
-      }
-    };
+const storageBucket = {
+  download: vi.fn(async (pathname: string) => {
+    const record = mockBlobStorage.get(pathname);
+    return record
+      ? { data: new Blob([record.body as BlobPart], { type: record.contentType }), error: null }
+      : { data: null, error: { statusCode: '404', message: 'Object not found' } };
   }),
-  del: vi.fn(async (pathname: string | string[]) => {
-    for (const item of Array.isArray(pathname) ? pathname : [pathname]) {
-      mockBlobStorage.delete(item);
+  upload: vi.fn(async (
+    pathname: string,
+    body: string | Buffer | ArrayBuffer | Blob,
+    options?: { contentType?: string; upsert?: boolean }
+  ) => {
+    if (!options?.upsert && mockBlobStorage.get(pathname)) {
+      return { data: null, error: { statusCode: '409', message: 'The resource already exists' } };
     }
+    const normalized = typeof body === 'string'
+      ? body
+      : body instanceof Blob
+        ? new Uint8Array(await body.arrayBuffer())
+        : body instanceof ArrayBuffer
+          ? new Uint8Array(body)
+          : new Uint8Array(body);
+    mockBlobStorage.put(pathname, normalized, options?.contentType);
+    return { data: { path: pathname }, error: null };
   }),
-  head: vi.fn(async (pathname: string) => mockBlobStorage.head(pathname))
+  list: vi.fn(async (folder: string, options?: { limit?: number; offset?: number }) => {
+    const prefix = folder ? `${folder}/` : '';
+    const records = mockBlobStorage.list(prefix).map((record) => ({
+      id: record.pathname,
+      name: record.pathname.slice(prefix.length),
+      created_at: record.uploadedAt.toISOString(),
+      updated_at: record.uploadedAt.toISOString(),
+      metadata: { size: record.body.length, mimetype: record.contentType }
+    }));
+    const offset = options?.offset ?? 0;
+    return { data: records.slice(offset, offset + (options?.limit ?? 100)), error: null };
+  }),
+  remove: vi.fn(async (paths: string[]) => {
+    paths.forEach((path) => mockBlobStorage.delete(path));
+    return { data: [], error: null };
+  })
+};
+
+vi.mock('@/lib/supabase/server-storage', () => ({
+  getSupabaseStorage: () => storageBucket,
+  getSupabaseStorageBucket: () => 'genealogy'
 }));
 
 vi.stubGlobal(
