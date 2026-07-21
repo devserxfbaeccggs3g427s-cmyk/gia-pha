@@ -4,13 +4,11 @@ import { isPrivateMediaUrl, privateMediaLoader } from '@/lib/images/media-loader
 import { setCacheHeaders } from '@/middleware';
 
 describe('performance cache policies', () => {
-  it('caches read-only API responses briefly without sharing family data', () => {
+  it('always revalidates read-only API responses before offline fallback', () => {
     const response = NextResponse.next();
     setCacheHeaders(new NextRequest('https://example.test/api/trees/tree-1/members'), response);
 
-    expect(response.headers.get('cache-control')).toBe(
-      'private, max-age=15, stale-while-revalidate=45'
-    );
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(response.headers.get('vary')).toContain('Cookie');
     expect(response.headers.get('vary')).toContain('Authorization');
   });

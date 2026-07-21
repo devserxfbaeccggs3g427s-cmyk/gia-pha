@@ -1,7 +1,7 @@
 /* Kinship PWA service worker. Keep this file dependency-free: it is served
  * directly from /public and must remain usable before the Next.js bundle has
  * loaded. */
-const VERSION = 'kinship-v2';
+const VERSION = 'kinship-v3';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const DATA_CACHE = `${VERSION}-data`;
@@ -89,7 +89,7 @@ self.addEventListener('fetch', (event) => {
 async function networkFirst(request, cacheName, fallbackUrl) {
   const cache = await caches.open(cacheName);
   try {
-    const response = await fetchWithTimeout(request, 5000);
+    const response = await fetchWithTimeout(request, 10000);
     if (response.ok && response.type !== 'opaque') await cache.put(request, response.clone());
     if (response.status >= 500) throw new Error(`Server responded with ${response.status}`);
     return response;
@@ -105,11 +105,11 @@ async function networkFirst(request, cacheName, fallbackUrl) {
 }
 
 async function cacheFirst(request, cacheName) {
-  const cached = await caches.match(request);
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
   if (cached) return cached;
   const response = await fetch(request);
   if (response.ok && response.type !== 'opaque') {
-    const cache = await caches.open(cacheName);
     await cache.put(request, response.clone());
   }
   return response;

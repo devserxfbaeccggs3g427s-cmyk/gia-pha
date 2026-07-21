@@ -134,23 +134,10 @@ export function setCacheHeaders(request: NextRequest, response: NextResponse): v
   const isApi = pathname === '/api' || pathname.startsWith('/api/');
 
   if (isApi) {
-    // Mutations, auth, exports and signed shares must never be replayed from an
-    // HTTP cache. Read-only genealogy JSON gets a short browser-private cache;
-    // the service worker separately provides the explicit offline cache.
-    const cacheableRead = request.method === 'GET'
-      && !pathname.startsWith('/api/auth')
-      && !pathname.startsWith('/api/share')
-      && !pathname.startsWith('/api/export')
-      && !pathname.startsWith('/api/backup');
     const cacheControl = request.method === 'GET' && pathname.endsWith('/content')
       ? 'private, max-age=3600'
-      : cacheableRead
-        ? 'private, max-age=15, stale-while-revalidate=45'
-        : 'private, no-store';
-    response.headers.set(
-      'Cache-Control',
-      cacheControl
-    );
+      : 'private, no-store';
+    response.headers.set('Cache-Control', cacheControl);
     appendVary(response.headers, 'Cookie');
     appendVary(response.headers, 'Authorization');
     return;

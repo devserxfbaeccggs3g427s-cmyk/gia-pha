@@ -14,7 +14,7 @@ export async function GET(request: Request, { params }: { params: { treeId: stri
     await requireTreePermission(params.treeId, userId, 'READ');
     const options = readPrintOptions(new URL(request.url).searchParams);
     if (params.format.toLowerCase() === 'preview') {
-      return NextResponse.json(await exportService.createPrintPreview(params.treeId, options));
+      return NextResponse.json(await exportService.createPrintPreview(params.treeId, options, userId));
     }
     const format = params.format.toLowerCase();
     let body: string | Buffer;
@@ -25,7 +25,7 @@ export async function GET(request: Request, { params }: { params: { treeId: stri
     } else if (format === 'composite-json') {
       body = await exportService.exportCompositeJSON(params.treeId, userId); contentType = 'application/json; charset=utf-8'; filename = `${params.treeId}.composite.json`;
     } else if (format === 'json') {
-      body = await exportService.exportJSON(params.treeId); contentType = 'application/json; charset=utf-8'; filename = `${params.treeId}.json`;
+      body = await exportService.exportJSON(params.treeId, userId); contentType = 'application/json; charset=utf-8'; filename = `${params.treeId}.json`;
     } else if (format === 'pdf') {
       body = await exportService.exportPDF(params.treeId, options, userId); contentType = 'application/pdf'; filename = `${params.treeId}.pdf`;
     } else if (format === 'png' || format === 'image') {

@@ -298,7 +298,7 @@ function categoriesToRecord(categories: ReadonlyMap<string, Category>): Record<s
   );
 }
 
-async function renderReportPDF(
+export async function renderReportPDF(
   tree: FamilyTree,
   statistics: ReportStatistics | BranchStatistics,
   timeline: readonly GrowthTimelinePoint[]

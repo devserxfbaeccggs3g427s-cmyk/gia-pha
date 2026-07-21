@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireAuthenticatedUserId } from '@/lib/auth/guards';
 import { requireTreePermission } from '@/lib/auth/rbac';
 import { reportRouteError } from '@/lib/services/report-api-errors';
-import { buildGrowthTimeline, calculateStatistics, reportService } from '@/lib/services/report-service';
+import { buildGrowthTimeline, calculateStatistics, renderReportPDF, reportService } from '@/lib/services/report-service';
 import { resolveTreeForUser } from '@/lib/services/tree-data-provider';
 import { getTrees } from '@/lib/blob/readers';
 
@@ -30,8 +30,12 @@ export async function GET(
     const userId = await requireAuthenticatedUserId();
     await requireTreePermission(params.treeId, userId, 'READ');
 
+    const tree = (await getTrees()).find((candidate) => candidate.id === params.treeId);
+    const resolved = tree?.kind === 'COMPOSITE' ? await resolveTreeForUser(params.treeId, userId) : undefined;
     if (query.format === 'pdf') {
-      const pdf = await reportService.exportPDF(params.treeId, query.branchRootMemberId);
+      const pdf = resolved && tree
+        ? await renderReportPDF(tree, calculateStatistics(params.treeId, resolved.members, resolved.relationships, new Date()), buildGrowthTimeline(resolved.members))
+        : await reportService.exportPDF(params.treeId, query.branchRootMemberId);
       return new NextResponse(new Uint8Array(pdf), {
         status: 200,
         headers: {
@@ -41,8 +45,6 @@ export async function GET(
         }
       });
     }
-    const tree = (await getTrees()).find((candidate) => candidate.id === params.treeId);
-    const resolved = tree?.kind === 'COMPOSITE' ? await resolveTreeForUser(params.treeId, userId) : undefined;
     if (resolved && query.branchRootMemberId) query.branchRootMemberId = undefined;
     if (query.view === 'timeline') {
       const timeline = resolved

@@ -129,8 +129,8 @@ export class ExportService {
     return JSON.stringify({ schema: 'family-genealogy-management/composite', version: 1, exportedAt: new Date().toISOString(), tree: { ...resolved.tree, ownerId: '', memberships: [] }, config: safeConfig, sourceManifest: resolved.sourceManifest, provenance: { members: resolved.members.map((item) => ({ id: item.id, provenance: item.provenance.filter((entry) => authorizedSources.has(entry.treeId)) })), relationships: resolved.relationships.map((item) => ({ id: item.id, provenance: item.provenance.filter((entry) => authorizedSources.has(entry.treeId)) })) }, auditLog: auditLog.map(({ actorId: _actorId, ...entry }) => entry) }, null, 2);
   }
 
-  async exportJSON(treeId: string): Promise<string> {
-    const data = await loadTreeData(treeId);
+  async exportJSON(treeId: string, userId?: string): Promise<string> {
+    const data = await loadTreeData(treeId, userId);
     const document: FamilyTreeExportDocument = {
       schema: 'family-genealogy-management/export',
       version: '1.0',
@@ -204,9 +204,9 @@ export class ExportService {
     return Buffer.from(await pdf.save());
   }
 
-  async createPrintPreview(treeId: string, options: PrintOptions = {}): Promise<PrintPreview> {
+  async createPrintPreview(treeId: string, options: PrintOptions = {}, userId?: string): Promise<PrintPreview> {
     const normalized = normalizeOptions(options);
-    const data = await loadTreeData(treeId);
+    const data = await loadTreeData(treeId, userId);
     const layout = createTreeLayout(data.members, data.relationships);
     let [widthMm, heightMm] = PAPER_MM[normalized.paperSize];
     if (normalized.orientation === 'LANDSCAPE') [widthMm, heightMm] = [heightMm, widthMm];

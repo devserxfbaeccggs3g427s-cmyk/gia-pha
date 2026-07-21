@@ -2,11 +2,13 @@
 
 import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { useQueryClient } from '@tanstack/react-query';
 
 /** Registers the worker only in a browser production build. Keeping this out
  * of development prevents stale precached chunks from interfering with HMR. */
 export function PwaProvider({ children }: { children: React.ReactNode }) {
   const { status } = useSession();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production' || !('serviceWorker' in navigator)) return;
@@ -33,21 +35,23 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const notify = () => window.dispatchEvent(new CustomEvent('composite-connectivity', { detail: { online: navigator.onLine, reauthorize: navigator.onLine } }));
+    const notify = () => {
+      window.dispatchEvent(new CustomEvent('composite-connectivity', { detail: { online: navigator.onLine, reauthorize: navigator.onLine } }));
+      if (navigator.onLine) void queryClient.invalidateQueries({ refetchType: 'active' });
+    };
     window.addEventListener('online', notify);
     window.addEventListener('offline', notify);
     return () => { window.removeEventListener('online', notify); window.removeEventListener('offline', notify); };
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
-    if (status === 'loading' || process.env.NODE_ENV !== 'production' || !('serviceWorker' in navigator)) return;
-    // Private route/API caches must never survive a sign-out and be shown to
-    // another account on the same device. The shell cache is intentionally
-    // retained because it contains no family data.
+    if (status === 'loading') return;
+    if (status === 'unauthenticated') queryClient.clear();
+    if (process.env.NODE_ENV !== 'production' || !('serviceWorker' in navigator)) return;
     void navigator.serviceWorker.ready.then((registration) => {
       registration.active?.postMessage({ type: status === 'authenticated' ? 'AUTHENTICATED' : 'CLEAR_PRIVATE_CACHES' });
     }).catch(() => undefined);
-  }, [status]);
+  }, [queryClient, status]);
 
   return children;
 }

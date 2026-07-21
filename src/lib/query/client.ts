@@ -5,17 +5,14 @@ export function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        // Run the initial request once while offline, then serve the last
-        // successful result from React Query/SW cache until the connection
-        // returns. Retries are paused by TanStack Query while offline.
-        networkMode: 'offlineFirst',
-        staleTime: 30_000,
+        networkMode: 'online',
+        staleTime: 0,
         gcTime: 10 * 60_000,
         retry: (failureCount, error) => failureCount < 2 && isRetryableQueryError(error),
         retryDelay: (attempt) => Math.min(1_000 * 2 ** attempt, 10_000),
-        refetchOnMount: true,
-        refetchOnReconnect: true,
-        refetchOnWindowFocus: true
+        refetchOnMount: 'always',
+        refetchOnReconnect: 'always',
+        refetchOnWindowFocus: 'always'
       },
       mutations: {
         // Initial request + two retries = three attempts, matching the Blob strategy.
