@@ -334,6 +334,7 @@ export class CompositeConfigStore {
     const mutationBlobs = await listBlobs(BLOB_PATHS.compositeMutationPrefix(treeId));
     await deleteBlobs([
       BLOB_PATHS.compositeConfig(treeId),
+      BLOB_PATHS.compositePublishedConfig(treeId),
       BLOB_PATHS.compositeChangeLogs(treeId),
       ...mutationBlobs.map((blob) => blob.pathname),
       ...manifestPaths,

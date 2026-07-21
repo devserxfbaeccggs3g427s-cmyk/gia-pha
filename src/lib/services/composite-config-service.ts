@@ -29,7 +29,7 @@ import type {
 import { getCompositeConfig, getEvents, getMediaMetadata, getMembers, getRelationships, getTrees } from '@/lib/blob/readers';
 import { resolveSourceScope } from '@/lib/algorithms/source-scope';
 import { getCompositeAuditLog } from '@/lib/blob/readers';
-import { putCompositeAuditLog, putCompositeConfig } from '@/lib/blob/writers';
+import { putCompositeAuditLog, putCompositeConfig, putCompositePublishedConfig } from '@/lib/blob/writers';
 import {
   canAccessTree,
   requireCompositeAdminPermission,
@@ -556,6 +556,7 @@ export class CompositeConfigService {
     const now = new Date().toISOString();
     const updated = { ...this.#bumpRevision(config, now), publishedAt: now };
     await this.#persistMutation(treeId, actorId, config, updated, 'CONFIG_PUBLISHED');
+    await putCompositePublishedConfig(treeId, updated);
     return updated;
   }
 

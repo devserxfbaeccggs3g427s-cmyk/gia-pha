@@ -38,6 +38,10 @@ export async function putCompositeConfig(treeId: string, config: CompositeTreeCo
   await writeBlob(BLOB_PATHS.compositeConfig(treeId), config);
 }
 
+export async function putCompositePublishedConfig(treeId: string, config: CompositeTreeConfig): Promise<void> {
+  await writeBlob(BLOB_PATHS.compositePublishedConfig(treeId), config);
+}
+
 export async function putCompositeAuditLog(treeId: string, entries: CompositeAuditEntry[]): Promise<void> {
   await writeBlob(BLOB_PATHS.compositeChangeLogs(treeId), entries);
 }

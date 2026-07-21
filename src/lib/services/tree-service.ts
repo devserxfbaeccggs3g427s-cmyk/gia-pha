@@ -154,6 +154,7 @@ export class TreeService {
       ]);
       await deleteBlobs([
         BLOB_PATHS.compositeConfig(treeId),
+        BLOB_PATHS.compositePublishedConfig(treeId),
         BLOB_PATHS.compositeChangeLogs(treeId),
         BLOB_PATHS.shareLinks(treeId),
         ...(shareLinks ?? []).map((link) => BLOB_PATHS.shareLink(link.token)),

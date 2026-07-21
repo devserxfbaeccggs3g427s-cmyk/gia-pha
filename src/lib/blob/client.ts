@@ -39,6 +39,7 @@ export const BLOB_PATHS = {
   shareLinks: (treeId: string) => `data/trees/${treeId}/share-links.json`,
   shareLink: (token: string) => `share-links/${token}.json`,
   compositeConfig: (treeId: string) => `data/trees/${treeId}/composite-config.json`,
+  compositePublishedConfig: (treeId: string) => `data/trees/${treeId}/composite-published-config.json`,
   compositeMutationPrefix: (treeId: string) => `data/trees/${treeId}/composite-mutations/`,
   compositeMutation: (treeId: string, mutationId: string) => `data/trees/${treeId}/composite-mutations/${mutationId}.json`,
   compositeChangeLogs: (treeId: string) => `data/trees/${treeId}/composite-change-logs.json`,

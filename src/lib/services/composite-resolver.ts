@@ -3,7 +3,7 @@ import type { CompositeIdentityGroup, CompositeWarning, FamilyTree, Member, Reso
 import { sourceReferenceKey } from '@/data/schemas';
 import { calculateGenerations } from '@/lib/algorithms/generation';
 import { resolveSourceScope } from '@/lib/algorithms/source-scope';
-import { getCompositeConfig, getTreeCollectionsBatch, getTrees } from '@/lib/blob/readers';
+import { getCompositeConfig, getCompositePublishedConfig, getTreeCollectionsBatch, getTrees } from '@/lib/blob/readers';
 import { canAccessTree, getUserTreeRole } from '@/lib/auth/rbac';
 import { compositeCacheKey, readCompositeCache, writeCompositeCache, type CompositeAudience } from '@/lib/composite/composite-cache';
 import { emitCompositeMetric, requireCompositeFeature } from '@/lib/composite/feature-flags';
@@ -14,10 +14,13 @@ const hashId = (prefix: string, value: string) => `${prefix}_${createHash('sha25
 const refKey = (treeId: string, memberId: string) => sourceReferenceKey({ treeId, memberId });
 
 export class CompositeResolver {
-  async resolveForUser(treeId: string, userId: string, options: { offline?: boolean } = {}): Promise<ResolvedTreeData> {
+  async resolveForUser(treeId: string, userId: string, options: { offline?: boolean; draft?: boolean } = {}): Promise<ResolvedTreeData> {
     requireCompositeFeature('trees');
     const started = Date.now();
-    const [trees, config] = await Promise.all([getTrees(), getCompositeConfig(treeId)]);
+    const [trees, draftConfig, publishedConfig] = await Promise.all([getTrees(), getCompositeConfig(treeId), getCompositePublishedConfig(treeId)]);
+    const config = options.draft
+      ? draftConfig
+      : publishedConfig ?? (draftConfig ? { ...draftConfig, sources: [], identityGroups: [], crossTreeRelationships: [], publishedAt: undefined } : null);
     const tree = trees.find((item) => item.id === treeId);
     if (!tree || (tree.kind ?? 'STANDALONE') !== 'COMPOSITE') throw new CompositeConfigError('NOT_COMPOSITE_TREE', 'Composite tree not found');
     if (!config) throw new CompositeConfigError('INVALID_COMPOSITE_CONFIG', 'Composite config not found');
@@ -106,7 +109,7 @@ export class CompositeResolver {
   }
 
   async validate(treeId: string, userId: string): Promise<{ valid: boolean; warnings: CompositeWarning[] }> {
-    try { const result = await this.resolveForUser(treeId, userId); return { valid: true, warnings: result.warnings }; }
+    try { const result = await this.resolveForUser(treeId, userId, { draft: true }); return { valid: true, warnings: result.warnings }; }
     catch (error) { if (error instanceof CompositeConfigError) return { valid: false, warnings: [{ code: 'INVALID_REFERENCE', message: error.message }] }; throw error; }
   }
 }

@@ -50,6 +50,12 @@ export async function getCompositeConfig(treeId: string): Promise<CompositeTreeC
   return compositeTreeConfigSchema.parse(raw);
 }
 
+export async function getCompositePublishedConfig(treeId: string): Promise<CompositeTreeConfig | null> {
+  const raw = await readBlob<unknown>(BLOB_PATHS.compositePublishedConfig(treeId));
+  if (raw === null) return null;
+  return compositeTreeConfigSchema.parse(raw);
+}
+
 export async function getTreeCollections(treeId: string): Promise<{ members: Member[]; relationships: Relationship[]; events: Event[]; mediaMetadata: MediaMetadata[] }> {
   const [members, relationships, events, mediaMetadata] = await Promise.all([getMembers(treeId), getRelationships(treeId), getEvents(treeId), getMediaMetadata(treeId)]);
   return { members, relationships, events, mediaMetadata };
