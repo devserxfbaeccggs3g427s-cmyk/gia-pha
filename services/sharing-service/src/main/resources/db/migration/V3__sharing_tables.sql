@@ -1,0 +1,20 @@
+CREATE TABLE share_links (
+    share_link_key BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    external_id VARCHAR(300) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+    tree_key BIGINT UNSIGNED NOT NULL,
+    token_hash BINARY(32) NOT NULL,
+    token_nonce BINARY(16) NOT NULL,
+    permission VARCHAR(10) NOT NULL DEFAULT 'VIEW',
+    expires_at DATETIME(6) NOT NULL,
+    revoked_at DATETIME(6) NULL,
+    created_by_user_key BIGINT UNSIGNED NULL,
+    allowed_scopes TEXT NOT NULL,
+    version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    created_at DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)),
+    updated_at DATETIME(6) NOT NULL DEFAULT (UTC_TIMESTAMP(6)),
+    PRIMARY KEY (share_link_key),
+    UNIQUE KEY uk_share_links_external_id (external_id),
+    UNIQUE KEY uk_share_links_token_hash (token_hash),
+    KEY ix_share_links_tree_expiry (tree_key, expires_at),
+    CONSTRAINT ck_share_links_permission CHECK (permission IN ('VIEW'))
+) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;

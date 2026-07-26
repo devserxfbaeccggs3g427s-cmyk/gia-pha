@@ -1,0 +1,1172 @@
+openapi: 3.1.0
+info:
+  title: Gia Pha Legacy Backend HTTP Contract (Frozen Baseline)
+  version: 1.0.0-legacy-baseline
+  description: |
+    Frozen contract of every Next.js App Router `/api/**` handler prior to the
+    Spring Boot migration (Task 1 of spring-boot-backend-migration).
+
+    Conventions frozen from the legacy implementation:
+    * **Error envelope** — every error response is `{"ok": false, "error": {"code", "message", "details?"}}`.
+    * **Mixed success envelopes** — most successful responses return the raw
+      resource JSON (no envelope). The exceptions that wrap in
+      `{"ok": true, "data": ...}` are: `POST /api/auth/register`,
+      `PATCH /api/trees/{treeId}/memberships/{userId}`,
+      `POST /api/media/upload`, and share-link management responses.
+    * **Timestamps** — ISO-8601 UTC strings with milliseconds (`.toISOString()` form).
+    * **Authentication** — NextAuth JWT session cookie
+      (`next-auth.session-token` / `__Secure-next-auth.session-token`).
+      Unauthenticated requests receive `401 UNAUTHORIZED`.
+    * **RBAC** — tree-scoped roles ADMIN/EDITOR/VIEWER, owner is immutable
+      effective ADMIN. Missing tree → `404 TREE_NOT_FOUND`, missing
+      permission → `403 FORBIDDEN`.
+    * **Tree discovery** — detail routes for members/relationships/events/media/
+      albums accept optional `?treeId=`; without it the legacy handler scans
+      every tree to locate the resource. Compatibility_API must preserve this.
+  x-baseline-source: src/app/api/** at migration freeze
+servers:
+  - url: /
+tags:
+  - { name: auth }
+  - { name: trees }
+  - { name: members }
+  - { name: relationships }
+  - { name: events }
+  - { name: media }
+  - { name: albums }
+  - { name: search }
+  - { name: import-export }
+  - { name: reports }
+  - { name: backup }
+  - { name: share }
+
+paths:
+  # ---------------------------------------------------------------- auth
+  /api/auth/register:
+    post:
+      tags: [auth]
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterInput' }
+      responses:
+        '201':
+          description: Account created. Vietnamese message text is part of the contract.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, data]
+                properties:
+                  ok: { const: true }
+                  data:
+                    type: object
+                    required: [user, emailVerificationRequired, message]
+                    properties:
+                      user:
+                        type: object
+                        required: [id, email, name, createdAt]
+                        properties:
+                          id: { type: string }
+                          email: { type: string }
+                          name: { type: string }
+                          createdAt: { type: string, format: date-time }
+                      emailVerificationRequired: { type: boolean }
+                      message:
+                        type: string
+                        description: >-
+                          "Tài khoản đã được tạo. Vui lòng kiểm tra email để xác nhận tài khoản."
+                          or "Tài khoản đã được tạo. Bạn có thể đăng nhập ngay."
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409':
+          description: EMAIL_ALREADY_EXISTS
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+        '503':
+          description: EMAIL_DELIVERY_FAILED (any non-conflict AuthServiceError)
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/auth/verify-email:
+    get:
+      tags: [auth]
+      operationId: verifyEmail
+      security: []
+      parameters:
+        - { name: token, in: query, required: false, schema: { type: string } }
+      responses:
+        '307':
+          description: |
+            Always redirects to `/vi/login`. Success appends `?verified=1`;
+            failure appends `?error=INVALID_TOKEN` (or the AuthServiceError code).
+          headers:
+            Location: { schema: { type: string } }
+
+  /api/auth/[...nextauth]:
+    description: NextAuth handler (credentials + Google). Session cookie JWT, 30-minute idle timeout, bcrypt cost 12, lockout 5 attempts / 15 minutes. Kept on Next.js during bridge phase; not re-implemented verbatim in Spring.
+    get: { tags: [auth], operationId: nextAuthGet, security: [], responses: { '200': { description: NextAuth-managed } } }
+    post: { tags: [auth], operationId: nextAuthPost, security: [], responses: { '200': { description: NextAuth-managed } } }
+
+  # ---------------------------------------------------------------- trees
+  /api/trees:
+    get:
+      tags: [trees]
+      operationId: listTrees
+      responses:
+        '200':
+          description: Raw array of trees where the caller is owner or member.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/FamilyTree' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [trees]
+      operationId: createTree
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTreeInput' }
+      responses:
+        '201':
+          description: Raw created tree (caller becomes owner + ADMIN membership).
+          content: { application/json: { schema: { $ref: '#/components/schemas/FamilyTree' } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/trees/{treeId}:
+    parameters: [ { $ref: '#/components/parameters/treeId' } ]
+    get:
+      tags: [trees]
+      operationId: getTree
+      description: Requires READ. Returns tree plus members array.
+      responses:
+        '200':
+          description: Tree with members.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/FamilyTree' }
+                  - type: object
+                    properties:
+                      members: { type: array, items: { $ref: '#/components/schemas/Member' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [trees]
+      operationId: updateTree
+      description: Requires UPDATE.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UpdateTreeInput' } } }
+      responses:
+        '200': { description: Raw updated tree., content: { application/json: { schema: { $ref: '#/components/schemas/FamilyTree' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [trees]
+      operationId: deleteTree
+      description: Requires DELETE (ADMIN). Removes tree, memberships and all tree-scoped blobs.
+      responses:
+        '204': { description: Deleted. Empty body. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/trees/{treeId}/memberships/{userId}:
+    parameters:
+      - { $ref: '#/components/parameters/treeId' }
+      - { name: userId, in: path, required: true, schema: { type: string } }
+    patch:
+      tags: [trees]
+      operationId: assignMembershipRole
+      description: Requires ASSIGN_ROLE (ADMIN). Owner demotion is rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { $ref: '#/components/schemas/TreeRole' }
+      responses:
+        '200':
+          description: Wrapped membership.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, data]
+                properties:
+                  ok: { const: true }
+                  data: { $ref: '#/components/schemas/TreeMembership' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: 'TREE_NOT_FOUND or USER_NOT_FOUND', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+        '409': { description: OWNER_ROLE_IMMUTABLE, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+
+  # ---------------------------------------------------------------- members
+  /api/trees/{treeId}/members:
+    parameters: [ { $ref: '#/components/parameters/treeId' } ]
+    get:
+      tags: [members]
+      operationId: listMembers
+      description: Requires READ. Raw array in storage order.
+      responses:
+        '200': { description: Members., content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Member' } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [members]
+      operationId: createMember
+      description: Requires CREATE. Death date forces isAlive=false; death >= birth.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateMemberInput' } } } }
+      responses:
+        '201': { description: Raw created member., content: { application/json: { schema: { $ref: '#/components/schemas/Member' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/members/{memberId}:
+    parameters:
+      - { name: memberId, in: path, required: true, schema: { type: string } }
+      - { name: treeId, in: query, required: false, schema: { type: string }, description: 'Optional; without it the tree is discovered by global scan.' }
+    get:
+      tags: [members]
+      operationId: getMember
+      responses:
+        '200':
+          description: Flattened member plus nested `member`, relationships, relatedMembers, events, media, status, lifespan.
+          content: { application/json: { schema: { $ref: '#/components/schemas/MemberFull' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [members]
+      operationId: updateMember
+      description: Requires UPDATE. No-op update returns current member unchanged (no audit entry).
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateMemberInput' } } } }
+      responses:
+        '200': { description: Raw updated member., content: { application/json: { schema: { $ref: '#/components/schemas/Member' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [members]
+      operationId: deleteMember
+      description: |
+        Requires DELETE. `?preview=true` returns the impact preview without
+        mutating. Actual delete cascades: relationships removed, event
+        memberIds filtered, media unlinked, media with no remaining links
+        deleted (including binary objects).
+      parameters:
+        - { name: preview, in: query, required: false, schema: { type: string, enum: ['true'] } }
+      responses:
+        '200':
+          description: DeleteMemberResult (or preview shape when preview=true).
+          content: { application/json: { schema: { $ref: '#/components/schemas/DeleteMemberResult' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------- relationships
+  /api/trees/{treeId}/relationships:
+    parameters: [ { $ref: '#/components/parameters/treeId' } ]
+    get:
+      tags: [relationships]
+      operationId: listRelationships
+      description: Requires READ. `?memberId=` returns RelationshipView list for that member.
+      parameters:
+        - { name: memberId, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: Raw array (Relationship[] or RelationshipView[] when memberId given).
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Relationship' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [relationships]
+      operationId: createRelationship
+      description: |
+        Requires CREATE. Symmetric types (SPOUSE/SIBLING/CUSTOM) are stored with
+        canonical endpoint order (source <= target). Duplicates by logical key
+        rejected 409 DUPLICATE; PARENT_CHILD cycles rejected 409 CYCLE_DETECTED.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateRelationshipInput' } } } }
+      responses:
+        '201': { description: Raw created relationship (normalized)., content: { application/json: { schema: { $ref: '#/components/schemas/Relationship' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: DUPLICATE or CYCLE_DETECTED, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+
+  /api/relationships/{relationshipId}:
+    parameters:
+      - { name: relationshipId, in: path, required: true, schema: { type: string } }
+      - { name: treeId, in: query, required: false, schema: { type: string } }
+    get:
+      tags: [relationships]
+      operationId: getRelationship
+      responses:
+        '200': { description: Raw relationship., content: { application/json: { schema: { $ref: '#/components/schemas/Relationship' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [relationships]
+      operationId: updateRelationship
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateRelationshipInput' } } } }
+      responses:
+        '200': { description: Raw updated relationship., content: { application/json: { schema: { $ref: '#/components/schemas/Relationship' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: DUPLICATE or CYCLE_DETECTED, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+    delete:
+      tags: [relationships]
+      operationId: deleteRelationship
+      responses:
+        '204': { description: Deleted. Empty body. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/relationships/validate:
+    post:
+      tags: [relationships]
+      operationId: validateRelationship
+      description: Dry-run validation; accepts `treeId` in body or query, payload as `data`, `relationship` or inline fields.
+      requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
+      responses:
+        '200':
+          description: Validation verdict (never throws for domain violations).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [valid]
+                properties:
+                  valid: { type: boolean }
+                  errors: { type: array, items: { type: object, properties: { code: { type: string }, message: { type: string } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ---------------------------------------------------------------- events
+  /api/trees/{treeId}/events:
+    parameters: [ { $ref: '#/components/parameters/treeId' } ]
+    get:
+      tags: [events]
+      operationId: listEvents
+      description: |
+        Requires READ. Default: all events sorted by eventDate then title.
+        `?upcoming=true&days=N` (N in 0..366, default 7) returns UpcomingEvent[]
+        with nextOccurrence/daysUntil; BIRTHDAY and ANNIVERSARY recur annually,
+        Feb 29 maps to Feb 28 in non-leap years.
+      parameters:
+        - { name: upcoming, in: query, required: false, schema: { type: string, enum: ['true'] } }
+        - { name: days, in: query, required: false, schema: { type: integer, minimum: 0, maximum: 366, default: 7 } }
+      responses:
+        '200': { description: Raw array., content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Event' } } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [events]
+      operationId: createEvent
+      description: Requires CREATE. memberIds/mediaIds must reference same-tree records; media eventIds back-links are synced.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateEventInput' } } } }
+      responses:
+        '201': { description: Raw created event., content: { application/json: { schema: { $ref: '#/components/schemas/Event' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/events/{eventId}:
+    parameters:
+      - { name: eventId, in: path, required: true, schema: { type: string } }
+      - { name: treeId, in: query, required: false, schema: { type: string } }
+    get:
+      tags: [events]
+      operationId: getEvent
+      responses:
+        '200': { description: 'Event plus members[] and media[].', content: { application/json: { schema: { $ref: '#/components/schemas/EventDetails' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [events]
+      operationId: updateEvent
+      description: Merged patch re-validated as a full event (cross-field rules apply); no-op returns current.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateEventInput' } } } }
+      responses:
+        '200': { description: Raw updated event., content: { application/json: { schema: { $ref: '#/components/schemas/Event' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [events]
+      operationId: deleteEvent
+      responses:
+        '204': { description: Deleted. Empty body. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------- media
+  /api/media/upload:
+    post:
+      tags: [media]
+      operationId: uploadMedia
+      description: |
+        Requires CREATE on target tree. multipart/form-data with fields:
+        file (required), treeId (required), memberId(s), eventId(s), albumId,
+        caption, takenAt, isAvatar. JPEG/PNG/WebP/PDF, max 10 MiB, magic-byte
+        validated; image uploads produce a 480px WebP q78 thumbnail. Vietnamese
+        error messages are part of the contract.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, treeId]
+              properties:
+                file: { type: string, format: binary }
+                treeId: { type: string }
+                memberId: { type: string }
+                memberIds: { type: string, description: JSON array or CSV }
+                eventId: { type: string }
+                eventIds: { type: string }
+                albumId: { type: string }
+                caption: { type: string, maxLength: 2000 }
+                takenAt: { type: string, format: date-time }
+                isAvatar: { type: string, enum: ['true', 'false'] }
+      responses:
+        '201':
+          description: Wrapped media metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, data]
+                properties:
+                  ok: { const: true }
+                  data: { $ref: '#/components/schemas/MediaMetadata' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { description: FILE_TOO_LARGE, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+        '415': { description: INVALID_FILE_TYPE, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+
+  /api/trees/{treeId}/media:
+    parameters: [ { $ref: '#/components/parameters/treeId' } ]
+    get:
+      tags: [media]
+      operationId: listMedia
+      description: |
+        Requires READ. At most one of memberId/eventId/albumId; more than one
+        → 400 with Vietnamese message. Sorted by takenAt||uploadedAt desc.
+      parameters:
+        - { name: memberId, in: query, required: false, schema: { type: string } }
+        - { name: eventId, in: query, required: false, schema: { type: string } }
+        - { name: albumId, in: query, required: false, schema: { type: string } }
+      responses:
+        '200': { description: Raw array., content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/MediaMetadata' } } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/media/{mediaId}:
+    parameters:
+      - { name: mediaId, in: path, required: true, schema: { type: string } }
+      - { name: treeId, in: query, required: false, schema: { type: string } }
+    get:
+      tags: [media]
+      operationId: getMedia
+      responses:
+        '200': { description: Raw metadata., content: { application/json: { schema: { $ref: '#/components/schemas/MediaMetadata' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [media]
+      operationId: deleteMedia
+      description: Metadata removed first; blob cleanup failures logged, not surfaced.
+      responses:
+        '204': { description: Deleted. Empty body. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/media/{mediaId}/content:
+    get:
+      tags: [media]
+      operationId: getMediaContent
+      description: |
+        Requires READ. Streams binary content. Variants:
+        `thumbnail=true` (stored WebP thumbnail), `download=true`
+        (Content-Disposition attachment with RFC 5987 filename*),
+        `format=webp&width=16..1920&quality=40..90` (on-the-fly sharp
+        transcode, default quality 78, no upscale, 40M pixel input limit).
+        Headers frozen: `X-Content-Type-Options: nosniff`;
+        Cache-Control `private, max-age=86400, stale-while-revalidate=604800`
+        for webp variants, `private, max-age=3600` otherwise; variant ETag
+        `"{etag}-webp-w{width}-q{quality}"`.
+      parameters:
+        - { name: mediaId, in: path, required: true, schema: { type: string } }
+        - { name: treeId, in: query, required: false, schema: { type: string } }
+        - { name: thumbnail, in: query, required: false, schema: { type: string, enum: ['true'] } }
+        - { name: download, in: query, required: false, schema: { type: string, enum: ['true'] } }
+        - { name: format, in: query, required: false, schema: { type: string, enum: [webp] } }
+        - { name: width, in: query, required: false, schema: { type: integer, minimum: 16, maximum: 1920 } }
+        - { name: quality, in: query, required: false, schema: { type: integer, minimum: 40, maximum: 90, default: 78 } }
+      responses:
+        '200':
+          description: Binary body.
+          headers:
+            Content-Type: { schema: { type: string } }
+            Content-Disposition: { schema: { type: string } }
+            Cache-Control: { schema: { type: string } }
+            ETag: { schema: { type: string } }
+            X-Content-Type-Options: { schema: { type: string, const: nosniff } }
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+            application/pdf: { schema: { type: string, format: binary } }
+        '304': { description: Conditional request matched ETag. }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------- albums
+  /api/trees/{treeId}/albums:
+    parameters: [ { $ref: '#/components/parameters/treeId' } ]
+    get:
+      tags: [albums]
+      operationId: listAlbums
+      description: Requires READ. Sorted by createdAt desc.
+      responses:
+        '200': { description: Raw array., content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Album' } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [albums]
+      operationId: createAlbum
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateAlbumInput' } } } }
+      responses:
+        '201': { description: Raw created album., content: { application/json: { schema: { $ref: '#/components/schemas/Album' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/albums/{albumId}:
+    parameters:
+      - { name: albumId, in: path, required: true, schema: { type: string } }
+      - { name: treeId, in: query, required: false, schema: { type: string } }
+    patch:
+      tags: [albums]
+      operationId: updateAlbum
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateAlbumInput' } } } }
+      responses:
+        '200': { description: Raw updated album., content: { application/json: { schema: { $ref: '#/components/schemas/Album' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [albums]
+      operationId: deleteAlbum
+      description: Album removed; linked media keep existing but albumId is cleared.
+      responses:
+        '204': { description: Deleted. Empty body. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------- search
+  /api/search:
+    get:
+      tags: [search]
+      operationId: searchMembers
+      description: |
+        Requires READ on treeId. Accent-insensitive Vietnamese matching
+        (NFD strip + đ→d). Modes: search (default), autocomplete, filter.
+        Scoring frozen: fieldWeight fullName=30/nickname=20/other=10 plus
+        matchWeight exact=100/prefix=70/word-start=50/substring=30; ties by
+        source order. Autocomplete ranks 140/135/120/115/100/95, min 2 chars.
+        Conflicting alive-status filters → 400 INVALID_FILTER.
+      parameters:
+        - { name: treeId, in: query, required: true, schema: { type: string } }
+        - { name: mode, in: query, required: false, schema: { type: string, enum: [search, autocomplete, filter], default: search } }
+        - { name: q, in: query, required: false, schema: { type: string } }
+        - { name: fields, in: query, required: false, schema: { type: string }, description: 'CSV of fullName,nickname,occupation,placeOfBirth' }
+        - { name: gender, in: query, required: false, schema: { type: string }, description: CSV }
+        - { name: generation, in: query, required: false, schema: { type: string }, description: CSV }
+        - { name: birthYearFrom, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 9999 } }
+        - { name: birthYearTo, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 9999 } }
+        - { name: isAlive, in: query, required: false, schema: { type: boolean } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [ALIVE, DECEASED] } }
+        - { name: location, in: query, required: false, schema: { type: string } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 0, maximum: 1000 } }
+      responses:
+        '200':
+          description: SearchResult[] | AutocompleteItem[] | Member[] depending on mode.
+          content: { application/json: { schema: { type: array, items: {} } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------- import / export
+  /api/import/preview:
+    post:
+      tags: [import-export]
+      operationId: previewImport
+      description: |
+        Authenticated (no tree permission needed for preview). Accepts
+        multipart (file + format) or JSON `{format, content|data(base64)}`.
+        Formats GEDCOM/JSON/CSV (extensions ged/gedcom accepted).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                format: { type: string, enum: [GEDCOM, JSON, CSV] }
+          application/json:
+            schema:
+              type: object
+              properties:
+                format: { type: string, enum: [GEDCOM, JSON, CSV], default: JSON }
+                content: { type: string, description: UTF-8 text }
+                data: { type: string, description: base64 alternative }
+      responses:
+        '200': { description: ImportPreview (counts, warnings, sample records)., content: { application/json: { schema: { type: object } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/import/execute:
+    post:
+      tags: [import-export]
+      operationId: executeImport
+      description: |
+        Requires UPDATE on treeId. Adds mode APPEND|REPLACE and
+        conflictStrategy SKIP|OVERWRITE|REGENERATE (form fields or JSON
+        body/options). Returns ImportResult with created/updated/skipped counts.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, treeId]
+              properties:
+                file: { type: string, format: binary }
+                treeId: { type: string }
+                format: { type: string, enum: [GEDCOM, JSON, CSV] }
+                mode: { type: string, enum: [APPEND, REPLACE] }
+                conflictStrategy: { type: string, enum: [SKIP, OVERWRITE, REGENERATE] }
+          application/json:
+            schema:
+              type: object
+              required: [treeId]
+              properties:
+                treeId: { type: string }
+                format: { type: string, enum: [GEDCOM, JSON, CSV], default: JSON }
+                content: { type: string }
+                data: { type: string }
+                mode: { type: string, enum: [APPEND, REPLACE] }
+                conflictStrategy: { type: string, enum: [SKIP, OVERWRITE, REGENERATE] }
+                options: { type: object }
+      responses:
+        '200': { description: ImportResult., content: { application/json: { schema: { type: object } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/export/{treeId}/{format}:
+    get:
+      tags: [import-export]
+      operationId: exportTree
+      description: |
+        Requires READ. Formats: gedcom|ged, json, pdf, png|image, svg, preview
+        (JSON print preview). Downloads use
+        `Content-Disposition: attachment; filename="{treeId}.{ext}"` and
+        `Cache-Control: private, no-store`. Print options via query:
+        paperSize, orientation, font, colorScheme, dpi, showDates, showGender,
+        showLocations, showMemberIds.
+      parameters:
+        - { $ref: '#/components/parameters/treeId' }
+        - { name: format, in: path, required: true, schema: { type: string, enum: [gedcom, ged, json, pdf, png, image, svg, preview] } }
+        - { name: paperSize, in: query, required: false, schema: { type: string } }
+        - { name: orientation, in: query, required: false, schema: { type: string } }
+        - { name: font, in: query, required: false, schema: { type: string } }
+        - { name: colorScheme, in: query, required: false, schema: { type: string } }
+        - { name: dpi, in: query, required: false, schema: { type: integer } }
+        - { name: showDates, in: query, required: false, schema: { type: boolean } }
+        - { name: showGender, in: query, required: false, schema: { type: boolean } }
+        - { name: showLocations, in: query, required: false, schema: { type: boolean } }
+        - { name: showMemberIds, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200':
+          description: Export artifact or preview JSON.
+          headers:
+            Content-Disposition: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: 'private, no-store' } }
+          content:
+            text/plain: { schema: { type: string } }
+            application/json: { schema: {} }
+            application/pdf: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+            image/svg+xml: { schema: { type: string } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------- reports
+  /api/reports/{treeId}/statistics:
+    get:
+      tags: [reports]
+      operationId: getStatistics
+      description: |
+        Requires READ. Default: ReportStatistics JSON with
+        `Cache-Control: private, no-store`. `?format=pdf` streams a PDF report;
+        `?format=timeline` returns GrowthTimelinePoint[]; optional
+        branchRootMemberId scopes to a descendant branch plus married-in spouses.
+      parameters:
+        - { $ref: '#/components/parameters/treeId' }
+        - { name: format, in: query, required: false, schema: { type: string, enum: [pdf, timeline] } }
+        - { name: branchRootMemberId, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: Statistics JSON, timeline JSON or PDF.
+          content:
+            application/json: { schema: {} }
+            application/pdf: { schema: { type: string, format: binary } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------- backup
+  /api/backup/{treeId}:
+    parameters: [ { $ref: '#/components/parameters/treeId' } ]
+    get:
+      tags: [backup]
+      operationId: listBackups
+      description: Requires READ. Only snapshots within the 30-day retention window are listed, newest first.
+      responses:
+        '200':
+          description: '`{backups: BackupInfo[], retentionDays: 30}` with Cache-Control private, no-store.'
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [backups, retentionDays]
+                properties:
+                  backups: { type: array, items: { $ref: '#/components/schemas/BackupInfo' } }
+                  retentionDays: { type: integer, const: 30 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [backup]
+      operationId: createBackup
+      description: Requires UPDATE. Returns full BackupSnapshot (201). Timestamp collisions resolved by +1ms probing.
+      responses:
+        '201': { description: BackupSnapshot., content: { application/json: { schema: { $ref: '#/components/schemas/BackupSnapshot' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [backup]
+      operationId: restoreBackup
+      description: |
+        Requires UPDATE. Body `{timestamp}` (canonical ISO). A safety snapshot
+        is written before restore; failed restore rolls back automatically.
+        Expired timestamps → 410 BACKUP_EXPIRED.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [timestamp]
+              properties: { timestamp: { type: string, format: date-time } }
+      responses:
+        '200': { description: RestoreResult with counts and safetyBackupTimestamp., content: { application/json: { schema: { $ref: '#/components/schemas/RestoreResult' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: TREE_NOT_FOUND or BACKUP_NOT_FOUND, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+        '410': { description: BACKUP_EXPIRED, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+
+  /api/cron/backups:
+    get:
+      tags: [backup]
+      operationId: runScheduledBackups
+      security: []
+      description: |
+        Requires `Authorization: Bearer {CRON_SECRET}`. Ensures at most one
+        snapshot per tree per UTC day and prunes expired snapshots.
+      parameters:
+        - { name: Authorization, in: header, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Summary of created/skipped/pruned per tree., content: { application/json: { schema: { type: object } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ---------------------------------------------------------------- share
+  /api/trees/{treeId}/share-links:
+    parameters: [ { $ref: '#/components/parameters/treeId' } ]
+    get:
+      tags: [share]
+      operationId: listShareLinks
+      description: Requires ADMIN (ASSIGN_ROLE-level management).
+      responses:
+        '200': { description: Wrapped list of active share links., content: { application/json: { schema: { type: object } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [share]
+      operationId: createShareLink
+      description: |
+        HMAC-SHA256 signed token `base64url(payload).base64url(signature)`;
+        payload {version:1, treeId, expiresAt(ms), nonce, permission:'VIEW'};
+        max validity 365 days.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expiresAt]
+              properties:
+                expiresAt: { type: string, format: date-time }
+      responses:
+        '201': { description: Wrapped created share link incl. token and URL., content: { application/json: { schema: { type: object } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/trees/{treeId}/share-links/{linkId}:
+    parameters:
+      - { $ref: '#/components/parameters/treeId' }
+      - { name: linkId, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [share]
+      operationId: revokeShareLink
+      responses:
+        '204': { description: Revoked. Empty body. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/share/{token}:
+    get:
+      tags: [share]
+      operationId: getSharedTree
+      security: []
+      description: |
+        Public, token-authorized. Token format
+        `/^[A-Za-z0-9_-]{20,400}\.[A-Za-z0-9_-]{43}$/`; validation order:
+        signature, expiry, stored record. Response headers frozen:
+        `Cache-Control: private, no-store`,
+        `X-Robots-Tag: noindex, nofollow, noarchive`.
+        LEGACY DEFECT (security-correct in Spring, see legacy-defect-register
+        DEF-01): the legacy payload leaks full member PII and internal contact
+        data; the migrated projection is a strict allowlist (ADR-014).
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Shared tree projection., content: { application/json: { schema: { type: object } } } }
+        '404': { description: Invalid/unknown token, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+        '410': { description: Expired link, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+
+components:
+  securitySchemes:
+    nextAuthSession:
+      type: apiKey
+      in: cookie
+      name: next-auth.session-token
+  parameters:
+    treeId:
+      name: treeId
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    Unauthorized:
+      description: Missing/invalid session (code UNAUTHORIZED).
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Forbidden:
+      description: Authenticated but lacking the tree permission (code FORBIDDEN).
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    NotFound:
+      description: Resource or tree not found (code NOT_FOUND / TREE_NOT_FOUND).
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    ValidationError:
+      description: Invalid input (code VALIDATION_ERROR / INVALID_INPUT / INVALID_FILTER; details carries Zod flatten()).
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    InternalError:
+      description: Unexpected failure (code INTERNAL_ERROR); internals never leak.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [ok, error]
+      properties:
+        ok: { const: false }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+    TreeRole: { type: string, enum: [ADMIN, EDITOR, VIEWER] }
+    Gender: { type: string, enum: [MALE, FEMALE, OTHER] }
+    RelationshipType: { type: string, enum: [PARENT_CHILD, SPOUSE, SIBLING, ADOPTED, CUSTOM] }
+    EventType: { type: string, enum: [BIRTHDAY, DEATH_ANNIVERSARY, ANNIVERSARY, WEDDING, FUNERAL, REUNION, CUSTOM] }
+    FamilyTree:
+      type: object
+      required: [id, name, ownerId, memberships, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        ownerId: { type: string }
+        memberships: { type: array, items: { $ref: '#/components/schemas/TreeMembership' } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    TreeMembership:
+      type: object
+      required: [userId, treeId, role, joinedAt]
+      properties:
+        userId: { type: string }
+        treeId: { type: string }
+        role: { $ref: '#/components/schemas/TreeRole' }
+        joinedAt: { type: string, format: date-time }
+    CreateTreeInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+    UpdateTreeInput:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+    Member:
+      type: object
+      required: [id, treeId, firstName, lastName, fullName, gender, isAlive, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        treeId: { type: string }
+        firstName: { type: string, minLength: 1, maxLength: 100 }
+        lastName: { type: string, minLength: 1, maxLength: 100 }
+        fullName: { type: string, minLength: 1, maxLength: 200 }
+        nickname: { type: string, maxLength: 100 }
+        gender: { $ref: '#/components/schemas/Gender' }
+        dateOfBirth: { type: string, description: ISO date or date-time }
+        dateOfDeath: { type: string }
+        isAlive: { type: boolean }
+        placeOfBirth: { type: string, maxLength: 500 }
+        currentAddress: { type: string, maxLength: 500 }
+        occupation: { type: string, maxLength: 200 }
+        education: { type: string, maxLength: 200 }
+        phone: { type: string, maxLength: 20 }
+        email: { type: string, maxLength: 254 }
+        biography: { type: string, maxLength: 5000 }
+        avatarUrl: { type: string, deprecated: true }
+        avatarMediaId: { type: string, description: Must reference same-tree image media }
+        generation: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateMemberInput:
+      type: object
+      required: [firstName, lastName, fullName, gender]
+      description: Same field limits as Member; isAlive defaults true; dateOfDeath forces isAlive=false.
+    UpdateMemberInput:
+      type: object
+      description: Partial CreateMemberInput; merged dates re-validated together.
+    MemberFull:
+      allOf:
+        - { $ref: '#/components/schemas/Member' }
+        - type: object
+          required: [member, relationships, relatedMembers, events, media, status, lifespan]
+          properties:
+            member: { $ref: '#/components/schemas/Member' }
+            relationships: { type: array, items: { $ref: '#/components/schemas/Relationship' } }
+            relatedMembers: { type: array, items: { $ref: '#/components/schemas/Member' } }
+            events: { type: array, items: { $ref: '#/components/schemas/Event' } }
+            media: { type: array, items: { $ref: '#/components/schemas/MediaMetadata' } }
+            status: { type: string, enum: [ALIVE, DECEASED] }
+            lifespan: { type: [integer, 'null'] }
+    DeleteMemberResult:
+      type: object
+      required: [member, affectedRelationships, deletedRelationships, affectedEvents, deletedMedia]
+      properties:
+        member: { $ref: '#/components/schemas/Member' }
+        affectedRelationships: { type: array, items: { $ref: '#/components/schemas/Relationship' } }
+        deletedRelationships: { type: array, items: { $ref: '#/components/schemas/Relationship' }, description: Alias of affectedRelationships }
+        affectedEvents: { type: array, items: { $ref: '#/components/schemas/Event' } }
+        deletedMedia: { type: array, items: { $ref: '#/components/schemas/MediaMetadata' } }
+    Relationship:
+      type: object
+      required: [id, treeId, sourceMemberId, targetMemberId, type, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        treeId: { type: string }
+        sourceMemberId: { type: string }
+        targetMemberId: { type: string }
+        type: { $ref: '#/components/schemas/RelationshipType' }
+        customType: { type: string, maxLength: 100, description: Required when type=CUSTOM }
+        startDate: { type: string }
+        endDate: { type: string }
+        notes: { type: string, maxLength: 2000 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateRelationshipInput:
+      type: object
+      required: [sourceMemberId, targetMemberId, type]
+      description: source != target; CUSTOM requires customType.
+    UpdateRelationshipInput:
+      type: object
+      description: Partial; merged value re-validated including duplicate/cycle checks.
+    Event:
+      type: object
+      required: [id, treeId, title, type, eventDate, memberIds, mediaIds, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        treeId: { type: string }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 5000 }
+        type: { $ref: '#/components/schemas/EventType' }
+        customType: { type: string, maxLength: 100 }
+        eventDate: { type: string }
+        location: { type: string, maxLength: 500 }
+        memberIds: { type: array, items: { type: string }, maxItems: 1000 }
+        mediaIds: { type: array, items: { type: string }, maxItems: 1000 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateEventInput: { type: object, required: [title, type, eventDate], description: Same limits as Event; memberIds/mediaIds deduplicated. }
+    UpdateEventInput: { type: object, description: Partial; merged value re-validated as full event. }
+    EventDetails:
+      allOf:
+        - { $ref: '#/components/schemas/Event' }
+        - type: object
+          properties:
+            members: { type: array, items: { $ref: '#/components/schemas/Member' } }
+            media: { type: array, items: { $ref: '#/components/schemas/MediaMetadata' } }
+    MediaMetadata:
+      type: object
+      required: [id, treeId, memberIds, eventIds, filename, originalName, mimeType, fileSize, blobUrl, uploadedAt]
+      properties:
+        id: { type: string }
+        treeId: { type: string }
+        memberId: { type: string, deprecated: true }
+        eventId: { type: string, deprecated: true }
+        memberIds: { type: array, items: { type: string } }
+        eventIds: { type: array, items: { type: string } }
+        albumId: { type: string }
+        filename: { type: string }
+        originalName: { type: string, maxLength: 255 }
+        mimeType: { type: string, enum: [image/jpeg, image/png, image/webp, application/pdf] }
+        fileSize: { type: integer, maximum: 10485760 }
+        blobUrl: { type: string, description: Private storage URL — never usable directly by clients }
+        thumbnailUrl: { type: string }
+        contentUrl: { type: string, description: '/api/media/{id}/content?treeId=...' }
+        thumbnailContentUrl: { type: string }
+        caption: { type: string, maxLength: 2000 }
+        takenAt: { type: string, format: date-time }
+        uploadedAt: { type: string, format: date-time }
+    Album:
+      type: object
+      required: [id, treeId, name, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        treeId: { type: string }
+        name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        coverMediaId: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateAlbumInput: { type: object, required: [name] }
+    UpdateAlbumInput: { type: object }
+    RegisterInput:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        email: { type: string, format: email, maxLength: 254, description: Lowercased before storage }
+        password: { type: string, minLength: 12, maxLength: 72, description: Requires upper, lower, digit and special character }
+    BackupInfo:
+      type: object
+      required: [treeId, timestamp, pathname, size, uploadedAt]
+      properties:
+        treeId: { type: string }
+        timestamp: { type: string, format: date-time }
+        pathname: { type: string }
+        size: { type: integer }
+        uploadedAt: { type: string, format: date-time }
+    BackupSnapshot:
+      type: object
+      required: [treeId, timestamp, data]
+      properties:
+        treeId: { type: string }
+        timestamp: { type: string, format: date-time }
+        data:
+          type: object
+          required: [members, relationships, events, mediaMetadata]
+          properties:
+            members: { type: array, items: { $ref: '#/components/schemas/Member' } }
+            relationships: { type: array, items: { $ref: '#/components/schemas/Relationship' } }
+            events: { type: array, items: { $ref: '#/components/schemas/Event' } }
+            mediaMetadata: { type: array, items: { $ref: '#/components/schemas/MediaMetadata' } }
+    RestoreResult:
+      type: object
+      required: [restoredFrom, safetyBackupTimestamp, counts]
+      properties:
+        restoredFrom: { type: string, format: date-time }
+        safetyBackupTimestamp: { type: string, format: date-time }
+        counts:
+          type: object
+          properties:
+            members: { type: integer }
+            relationships: { type: integer }
+            events: { type: integer }
+            mediaMetadata: { type: integer }
+
+security:
+  - nextAuthSession: []

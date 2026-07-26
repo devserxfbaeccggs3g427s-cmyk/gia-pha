@@ -1,0 +1,89 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway-service
+  cloud:
+    gateway:
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
+      routes:
+        # The BFF (Next.js) sends requests to paths starting with /api/<service>/**.
+        # The downstream services expose controllers under the same /api/ paths,
+        # so the gateway forwards without rewriting the prefix.
+        - id: identity
+          uri: http://identity-service:8081
+          predicates:
+            - Path=/api/identity/**
+            - Path=/api/auth/**
+            - Path=/api/internal/**
+        - id: audit
+          uri: http://audit-service:8082
+          predicates:
+            - Path=/api/audit/**
+            - Path=/api/audit/**
+        - id: tree
+          uri: http://tree-service:8083
+          predicates:
+            - Path=/api/trees/**
+            - Path=/api/tree/**
+        - id: members
+          uri: http://members-service:8084
+          predicates:
+            - Path=/api/trees/**/members/**
+        - id: relationships
+          uri: http://relationships-service:8085
+          predicates:
+            - Path=/api/trees/**/relationships/**
+        - id: events
+          uri: http://events-service:8086
+          predicates:
+            - Path=/api/trees/**/events/**
+        - id: media
+          uri: http://media-metadata-service:8087
+          predicates:
+            - Path=/api/trees/**/albums/**
+            - Path=/api/trees/**/media/**
+            - Path=/api/albums/**
+            - Path=/api/media/**
+        - id: binary
+          uri: http://binary-storage-service:8088
+          predicates:
+            - Path=/api/binary/**
+        - id: sharing
+          uri: http://sharing-service:8089
+          predicates:
+            - Path=/api/trees/**/shares/**
+            - Path=/api/public/share/**
+            - Path=/api/share/**
+            - Path=/api/sharing/**
+        - id: reporting
+          uri: http://reporting-service:8090
+          predicates:
+            - Path=/api/trees/**/member-search/**
+            - Path=/api/reports/**
+            - Path=/api/reporting/**
+        - id: transfer
+          uri: http://transfer-service:8091
+          predicates:
+            - Path=/api/trees/**/imports/**
+            - Path=/api/trees/**/exports/**
+            - Path=/api/transfer/**
+            - Path=/api/import/**
+            - Path=/api/export/**
+            - Path=/api/backup/**
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,gateway
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:-}]"

@@ -1,0 +1,82 @@
+{
+  "description": "Vietnamese normalization + search corpus. Expected outputs per src/lib/utils/vietnamese.ts, src/lib/services/search-service.ts and member-service.ts findDuplicates.",
+  "treeId": "tree_corpus_search",
+  "members": [
+    { "id": "s_binh", "fullName": "Nguyễn Văn Bình", "nickname": "Bình Béo", "occupation": "Giáo viên", "placeOfBirth": "Hà Nội", "currentAddress": "Quận Đống Đa, Hà Nội", "biography": "Dạy học tại trường làng.", "gender": "MALE", "generation": 1, "isAlive": true, "dateOfBirth": "1960-04-12" },
+    { "id": "s_dung", "fullName": "Đặng Thị Dung", "nickname": "Dung", "occupation": "Bác sĩ", "placeOfBirth": "Đà Nẵng", "gender": "FEMALE", "generation": 2, "isAlive": true, "dateOfBirth": "1985-09-01" },
+    { "id": "s_duong", "fullName": "Dương Văn Đường", "occupation": "Nông dân", "placeOfBirth": "Hải Dương", "gender": "MALE", "generation": 2, "isAlive": false, "dateOfBirth": "1930-01-01", "dateOfDeath": "2001-05-20" },
+    { "id": "s_binh2", "fullName": "Nguyen Van Binh", "note": "unaccented duplicate of s_binh", "placeOfBirth": "Ha Noi", "gender": "MALE", "generation": 1, "isAlive": true, "dateOfBirth": "1960-04-12" }
+  ],
+  "normalizationCases": [
+    { "input": "Nguyễn Văn Bình", "expected": "nguyen van binh" },
+    { "input": "  Đặng   Thị Dung ", "expected": "dang thi dung", "note": "đ→d, trim, collapse internal whitespace" },
+    { "input": "ĐƯỜNG", "expected": "duong" },
+    { "input": "Hà Nội", "expected": "ha noi" }
+  ],
+  "searchCases": [
+    {
+      "id": "accent-insensitive-prefix-bonus",
+      "query": "nguyen van",
+      "expected": [
+        { "memberId": "s_binh", "score": 100, "matchedFields": ["fullName"], "note": "fullName contains (30) + normalized fullName startsWith query (70) = 100" },
+        { "memberId": "s_binh2", "score": 100, "matchedFields": ["fullName"] }
+      ],
+      "orderNote": "Equal score → fullName asc (vi locale): 'Nguyen Van Binh' vs 'Nguyễn Văn Bình' per localeCompare('vi')"
+    },
+    {
+      "id": "dj-to-d-matches-both-d-names",
+      "query": "duong",
+      "expected": [
+        { "memberId": "s_duong", "score": 100, "matchedFields": ["fullName"], "note": "normalized 'duong van duong' startsWith 'duong' → 30+70" }
+      ],
+      "note": "s_dung ('dang thi dung') does not contain 'duong'; placeOfBirth 'hai duong' of s_duong already counted once per field rules"
+    },
+    {
+      "id": "occupation-and-address-weights",
+      "query": "giao vien",
+      "expected": [
+        { "memberId": "s_binh", "score": 15, "matchedFields": ["occupation"] }
+      ]
+    },
+    {
+      "id": "suggest-mode-prefix-max-10",
+      "query": "b",
+      "mode": "suggest",
+      "expected": [
+        { "memberId": "s_binh", "via": "nickname", "note": "nickname 'binh beo' startsWith 'b'; fullName 'nguyen van binh' does not" }
+      ]
+    },
+    {
+      "id": "filter-status-conflict",
+      "mode": "filter",
+      "params": { "status": "ALIVE", "isAlive": "false" },
+      "expected": { "status": 400, "errorCode": "INVALID_FILTER" }
+    },
+    {
+      "id": "filter-generation-and-alive",
+      "mode": "filter",
+      "params": { "generation": 2, "isAlive": "true" },
+      "expected": { "memberIds": ["s_dung"] }
+    },
+    {
+      "id": "filter-birth-year-range",
+      "mode": "filter",
+      "params": { "birthYearFrom": 1950, "birthYearTo": 1970 },
+      "expected": { "memberIds": ["s_binh", "s_binh2"] }
+    }
+  ],
+  "duplicateDetectionCases": [
+    {
+      "id": "accents-do-not-hide-duplicates",
+      "criteria": { "memberId": "s_binh" },
+      "expected": [
+        {
+          "pair": ["s_binh", "s_binh2"],
+          "matchingFields": ["name", "dateOfBirth", "placeOfBirth"],
+          "score": 1,
+          "note": "'Nguyễn Văn Bình'≡'Nguyen Van Binh' and 'Hà Nội'≡'Ha Noi' after normalization; same calendar birth date"
+        }
+      ]
+    }
+  ]
+}

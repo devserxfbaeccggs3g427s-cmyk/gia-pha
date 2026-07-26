@@ -1,0 +1,57 @@
+server:
+  port: 8088
+  shutdown: graceful
+
+spring:
+  application:
+    name: binary-storage-service
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/binary_storage?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: ${MYSQL_SVC_BINARY:binpw}
+    password: ${MYSQL_SVC_BINARY_PASSWORD:binpw}
+  flyway:
+    enabled: true
+    schemas: binary_storage
+    default-schema: binary_storage
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+
+giapha:
+  binary-storage:
+    gateway-base-url: ${BLOB_GATEWAY_BASE_URL:http://localhost:3000}
+    secrets: ${BLOB_GATEWAY_SECRETS:local-development-secret}
+    notify-secrets: ${BLOB_GATEWAY_NOTIFY_SECRETS:local-development-secret}
+    issuer: ${BLOB_GATEWAY_ISSUER:binary-storage-service}
+    audience: ${BLOB_GATEWAY_AUDIENCE:blob-gateway}
+    connect-timeout: 5s
+    read-timeout: 30s
+    browser-signed-url-ttl: 15m
+    internal-signed-url-ttl: 2m
+    breaker-failure-threshold: 5
+    breaker-open-duration: 30s
+  upload-lifecycle:
+    intent-ttl: 24h
+    orphan-min-age: 24h
+    reconcile-batch-size: 100
+    cleanup-batch-size: 100
+    cleanup-lease: 5m
+    cleanup-max-attempts: 10
+    cleanup-backoff-base: 30s
+    cleanup-backoff-max: 6h
+    overdue-alert-age: 24h
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:-}]"

@@ -1,0 +1,59 @@
+server:
+  port: 8083
+  shutdown: graceful
+
+spring:
+  application:
+    name: tree-service
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/tree_content?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: ${MYSQL_SVC_TREE:trepw}
+    password: ${MYSQL_SVC_TREE_PASSWORD:trepw}
+  flyway:
+    enabled: true
+    schemas: tree_content
+    default-schema: tree_content
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:giapha}
+    password: ${RABBITMQ_PASS:giapha}
+    virtual-host: /
+
+identity-service:
+  base-url: ${IDENTITY_SERVICE_URL:http://localhost:8081}
+
+giapha:
+  research:
+    routing:
+      owner-only-final-deletion: false
+
+service:
+  name: tree-service
+  schema: tree_content
+  rabbit-host: ${RABBITMQ_HOST:localhost}
+  rabbit-port: ${RABBITMQ_PORT:5672}
+  rabbit-user: ${RABBITMQ_USER:giapha}
+  rabbit-password: ${RABBITMQ_PASS:giapha}
+  outbox-poll-interval: 1s
+  outbox-batch-size: 100
+  publishes:
+    - events.tree
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:-}]"

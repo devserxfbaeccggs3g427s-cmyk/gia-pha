@@ -1,0 +1,37 @@
+server:
+  port: 8087
+  shutdown: graceful
+
+spring:
+  application:
+    name: media-metadata-service
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/tree_content?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: ${MYSQL_SVC_MEDIA:medpw}
+    password: ${MYSQL_SVC_MEDIA_PASSWORD:medpw}
+  flyway:
+    enabled: true
+    schemas: tree_content
+    default-schema: tree_content
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+
+giapha:
+  binary-storage:
+    base-url: ${BINARY_STORAGE_BASE_URL:http://localhost:8088}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:-}]"

@@ -1,0 +1,62 @@
+server:
+  port: 8081
+  shutdown: graceful
+
+spring:
+  application:
+    name: identity-service
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/identity?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: ${MYSQL_SVC_IDENTITY:identitypw}
+    password: ${MYSQL_SVC_IDENTITY_PASSWORD:identitypw}
+  flyway:
+    enabled: true
+    schemas: identity
+    default-schema: identity
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:giapha}
+    password: ${RABBITMQ_PASS:giapha}
+    virtual-host: /
+
+giapha:
+  research:
+    auth:
+      bridge-issuer: ${BRIDGE_ISSUER:giapha-nextauth}
+      bridge-audience: ${BRIDGE_AUDIENCE:giapha-identity}
+      require-email-verification: true
+    routing:
+      owner-only-final-deletion: false
+    limits:
+      import-max-bytes: 10485760
+
+service:
+  name: identity-service
+  schema: identity
+  rabbit-host: ${RABBITMQ_HOST:localhost}
+  rabbit-port: ${RABBITMQ_PORT:5672}
+  rabbit-user: ${RABBITMQ_USER:giapha}
+  rabbit-password: ${RABBITMQ_PASS:giapha}
+  outbox-poll-interval: 1s
+  outbox-batch-size: 100
+  publishes:
+    - events.identity
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:-}]"

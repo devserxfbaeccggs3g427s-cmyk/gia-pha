@@ -7,3 +7,12 @@ coverage/
 .env
 .env*.local
 .DS_Store
+/.next-dev/
+/.idea/
+*/target/
+.kilo
+
+# Spring Boot backend (Maven)
+services/**/target/
+services/**/.idea/
+fontend/node_modules/

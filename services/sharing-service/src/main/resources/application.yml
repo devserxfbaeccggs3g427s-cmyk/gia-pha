@@ -1,0 +1,57 @@
+server:
+  port: 8089
+  shutdown: graceful
+
+spring:
+  application:
+    name: sharing-service
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/sharing?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: ${MYSQL_SVC_SHARING:shapw}
+    password: ${MYSQL_SVC_SHARING_PASSWORD:shapw}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    schemas: sharing
+    default-schema: sharing
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:giapha}
+    password: ${RABBITMQ_PASS:giapha}
+    virtual-host: /
+
+service:
+  name: sharing-service
+  schema: sharing
+  rabbit-host: ${RABBITMQ_HOST:localhost}
+  rabbit-port: ${RABBITMQ_PORT:5672}
+  rabbit-user: ${RABBITMQ_USER:giapha}
+  rabbit-password: ${RABBITMQ_PASS:giapha}
+  outbox-poll-interval: 1s
+  outbox-batch-size: 100
+  publishes:
+    - events.sharing
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:-}]"

@@ -1,0 +1,225 @@
+name: giapha-microservice-research
+
+# Phase 0.1 / Phase 6 — full microservice-decomposition research stack.
+# Per .kiro/specs/microservice-decomposition/README.md, "deploy", "production",
+# and "operators" mean "local docker-compose environment" unless stated otherwise.
+
+x-service-common: &service-common
+  restart: unless-stopped
+  environment: &service-env
+    MYSQL_HOST: mysql
+    RABBITMQ_HOST: rabbitmq
+    RABBITMQ_PORT: 5672
+    RABBITMQ_USER: ${RABBITMQ_USER:-giapha}
+    RABBITMQ_PASS: ${RABBITMQ_PASS:-giapha}
+  depends_on:
+    mysql:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+  networks:
+    - giapha-net
+
+services:
+  mysql:
+    image: mysql:8.4.5
+    container_name: giapha-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpw}
+      MYSQL_DATABASE: ${MYSQL_DB:-giapha}
+      MYSQL_SVC_IDENTITY: ${MYSQL_SVC_IDENTITY:-identitypw}
+      MYSQL_SVC_TREE: ${MYSQL_SVC_TREE:-trepw}
+      MYSQL_SVC_MEMBERS: ${MYSQL_SVC_MEMBERS:-mempw}
+      MYSQL_SVC_RELATIONS: ${MYSQL_SVC_RELATIONS:-relpw}
+      MYSQL_SVC_EVENTS: ${MYSQL_SVC_EVENTS:-evpw}
+      MYSQL_SVC_MEDIA: ${MYSQL_SVC_MEDIA:-medpw}
+      MYSQL_SVC_BINARY: ${MYSQL_SVC_BINARY:-binpw}
+      MYSQL_SVC_SHARING: ${MYSQL_SVC_SHARING:-shapw}
+      MYSQL_SVC_TRANSFER: ${MYSQL_SVC_TRANSFER:-trapw}
+      MYSQL_SVC_REPORTING: ${MYSQL_SVC_REPORTING:-reppw}
+      MYSQL_SVC_AUDIT: ${MYSQL_SVC_AUDIT:-audpw}
+    ports: ["3306:3306"]
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/conf/my.cnf:/etc/mysql/conf.d/zz-research.cnf:ro
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+      - ./mysql/entrypoint.sh:/usr/local/bin/entrypoint.sh:ro
+    entrypoint: ["/usr/local/bin/entrypoint.sh"]
+    command:
+      - mysqld
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max_connections=512
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-rootpw}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks: [giapha-net]
+
+  rabbitmq:
+    image: rabbitmq:3.13.7-management
+    container_name: giapha-rabbit
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-giapha}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-giapha}
+    ports: ["5672:5672", "15672:15672"]
+    volumes: ["rabbit-data:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks: [giapha-net]
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: giapha-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports: ["9090:9090"]
+    networks: [giapha-net]
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: giapha-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+    depends_on: [prometheus]
+    networks: [giapha-net]
+
+  # ---- Microservices (Phase 1+). ----
+  # All services use the same base env block above.
+  identity-service:
+    <<: *service-common
+    build:
+      context: ../services/identity-service
+    environment:
+      <<: *service-env
+      MYSQL_SVC_IDENTITY: ${MYSQL_SVC_IDENTITY:-identitypw}
+      MYSQL_SVC_IDENTITY_PASSWORD: ${MYSQL_SVC_IDENTITY_PASSWORD:-identitypw}
+    ports: ["8081:8081"]
+
+  audit-service:
+    <<: *service-common
+    build: { context: ../services/audit-service }
+    environment:
+      <<: *service-env
+      MYSQL_SVC_AUDIT: ${MYSQL_SVC_AUDIT:-audpw}
+      MYSQL_SVC_AUDIT_PASSWORD: ${MYSQL_SVC_AUDIT_PASSWORD:-audpw}
+    ports: ["8082:8082"]
+
+  tree-service:
+    <<: *service-common
+    build: { context: ../services/tree-service }
+    environment:
+      <<: *service-env
+      MYSQL_SVC_TREE: ${MYSQL_SVC_TREE:-trepw}
+      MYSQL_SVC_TREE_PASSWORD: ${MYSQL_SVC_TREE_PASSWORD:-trepw}
+    ports: ["8083:8083"]
+
+  members-service:
+    <<: *service-common
+    build: { context: ../services/members-service }
+    environment:
+      <<: *service-env
+      MYSQL_SVC_MEMBERS: ${MYSQL_SVC_MEMBERS:-mempw}
+      MYSQL_SVC_MEMBERS_PASSWORD: ${MYSQL_SVC_MEMBERS_PASSWORD:-mempw}
+    ports: ["8084:8084"]
+
+  relationships-service:
+    <<: *service-common
+    build: { context: ../services/relationships-service }
+    environment:
+      <<: *service-env
+      MYSQL_SVC_RELATIONS: ${MYSQL_SVC_RELATIONS:-relpw}
+      MYSQL_SVC_RELATIONS_PASSWORD: ${MYSQL_SVC_RELATIONS_PASSWORD:-relpw}
+    ports: ["8085:8085"]
+
+  events-service:
+    <<: *service-common
+    build: { context: ../services/events-service }
+    environment:
+      <<: *service-env
+      MYSQL_SVC_EVENTS: ${MYSQL_SVC_EVENTS:-evpw}
+      MYSQL_SVC_EVENTS_PASSWORD: ${MYSQL_SVC_EVENTS_PASSWORD:-evpw}
+    ports: ["8086:8086"]
+
+  media-metadata-service:
+    <<: *service-common
+    build: { context: ../services/media-metadata-service }
+    environment:
+      <<: *service-env
+      MYSQL_SVC_MEDIA: ${MYSQL_SVC_MEDIA:-medpw}
+      MYSQL_SVC_MEDIA_PASSWORD: ${MYSQL_SVC_MEDIA_PASSWORD:-medpw}
+    ports: ["8087:8087"]
+
+  binary-storage-service:
+    <<: *service-common
+    build: { context: ../services/binary-storage-service }
+    environment:
+      <<: *service-env
+      MYSQL_SVC_BINARY: ${MYSQL_SVC_BINARY:-binpw}
+      MYSQL_SVC_BINARY_PASSWORD: ${MYSQL_SVC_BINARY_PASSWORD:-binpw}
+    ports: ["8088:8088"]
+
+  sharing-service:
+    <<: *service-common
+    build: { context: ../services/sharing-service }
+    environment:
+      <<: *service-env
+      MYSQL_SVC_SHARING: ${MYSQL_SVC_SHARING:-shapw}
+      MYSQL_SVC_SHARING_PASSWORD: ${MYSQL_SVC_SHARING_PASSWORD:-shapw}
+    ports: ["8089:8089"]
+
+  reporting-service:
+    <<: *service-common
+    build: { context: ../services/reporting-service }
+    environment:
+      <<: *service-env
+      MYSQL_SVC_REPORTING: ${MYSQL_SVC_REPORTING:-reppw}
+      MYSQL_SVC_REPORTING_PASSWORD: ${MYSQL_SVC_REPORTING_PASSWORD:-reppw}
+    ports: ["8090:8090"]
+
+  transfer-service:
+    <<: *service-common
+    build: { context: ../services/transfer-service }
+    environment:
+      <<: *service-env
+      MYSQL_SVC_TRANSFER: ${MYSQL_SVC_TRANSFER:-trapw}
+      MYSQL_SVC_TRANSFER_PASSWORD: ${MYSQL_SVC_TRANSFER_PASSWORD:-trapw}
+    ports: ["8091:8091"]
+
+  gateway-service:
+    <<: *service-common
+    build: { context: ../services/gateway-service }
+    ports: ["8080:8080"]
+
+volumes:
+  mysql-data:
+  rabbit-data:
+  prom-data:
+  grafana-data:
+
+networks:
+  giapha-net:
+    name: giapha-net
+    driver: bridge

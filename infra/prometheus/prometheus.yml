@@ -1,0 +1,22 @@
+# Prometheus config for the microservice research lane.
+# Per Requirement 11: per-service p95 latency, error rate, queue age, outbox lag.
+# Each service exposes /actuator/prometheus on its management port.
+# We rely on a static scrape config because service discovery is via DNS + a
+# registry file (Requirement 1.7); Docker Compose service names resolve via DNS.
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+  external_labels:
+    topology: microservice-research
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Service scrapes are added in Phase 6.3 (Observability).
+  - job_name: services
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/*.json']
+        refresh_interval: 5s
+    metrics_path: /actuator/prometheus

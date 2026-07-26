@@ -1,0 +1,394 @@
+{
+  "$schema": "./golden-fixtures.schema.json",
+  "description": "Sanitized golden fixtures frozen from the legacy Next.js backend (Task 1.4). Every fixture is an executable request/response pair used by contract tests against both the legacy handlers and the Spring Compatibility_API. All identifiers, names and e-mails are synthetic.",
+  "conventions": {
+    "timestamps": "ISO-8601 UTC with milliseconds",
+    "errorEnvelope": { "ok": false, "error": { "code": "…", "message": "…", "details": "optional" } },
+    "auth": "Session cookie of user usr_admin01 unless stated otherwise"
+  },
+  "fixtures": [
+    {
+      "id": "trees-list-success",
+      "operationId": "listTrees",
+      "request": { "method": "GET", "path": "/api/trees" },
+      "response": {
+        "status": 200,
+        "body": [
+          {
+            "id": "tree_0001",
+            "name": "Dòng họ Nguyễn Văn",
+            "description": "Gia phả chi Hà Nội",
+            "ownerId": "usr_admin01",
+            "memberships": [
+              { "userId": "usr_admin01", "treeId": "tree_0001", "role": "ADMIN", "joinedAt": "2025-01-05T08:00:00.000Z" },
+              { "userId": "usr_editor01", "treeId": "tree_0001", "role": "EDITOR", "joinedAt": "2025-02-11T09:30:00.000Z" }
+            ],
+            "createdAt": "2025-01-05T08:00:00.000Z",
+            "updatedAt": "2025-06-20T14:12:33.512Z"
+          }
+        ]
+      },
+      "note": "Raw array — no ok/data envelope."
+    },
+    {
+      "id": "tree-create-success",
+      "operationId": "createTree",
+      "request": {
+        "method": "POST",
+        "path": "/api/trees",
+        "body": { "name": "Chi thứ hai", "description": "Nhánh Sài Gòn" }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "id": "tree_0002",
+          "name": "Chi thứ hai",
+          "description": "Nhánh Sài Gòn",
+          "ownerId": "usr_admin01",
+          "memberships": [
+            { "userId": "usr_admin01", "treeId": "tree_0002", "role": "ADMIN", "joinedAt": "2026-07-25T02:00:00.000Z" }
+          ],
+          "createdAt": "2026-07-25T02:00:00.000Z",
+          "updatedAt": "2026-07-25T02:00:00.000Z"
+        }
+      }
+    },
+    {
+      "id": "member-create-death-forces-dead",
+      "operationId": "createMember",
+      "request": {
+        "method": "POST",
+        "path": "/api/trees/tree_0001/members",
+        "body": {
+          "firstName": "Văn Bình",
+          "lastName": "Nguyễn",
+          "fullName": "Nguyễn Văn Bình",
+          "gender": "MALE",
+          "dateOfBirth": "1920-02-29",
+          "dateOfDeath": "1999-08-15",
+          "isAlive": true
+        }
+      },
+      "response": {
+        "status": 201,
+        "bodyMatch": { "isAlive": false, "dateOfDeath": "1999-08-15" }
+      },
+      "note": "A death date is authoritative: isAlive true in input is overridden to false."
+    },
+    {
+      "id": "member-death-before-birth-rejected",
+      "operationId": "createMember",
+      "request": {
+        "method": "POST",
+        "path": "/api/trees/tree_0001/members",
+        "body": {
+          "firstName": "A", "lastName": "B", "fullName": "A B", "gender": "OTHER",
+          "dateOfBirth": "1990-01-01", "dateOfDeath": "1980-01-01"
+        }
+      },
+      "response": {
+        "status": 400,
+        "body": { "ok": false, "error": { "code": "VALIDATION_ERROR", "message": "dateOfDeath must not be before dateOfBirth" } }
+      }
+    },
+    {
+      "id": "member-noop-update-returns-current",
+      "operationId": "updateMember",
+      "request": {
+        "method": "PUT",
+        "path": "/api/members/mem_0001?treeId=tree_0001",
+        "body": { "occupation": "Giáo viên" }
+      },
+      "preState": { "member": { "id": "mem_0001", "occupation": "Giáo viên", "updatedAt": "2025-05-01T00:00:00.000Z" } },
+      "response": { "status": 200, "bodyMatch": { "updatedAt": "2025-05-01T00:00:00.000Z" } },
+      "note": "No field changed → stored record returned unchanged, no changelog entry."
+    },
+    {
+      "id": "member-not-found",
+      "operationId": "getMember",
+      "request": { "method": "GET", "path": "/api/members/mem_missing?treeId=tree_0001" },
+      "response": {
+        "status": 404,
+        "body": { "ok": false, "error": { "code": "NOT_FOUND", "message": "Member not found" } }
+      }
+    },
+    {
+      "id": "relationship-symmetric-normalized",
+      "operationId": "createRelationship",
+      "request": {
+        "method": "POST",
+        "path": "/api/trees/tree_0001/relationships",
+        "body": { "sourceMemberId": "mem_zzz", "targetMemberId": "mem_aaa", "type": "SPOUSE" }
+      },
+      "response": {
+        "status": 201,
+        "bodyMatch": { "sourceMemberId": "mem_aaa", "targetMemberId": "mem_zzz", "type": "SPOUSE" }
+      },
+      "note": "Symmetric types stored with lexicographic canonical endpoint order."
+    },
+    {
+      "id": "relationship-duplicate-conflict",
+      "operationId": "createRelationship",
+      "request": {
+        "method": "POST",
+        "path": "/api/trees/tree_0001/relationships",
+        "body": { "sourceMemberId": "mem_aaa", "targetMemberId": "mem_zzz", "type": "SPOUSE" }
+      },
+      "preState": { "existingRelationship": { "type": "SPOUSE", "sourceMemberId": "mem_aaa", "targetMemberId": "mem_zzz" } },
+      "response": { "status": 409, "bodyMatch": { "ok": false, "error": { "code": "DUPLICATE" } } }
+    },
+    {
+      "id": "relationship-cycle-conflict",
+      "operationId": "createRelationship",
+      "request": {
+        "method": "POST",
+        "path": "/api/trees/tree_0001/relationships",
+        "body": { "sourceMemberId": "mem_child", "targetMemberId": "mem_grandparent", "type": "PARENT_CHILD" }
+      },
+      "preState": { "edges": [["mem_grandparent", "mem_parent"], ["mem_parent", "mem_child"]] },
+      "response": { "status": 409, "bodyMatch": { "ok": false, "error": { "code": "CYCLE_DETECTED" } } }
+    },
+    {
+      "id": "events-upcoming-leap-day",
+      "operationId": "listEvents",
+      "request": { "method": "GET", "path": "/api/trees/tree_0001/events?upcoming=true&days=30" },
+      "preState": {
+        "referenceDate": "2026-02-20T00:00:00.000Z",
+        "event": { "id": "evt_leap", "type": "BIRTHDAY", "title": "Sinh nhật cụ Bình", "eventDate": "1920-02-29" }
+      },
+      "response": {
+        "status": 200,
+        "bodyMatch": [ { "id": "evt_leap", "nextOccurrence": "2026-02-28", "daysUntil": 8 } ]
+      },
+      "note": "2026 is not a leap year → Feb 29 anniversary observed on Feb 28."
+    },
+    {
+      "id": "search-accent-insensitive",
+      "operationId": "searchMembers",
+      "request": { "method": "GET", "path": "/api/search?treeId=tree_0001&q=nguyen%20van" },
+      "preState": { "members": [{ "id": "mem_0001", "fullName": "Nguyễn Văn Bình" }] },
+      "response": {
+        "status": 200,
+        "bodyMatch": [ { "member": { "id": "mem_0001" }, "matchedFields": ["fullName"], "score": 100 } ]
+      },
+      "note": "fullName(30) + prefix(70) = 100. NFD-normalized, đ→d, case/diacritic-insensitive."
+    },
+    {
+      "id": "search-conflicting-status-filter",
+      "operationId": "searchMembers",
+      "request": { "method": "GET", "path": "/api/search?treeId=tree_0001&mode=filter&status=ALIVE&isAlive=false" },
+      "response": { "status": 400, "bodyMatch": { "ok": false, "error": { "code": "INVALID_FILTER" } } }
+    },
+    {
+      "id": "media-upload-success",
+      "operationId": "uploadMedia",
+      "request": {
+        "method": "POST",
+        "path": "/api/media/upload",
+        "multipart": {
+          "file": { "filename": "anh-gia-dinh.jpg", "contentType": "image/jpeg", "bytes": "base64:/9j/4AAQSkZJRgABAQ…(sanitized JPEG, SOI FF D8 FF)", "size": 245760 },
+          "treeId": "tree_0001",
+          "memberId": "mem_0001",
+          "caption": "Ảnh gia đình Tết 1995"
+        }
+      },
+      "response": {
+        "status": 201,
+        "bodyMatch": {
+          "ok": true,
+          "data": {
+            "treeId": "tree_0001",
+            "memberIds": ["mem_0001"],
+            "memberId": "mem_0001",
+            "mimeType": "image/jpeg",
+            "contentUrl": "/api/media/{id}/content?treeId=tree_0001",
+            "thumbnailContentUrl": "/api/media/{id}/content?treeId=tree_0001&thumbnail=true"
+          }
+        }
+      },
+      "note": "Wrapped envelope. Thumbnail: 480px WebP q78. Filename becomes {id}.jpg."
+    },
+    {
+      "id": "media-upload-mime-mismatch",
+      "operationId": "uploadMedia",
+      "request": {
+        "method": "POST",
+        "path": "/api/media/upload",
+        "multipart": {
+          "file": { "filename": "evil.png", "contentType": "image/png", "bytes": "base64:JVBERi0…(PDF magic %PDF-)", "size": 1024 },
+          "treeId": "tree_0001"
+        }
+      },
+      "response": {
+        "status": 415,
+        "bodyMatch": { "ok": false, "error": { "code": "INVALID_FILE_TYPE", "message": "Nội dung tệp không khớp với định dạng JPEG, PNG, WebP hoặc PDF đã khai báo" } }
+      },
+      "note": "Vietnamese message text is contractual."
+    },
+    {
+      "id": "media-content-webp-variant-headers",
+      "operationId": "getMediaContent",
+      "request": { "method": "GET", "path": "/api/media/med_0001/content?treeId=tree_0001&format=webp&width=640" },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "image/webp",
+          "Cache-Control": "private, max-age=86400, stale-while-revalidate=604800",
+          "ETag": "\"{sourceEtag}-webp-w640-q78\"",
+          "X-Content-Type-Options": "nosniff",
+          "Content-Disposition": "inline; filename*=UTF-8''anh-gia-dinh.webp"
+        },
+        "bodyMeta": { "binary": true, "format": "webp", "maxWidth": 640 }
+      }
+    },
+    {
+      "id": "media-content-download-headers",
+      "operationId": "getMediaContent",
+      "request": { "method": "GET", "path": "/api/media/med_0001/content?treeId=tree_0001&download=true" },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "image/jpeg",
+          "Cache-Control": "private, max-age=3600",
+          "Content-Disposition": "attachment; filename*=UTF-8''anh-gia-dinh.jpg",
+          "X-Content-Type-Options": "nosniff"
+        },
+        "bodyMeta": { "binary": true, "bytesEqualOriginal": true }
+      }
+    },
+    {
+      "id": "membership-owner-immutable",
+      "operationId": "assignMembershipRole",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/trees/tree_0001/memberships/usr_admin01",
+        "body": { "role": "VIEWER" }
+      },
+      "response": { "status": 409, "bodyMatch": { "ok": false, "error": { "code": "OWNER_ROLE_IMMUTABLE" } } }
+    },
+    {
+      "id": "membership-assign-success",
+      "operationId": "assignMembershipRole",
+      "request": {
+        "method": "PATCH",
+        "path": "/api/trees/tree_0001/memberships/usr_editor01",
+        "body": { "role": "VIEWER" }
+      },
+      "response": {
+        "status": 200,
+        "bodyMatch": { "ok": true, "data": { "userId": "usr_editor01", "treeId": "tree_0001", "role": "VIEWER" } }
+      }
+    },
+    {
+      "id": "forbidden-viewer-write",
+      "operationId": "createMember",
+      "request": {
+        "method": "POST",
+        "path": "/api/trees/tree_0001/members",
+        "auth": "usr_viewer01",
+        "body": { "firstName": "X", "lastName": "Y", "fullName": "X Y", "gender": "OTHER" }
+      },
+      "response": { "status": 403, "bodyMatch": { "ok": false, "error": { "code": "FORBIDDEN" } } }
+    },
+    {
+      "id": "unauthorized-no-session",
+      "operationId": "listTrees",
+      "request": { "method": "GET", "path": "/api/trees", "auth": null },
+      "response": { "status": 401, "bodyMatch": { "ok": false, "error": { "code": "UNAUTHORIZED" } } }
+    },
+    {
+      "id": "register-validation-error",
+      "operationId": "registerUser",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/register",
+        "auth": null,
+        "body": { "name": "A", "email": "not-an-email", "password": "short" }
+      },
+      "response": {
+        "status": 400,
+        "bodyMatch": { "ok": false, "error": { "code": "VALIDATION_ERROR", "message": "Dữ liệu đăng ký không hợp lệ", "details": { "fieldErrors": {} } } }
+      },
+      "note": "details carries Zod flatten() shape: {formErrors: [], fieldErrors: {…}}."
+    },
+    {
+      "id": "register-success",
+      "operationId": "registerUser",
+      "request": {
+        "method": "POST",
+        "path": "/api/auth/register",
+        "auth": null,
+        "body": { "name": "Trần Thị Mai", "email": "mai.tran@example.test", "password": "MatKhauManh#2026" }
+      },
+      "response": {
+        "status": 201,
+        "bodyMatch": {
+          "ok": true,
+          "data": { "user": { "email": "mai.tran@example.test", "name": "Trần Thị Mai" }, "emailVerificationRequired": true, "message": "Tài khoản đã được tạo. Vui lòng kiểm tra email để xác nhận tài khoản." }
+        }
+      }
+    },
+    {
+      "id": "backup-list-retention",
+      "operationId": "listBackups",
+      "request": { "method": "GET", "path": "/api/backup/tree_0001" },
+      "response": {
+        "status": 200,
+        "headers": { "Cache-Control": "private, no-store" },
+        "bodyMatch": { "retentionDays": 30, "backups": [] }
+      }
+    },
+    {
+      "id": "backup-restore-expired",
+      "operationId": "restoreBackup",
+      "request": { "method": "PUT", "path": "/api/backup/tree_0001", "body": { "timestamp": "2020-01-01T00:00:00.000Z" } },
+      "response": { "status": 410, "bodyMatch": { "ok": false, "error": { "code": "BACKUP_EXPIRED" } } }
+    },
+    {
+      "id": "export-json-download-headers",
+      "operationId": "exportTree",
+      "request": { "method": "GET", "path": "/api/export/tree_0001/json" },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Disposition": "attachment; filename=\"tree_0001.json\"",
+          "Cache-Control": "private, no-store"
+        }
+      }
+    },
+    {
+      "id": "export-invalid-format",
+      "operationId": "exportTree",
+      "request": { "method": "GET", "path": "/api/export/tree_0001/docx" },
+      "response": {
+        "status": 400,
+        "body": { "ok": false, "error": { "code": "INVALID_INPUT", "message": "format must be GEDCOM, JSON, PDF, PNG, SVG, or preview" } }
+      }
+    },
+    {
+      "id": "share-token-response-headers",
+      "operationId": "getSharedTree",
+      "request": { "method": "GET", "path": "/api/share/{validToken}", "auth": null },
+      "response": {
+        "status": 200,
+        "headers": { "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow, noarchive" }
+      }
+    },
+    {
+      "id": "media-filter-conflict",
+      "operationId": "listMedia",
+      "request": { "method": "GET", "path": "/api/trees/tree_0001/media?memberId=mem_0001&eventId=evt_0001" },
+      "response": {
+        "status": 400,
+        "body": { "ok": false, "error": { "code": "VALIDATION_ERROR", "message": "Chỉ được dùng một bộ lọc memberId, eventId hoặc albumId" } }
+      }
+    },
+    {
+      "id": "delete-returns-204",
+      "operationId": "deleteEvent",
+      "request": { "method": "DELETE", "path": "/api/events/evt_0001?treeId=tree_0001" },
+      "response": { "status": 204, "bodyMeta": { "empty": true } }
+    }
+  ]
+}

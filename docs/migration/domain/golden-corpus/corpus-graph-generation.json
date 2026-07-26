@@ -1,0 +1,104 @@
+{
+  "description": "Graph corpus: multiple parents, adoption, spouse components, legacy reciprocal rows. Expected outputs computed per src/lib/algorithms/generation.ts and ancestry.ts.",
+  "treeId": "tree_corpus_graph",
+  "members": [
+    { "id": "m_an", "fullName": "Nguyễn Văn An", "note": "patriarch, gen 0" },
+    { "id": "m_ba", "fullName": "Trần Thị Ba", "note": "wife of m_an — spouse component with m_an" },
+    { "id": "m_cuc", "fullName": "Nguyễn Thị Cúc", "note": "biological child of m_an+m_ba" },
+    { "id": "m_dung", "fullName": "Lê Văn Dũng", "note": "husband of m_cuc" },
+    { "id": "m_em", "fullName": "Nguyễn Văn Em", "note": "ADOPTED child: has 4 parent edges — biological (m_giang, m_hoa) and adoptive (m_cuc, m_dung)" },
+    { "id": "m_giang", "fullName": "Phạm Văn Giang", "note": "biological father of m_em, unrelated root — gen 0" },
+    { "id": "m_hoa", "fullName": "Đỗ Thị Hoa", "note": "biological mother of m_em, spouse of m_giang" },
+    { "id": "m_kim", "fullName": "Nguyễn Thị Kim", "note": "child of m_em — tests deepest-constraint propagation" },
+    { "id": "m_long", "fullName": "Vũ Văn Long", "note": "second husband of m_ba (remarriage) — joins spouse component {m_an,m_ba,m_long}" }
+  ],
+  "relationships": [
+    { "id": "r01", "type": "SPOUSE", "sourceMemberId": "m_an", "targetMemberId": "m_ba", "note": "canonical order m_an <= m_ba" },
+    { "id": "r02", "type": "SPOUSE", "sourceMemberId": "m_ba", "targetMemberId": "m_long", "note": "canonical" },
+    { "id": "r03", "type": "PARENT_CHILD", "sourceMemberId": "m_an", "targetMemberId": "m_cuc" },
+    { "id": "r04", "type": "PARENT_CHILD", "sourceMemberId": "m_ba", "targetMemberId": "m_cuc" },
+    { "id": "r05", "type": "SPOUSE", "sourceMemberId": "m_cuc", "targetMemberId": "m_dung" },
+    { "id": "r06", "type": "SPOUSE", "sourceMemberId": "m_dung", "targetMemberId": "m_cuc", "note": "LEGACY RECIPROCAL ROW of r05 — must be deduped by canonical edge set, never duplicated in outputs" },
+    { "id": "r07", "type": "PARENT_CHILD", "sourceMemberId": "m_giang", "targetMemberId": "m_em", "note": "biological" },
+    { "id": "r08", "type": "PARENT_CHILD", "sourceMemberId": "m_hoa", "targetMemberId": "m_em", "note": "biological" },
+    { "id": "r09", "type": "PARENT_CHILD", "sourceMemberId": "m_cuc", "targetMemberId": "m_em", "customType": "adoptive", "note": "adoption modeled as additional PARENT_CHILD" },
+    { "id": "r10", "type": "PARENT_CHILD", "sourceMemberId": "m_dung", "targetMemberId": "m_em", "customType": "adoptive" },
+    { "id": "r11", "type": "SPOUSE", "sourceMemberId": "m_giang", "targetMemberId": "m_hoa" },
+    { "id": "r12", "type": "PARENT_CHILD", "sourceMemberId": "m_em", "targetMemberId": "m_kim" }
+  ],
+  "expected": {
+    "spouseComponents": {
+      "note": "DisjointSet representative = lexicographically smallest member id in component",
+      "components": [
+        { "representative": "m_an", "members": ["m_an", "m_ba", "m_long"] },
+        { "representative": "m_cuc", "members": ["m_cuc", "m_dung"] },
+        { "representative": "m_giang", "members": ["m_giang", "m_hoa"] },
+        { "representative": "m_em", "members": ["m_em"] },
+        { "representative": "m_kim", "members": ["m_kim"] }
+      ]
+    },
+    "generations": {
+      "note": "Deepest constraint wins for m_em: adoptive parents' component {m_cuc,m_dung} is gen 1 → m_em = 2; biological parents {m_giang,m_hoa} gen 0 would give 1; max(1,2)=2.",
+      "m_an": 0,
+      "m_ba": 0,
+      "m_long": 0,
+      "m_giang": 0,
+      "m_hoa": 0,
+      "m_cuc": 1,
+      "m_dung": 1,
+      "m_em": 2,
+      "m_kim": 3
+    },
+    "canonicalParentChildEdges": [
+      ["m_an", "m_cuc"], ["m_ba", "m_cuc"],
+      ["m_giang", "m_em"], ["m_hoa", "m_em"],
+      ["m_cuc", "m_em"], ["m_dung", "m_em"],
+      ["m_em", "m_kim"]
+    ],
+    "ancestryPath": {
+      "memberId": "m_kim",
+      "note": "One shortest root→member path via BFS from generation-0 roots; deterministic given stable iteration",
+      "path": ["m_giang", "m_em", "m_kim"]
+    },
+    "ancestrySubgraph": {
+      "memberId": "m_kim",
+      "note": "ALL parent branches of every ancestor + spouses of included ancestors",
+      "memberIds": ["m_kim", "m_em", "m_giang", "m_hoa", "m_cuc", "m_dung", "m_an", "m_ba", "m_long"],
+      "parentChildEdges": [
+        ["m_em", "m_kim"],
+        ["m_giang", "m_em"], ["m_hoa", "m_em"], ["m_cuc", "m_em"], ["m_dung", "m_em"],
+        ["m_an", "m_cuc"], ["m_ba", "m_cuc"]
+      ],
+      "spouseEdges": [
+        ["m_giang", "m_hoa"], ["m_cuc", "m_dung"], ["m_an", "m_ba"], ["m_ba", "m_long"]
+      ]
+    },
+    "cycleRejections": [
+      {
+        "attempt": { "type": "PARENT_CHILD", "sourceMemberId": "m_kim", "targetMemberId": "m_an" },
+        "result": "409 CYCLE_DETECTED",
+        "note": "m_an reaches m_kim via m_an→m_cuc→m_em→m_kim"
+      },
+      {
+        "attempt": { "type": "PARENT_CHILD", "sourceMemberId": "m_kim", "targetMemberId": "m_em" },
+        "result": "409 CYCLE_DETECTED",
+        "note": "direct 2-cycle with r12"
+      }
+    ],
+    "duplicateRejections": [
+      {
+        "attempt": { "type": "SPOUSE", "sourceMemberId": "m_dung", "targetMemberId": "m_cuc" },
+        "result": "409 DUPLICATE",
+        "note": "normalizes to (m_cuc,m_dung) which exists as r05"
+      }
+    ]
+  },
+  "malformedGraphVariant": {
+    "note": "Same members but only edges below: an all-cycle graph. Legacy picks the first component as forced root (DEF-06) — output must still be total.",
+    "relationships": [
+      { "id": "x1", "type": "PARENT_CHILD", "sourceMemberId": "m_an", "targetMemberId": "m_cuc" },
+      { "id": "x2", "type": "PARENT_CHILD", "sourceMemberId": "m_cuc", "targetMemberId": "m_an" }
+    ],
+    "expectedGenerations": { "m_an": 0, "m_cuc": 1 }
+  }
+}

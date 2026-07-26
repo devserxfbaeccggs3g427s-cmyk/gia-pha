@@ -1,0 +1,99 @@
+{
+  "description": "Corrupt import corpus. Each case is a JSON import document plus the expected ImportIssue[] from preview per src/lib/services/import-service.ts (.strict() Zod schemas + cross-reference checks). ERROR issues block execute.",
+  "cases": [
+    {
+      "id": "unknown-field-rejected-strict",
+      "document": {
+        "tree": { "id": "t1", "name": "Corpus", "ownerId": "u1", "memberships": [] },
+        "members": [
+          {
+            "id": "m1", "treeId": "t1", "firstName": "An", "lastName": "Nguyễn", "fullName": "Nguyễn An",
+            "gender": "MALE", "isAlive": true, "createdAt": "2025-01-01T00:00:00.000Z", "updatedAt": "2025-01-01T00:00:00.000Z",
+            "zodiacSign": "Tiger"
+          }
+        ],
+        "relationships": [], "events": [], "mediaMetadata": [], "albums": []
+      },
+      "expectedIssues": [
+        { "severity": "ERROR", "entity": "members", "recordId": "m1", "reason": "Unrecognized key: zodiacSign (strict schema, DEF-17)" }
+      ],
+      "executeAllowed": false
+    },
+    {
+      "id": "broken-relationship-reference",
+      "document": {
+        "tree": { "id": "t1", "name": "Corpus", "ownerId": "u1", "memberships": [] },
+        "members": [
+          { "id": "m1", "treeId": "t1", "firstName": "An", "lastName": "Nguyễn", "fullName": "Nguyễn An", "gender": "MALE", "isAlive": true, "createdAt": "2025-01-01T00:00:00.000Z", "updatedAt": "2025-01-01T00:00:00.000Z" }
+        ],
+        "relationships": [
+          { "id": "r1", "treeId": "t1", "sourceMemberId": "m1", "targetMemberId": "m_ghost", "type": "PARENT_CHILD", "createdAt": "2025-01-01T00:00:00.000Z" }
+        ],
+        "events": [], "mediaMetadata": [], "albums": []
+      },
+      "expectedIssues": [
+        { "severity": "ERROR", "entity": "relationships", "recordId": "r1", "reason": "targetMemberId m_ghost does not resolve to an imported or existing member" }
+      ],
+      "executeAllowed": false
+    },
+    {
+      "id": "invalid-date-and-missing-required",
+      "document": {
+        "tree": { "id": "t1", "name": "Corpus", "ownerId": "u1", "memberships": [] },
+        "members": [
+          { "id": "m1", "treeId": "t1", "firstName": "An", "lastName": "Nguyễn", "fullName": "Nguyễn An", "gender": "MALE", "isAlive": true, "dateOfBirth": "not-a-date", "createdAt": "2025-01-01T00:00:00.000Z", "updatedAt": "2025-01-01T00:00:00.000Z" },
+          { "id": "m2", "treeId": "t1", "firstName": "Ba", "lastName": "Trần", "gender": "FEMALE", "isAlive": true, "createdAt": "2025-01-01T00:00:00.000Z", "updatedAt": "2025-01-01T00:00:00.000Z" }
+        ],
+        "relationships": [], "events": [], "mediaMetadata": [], "albums": []
+      },
+      "expectedIssues": [
+        { "severity": "ERROR", "entity": "members", "recordId": "m1", "reason": "dateOfBirth: Must be a valid ISO date" },
+        { "severity": "ERROR", "entity": "members", "recordId": "m2", "reason": "fullName: required" }
+      ],
+      "executeAllowed": false
+    },
+    {
+      "id": "event-references-unknown-media",
+      "document": {
+        "tree": { "id": "t1", "name": "Corpus", "ownerId": "u1", "memberships": [] },
+        "members": [
+          { "id": "m1", "treeId": "t1", "firstName": "An", "lastName": "Nguyễn", "fullName": "Nguyễn An", "gender": "MALE", "isAlive": true, "createdAt": "2025-01-01T00:00:00.000Z", "updatedAt": "2025-01-01T00:00:00.000Z" }
+        ],
+        "relationships": [],
+        "events": [
+          { "id": "e1", "treeId": "t1", "type": "BIRTHDAY", "title": "Sinh nhật", "eventDate": "1960-04-12", "memberIds": ["m1"], "mediaIds": ["med_missing"], "createdAt": "2025-01-01T00:00:00.000Z", "updatedAt": "2025-01-01T00:00:00.000Z" }
+        ],
+        "mediaMetadata": [], "albums": []
+      },
+      "expectedIssues": [
+        { "severity": "ERROR", "entity": "events", "recordId": "e1", "reason": "mediaIds med_missing does not resolve" }
+      ],
+      "executeAllowed": false
+    },
+    {
+      "id": "oversized-payload",
+      "documentMeta": { "byteSize": 26214401 },
+      "expectedIssues": [
+        { "severity": "ERROR", "entity": "document", "reason": "Payload exceeds MAX_IMPORT_BYTES (25 MiB) → rejected before parsing" }
+      ],
+      "executeAllowed": false
+    },
+    {
+      "id": "valid-with-treeId-restamp",
+      "destinationTreeId": "tree_dest",
+      "document": {
+        "tree": { "id": "t_source", "name": "Corpus", "ownerId": "u1", "memberships": [] },
+        "members": [
+          { "id": "m1", "treeId": "t_source", "firstName": "An", "lastName": "Nguyễn", "fullName": "Nguyễn An", "gender": "MALE", "isAlive": true, "createdAt": "2025-01-01T00:00:00.000Z", "updatedAt": "2025-01-01T00:00:00.000Z" }
+        ],
+        "relationships": [], "events": [], "mediaMetadata": [], "albums": []
+      },
+      "expectedIssues": [],
+      "executeAllowed": true,
+      "expectedAfterExecute": {
+        "mode": "MERGE",
+        "members": [ { "id": "m1", "treeId": "tree_dest", "note": "records re-stamped with destination treeId" } ]
+      }
+    }
+  ]
+}

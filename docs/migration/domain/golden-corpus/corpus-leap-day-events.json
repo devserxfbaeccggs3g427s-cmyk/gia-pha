@@ -1,0 +1,84 @@
+{
+  "description": "Event recurrence corpus. Expected outputs per src/lib/services/event-service.ts (getUpcomingEvents). referenceDate is 'today' (UTC) for the expectation.",
+  "treeId": "tree_corpus_events",
+  "cases": [
+    {
+      "id": "leap-day-non-leap-year",
+      "referenceDate": "2026-02-20",
+      "windowDays": 30,
+      "events": [
+        { "id": "e_leap", "type": "BIRTHDAY", "title": "Sinh nhật cụ Bình", "eventDate": "1920-02-29" }
+      ],
+      "expected": [
+        { "id": "e_leap", "nextOccurrence": "2026-02-28", "daysUntil": 8 }
+      ],
+      "note": "2026 is not a leap year → Feb 29 observed on Feb 28 (DEF-13)."
+    },
+    {
+      "id": "leap-day-leap-year",
+      "referenceDate": "2028-02-20",
+      "windowDays": 30,
+      "events": [
+        { "id": "e_leap", "type": "BIRTHDAY", "title": "Sinh nhật cụ Bình", "eventDate": "1920-02-29" }
+      ],
+      "expected": [
+        { "id": "e_leap", "nextOccurrence": "2028-02-29", "daysUntil": 9 }
+      ]
+    },
+    {
+      "id": "anniversary-already-passed-rolls-to-next-year",
+      "referenceDate": "2026-07-25",
+      "windowDays": 365,
+      "events": [
+        { "id": "e_gio", "type": "DEATH_ANNIVERSARY", "title": "Giỗ cụ An", "eventDate": "1999-03-10" }
+      ],
+      "expected": [
+        { "id": "e_gio", "nextOccurrence": "2027-03-10", "daysUntil": 228 }
+      ]
+    },
+    {
+      "id": "one-time-event-not-annual",
+      "referenceDate": "2026-07-25",
+      "windowDays": 30,
+      "events": [
+        { "id": "e_wed_past", "type": "WEDDING", "title": "Đám cưới 2020", "eventDate": "2020-06-01" },
+        { "id": "e_reunion", "type": "REUNION", "title": "Họp mặt dòng họ", "eventDate": "2026-08-10" }
+      ],
+      "expected": [
+        { "id": "e_reunion", "nextOccurrence": "2026-08-10", "daysUntil": 16 }
+      ],
+      "note": "Past one-time events never project forward; WEDDING is not annual."
+    },
+    {
+      "id": "sort-daysuntil-then-title-vi",
+      "referenceDate": "2026-01-01",
+      "windowDays": 60,
+      "events": [
+        { "id": "e_b", "type": "BIRTHDAY", "title": "Sinh nhật Bình", "eventDate": "1980-01-15" },
+        { "id": "e_a", "type": "BIRTHDAY", "title": "Sinh nhật An", "eventDate": "1985-01-15" },
+        { "id": "e_c", "type": "BIRTHDAY", "title": "Sinh nhật Cúc", "eventDate": "1990-01-05" }
+      ],
+      "expected": [
+        { "id": "e_c", "nextOccurrence": "2026-01-05", "daysUntil": 4 },
+        { "id": "e_a", "nextOccurrence": "2026-01-15", "daysUntil": 14 },
+        { "id": "e_b", "nextOccurrence": "2026-01-15", "daysUntil": 14 }
+      ],
+      "note": "Tie on daysUntil broken by title.localeCompare: 'Sinh nhật An' < 'Sinh nhật Bình'."
+    },
+    {
+      "id": "window-boundaries-inclusive",
+      "referenceDate": "2026-07-25",
+      "windowDays": 30,
+      "events": [
+        { "id": "e_today", "type": "BIRTHDAY", "title": "Hôm nay", "eventDate": "2000-07-25" },
+        { "id": "e_edge", "type": "BIRTHDAY", "title": "Cạnh cửa sổ", "eventDate": "2000-08-24" },
+        { "id": "e_out", "type": "BIRTHDAY", "title": "Ngoài cửa sổ", "eventDate": "2000-08-25" }
+      ],
+      "expected": [
+        { "id": "e_today", "nextOccurrence": "2026-07-25", "daysUntil": 0 },
+        { "id": "e_edge", "nextOccurrence": "2026-08-24", "daysUntil": 30 }
+      ],
+      "note": "Window is [today, today+days] inclusive; today+31 excluded."
+    }
+  ]
+}
