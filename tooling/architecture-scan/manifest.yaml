@@ -1,0 +1,5 @@
+name: architecture-scan
+description: Repository-wide architecture and contradiction scanner.
+main: "com.familya.governance.scan.ArchitectureScan"
+target: "21"
+version: "1.0.0"

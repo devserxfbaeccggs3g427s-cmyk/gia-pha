@@ -1,0 +1,4 @@
+name: relationship-service
+team: relationship
+slack: "#familya-relationship"
+oncall: relationship-oncall@example.com

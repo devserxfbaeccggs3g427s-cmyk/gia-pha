@@ -1,0 +1,22 @@
+# Export fixtures (sanitised)
+# Used by Transfer service to assert deterministic output.
+gedcomExpected: |
+  0 HEAD
+  1 SOUR FamilyTree
+  1 GEDC
+  2 VERS 5.5.1
+  1 CHAR UTF-8
+  0 @I1@ INDI
+  1 NAME Nguyen /Van A/
+  0 TRLR
+jsonExpected: |
+  {
+    "members": [
+      { "externalId": "m1", "displayName": "Nguyen Van A" }
+    ]
+  }
+rules:
+  - preservesExternalIds: true
+  - preservesTimestamps: true
+  - dropsInternalAggregateIds: true
+  - dropsEventMetadata: true

@@ -1,0 +1,21 @@
+name: relationship-service
+namespace: familya-relationship
+replicaCount: 2
+image:
+  repository: ghcr.io/familya/relationship-service
+  digest: REPLACE_WITH_SIGNED_DIGEST
+  pullPolicy: IfNotPresent
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: prod
+  - name: SPRING_DATASOURCE_URL
+    value: jdbc:mysql://familya-relationship.example.internal:3306/relationship?sslMode=VERIFY_CA
+  - name: SPRING_DATASOURCE_USERNAME
+    value: relationship
+  - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+    value: familya-example.kafka.example.com:9092
+serviceAccount:
+  name: relationship-workload
+keda:
+  enabled: true
+  lagThreshold: "50"

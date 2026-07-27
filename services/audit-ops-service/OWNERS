@@ -1,0 +1,4 @@
+name: audit-ops-service
+team: audit-ops
+slack: "#familya-audit-ops"
+oncall: audit-ops-oncall@example.com

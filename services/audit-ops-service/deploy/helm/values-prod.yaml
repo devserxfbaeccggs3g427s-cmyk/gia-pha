@@ -1,0 +1,21 @@
+name: audit-ops-service
+namespace: familya-audit-ops
+replicaCount: 2
+image:
+  repository: ghcr.io/familya/audit-ops-service
+  digest: REPLACE_WITH_SIGNED_DIGEST
+  pullPolicy: IfNotPresent
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: prod
+  - name: SPRING_DATASOURCE_URL
+    value: jdbc:mysql://familya-audit-ops.example.internal:3306/auditops?sslMode=VERIFY_CA
+  - name: SPRING_DATASOURCE_USERNAME
+    value: audit-ops
+  - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+    value: familya-example.kafka.example.com:9092
+serviceAccount:
+  name: audit-ops-workload
+keda:
+  enabled: true
+  lagThreshold: "50"

@@ -1,0 +1,15 @@
+name: audit-ops-service
+on:
+  push:    { paths: [services/audit-ops-service/**, platform/starters/**] }
+  pull_request: { paths: [services/audit-ops-service/**, platform/starters/**] }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '25' }
+      - run: mvn -B -ntp -f services/audit-ops-service/pom.xml -DskipTests package
+      - run: mvn -B -ntp -f services/audit-ops-service/pom.xml -Dtest=ArchitectureTest test
+      - run: mvn -B -ntp -f services/audit-ops-service/pom.xml jib:build
+      - run: cosign sign --yes ghcr.io/familya/audit-ops-service:${{ github.sha }}

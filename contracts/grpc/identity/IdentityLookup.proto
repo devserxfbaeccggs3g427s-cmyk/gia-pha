@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package com.familya.identity.grpc;
+
+option java_package = "com.familya.identity.adapter.in.grpc";
+option java_multiple_files = true;
+option java_outer_classname = "IdentityLookupProto";
+
+message IdentityLookupRequest { string user_id = 1; }
+message IdentityLookupResponse {
+  string user_id = 1;
+  bool   found   = 2;
+}
+
+service IdentityLookup {
+  rpc lookup(IdentityLookupRequest) returns (IdentityLookupResponse);
+}

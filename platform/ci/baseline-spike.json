@@ -1,0 +1,10 @@
+{
+  "verdict": "PASS",
+  "java": "25",
+  "springBoot": "4.1.0",
+  "resolvedAt": "2026-07-27T00:00:00Z",
+  "notes": [
+    "All production and test artifacts listed in platform/starters/bom/pom.xml resolve against the pinned Spring Boot 4.1.0 BOM.",
+    "Service templates and the Identity reference service use this verdict as their import-scope manifest."
+  ]
+}

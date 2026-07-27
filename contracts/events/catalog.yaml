@@ -1,0 +1,46 @@
+# Event Catalog
+
+The V2 event catalog. Every entry has a version, owning service, partition
+key, retention class, and PII classification. Backward compatibility is
+enforced by `platform/ci/schema-compat.sh`.
+
+## Conventions
+
+- Topic naming: `<context>.events.v<n>` for events, `<context>.commands.v<n>`
+  for Saga commands, `<context>.replies.v<n>` for Saga replies.
+- Partition key: `treeId` for tree-scoped contexts, `userId` for Identity.
+- Headers: `eventId`, `correlationId`, `causationId`, `operationId`,
+  `aggregateVersion`, `occurredAt`, `schemaVersion`, `traceparent`.
+
+## Catalog
+
+| Name | Version | Owner | Topic | Partition key | Retention | PII |
+|---|---|---|---|---|---|---|
+| `IdentityUserCreated` | v1 | Identity | `identity.events.v1` | `userId` | 7y | LOW |
+| `IdentityUserVerified` | v1 | Identity | `identity.events.v1` | `userId` | 7y | NONE |
+| `IdentityUserLocked` | v1 | Identity | `identity.events.v1` | `userId` | 7y | NONE |
+| `IdentityUserRevoked` | v1 | Identity | `identity.events.v1` | `userId` | 7y | NONE |
+| `IdentityCredentialsRehashed` | v1 | Identity | `identity.events.v1` | `userId` | 7y | NONE |
+| `TreeCreated` | v1 | TreeAccess | `tree.events.v1` | `treeId` | 7y | LOW |
+| `TreeFrozen` | v1 | TreeAccess | `tree.events.v1` | `treeId` | 7y | NONE |
+| `TreeAdvancedRevision` | v1 | TreeAccess | `tree.events.v1` | `treeId` | 7y | NONE |
+| `MembershipGranted` | v1 | TreeAccess | `tree.memberships.v1` | `treeId` | 7y | MEDIUM |
+| `MembershipRevoked` | v1 | TreeAccess | `tree.memberships.v1` | `treeId` | 7y | MEDIUM |
+| `MemberCreated` | v1 | Member | `member.events.v1` | `treeId` | 7y | MEDIUM |
+| `MemberTombstoned` | v1 | Member | `member.events.v1` | `treeId` | 7y | MEDIUM |
+| `RelationshipCreated` | v1 | Relationship | `relationship.events.v1` | `treeId` | 7y | LOW |
+| `EventCreated` | v1 | Event | `event.events.v1` | `treeId` | 7y | MEDIUM |
+| `MediaIntentCreated` | v1 | Media | `media.events.v1` | `treeId` | 7y | LOW |
+| `MediaPromoted` | v1 | Media | `media.events.v1` | `treeId` | 7y | LOW |
+| `MediaTombstoned` | v1 | Media | `media.events.v1` | `treeId` | 7y | LOW |
+| `ShareLinkCreated` | v1 | Sharing | `sharing.events.v1` | `treeId` | 90d | NONE |
+| `ShareLinkRevoked` | v1 | Sharing | `sharing.events.v1` | `treeId` | 90d | NONE |
+| `OperationStarted` | v1 | AuditOps | `operations.events.v1` | `operationId` | 365d | NONE |
+| `OperationStateChanged` | v1 | AuditOps | `operations.events.v1` | `operationId` | 365d | NONE |
+
+## Forbidden payloads
+
+- Raw Vercel Blob URLs / signed capabilities
+- Plaintext passwords, BCrypt hashes, OAuth access/refresh tokens
+- Non-allowlisted PII (e.g. government IDs, phone numbers, addresses)
+  unless classified `MEDIUM` and approved by the privacy gate.

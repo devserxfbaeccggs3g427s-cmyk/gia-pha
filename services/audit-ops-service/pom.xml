@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.familya.auditops</groupId>
+    <artifactId>audit-ops-service</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    <name>Family Tree — audit-ops-service</name>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.familya.platform</groupId>
+                <artifactId>familya-platform-bom</artifactId>
+                <version>1.0.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencies>
+    <dependencies>
+        <dependency><groupId>com.familya.platform</groupId><artifactId>familya-platform-spring-boot-starter</artifactId></dependency>
+        <dependency><groupId>com.familya.platform</groupId><artifactId>familya-platform-outbox-starter</artifactId></dependency>
+        <dependency><groupId>com.familya.platform</groupId><artifactId>familya-platform-security-starter</artifactId></dependency>
+        <dependency><groupId>com.familya.platform</groupId><artifactId>familya-platform-observability-starter</artifactId></dependency>
+        <dependency><groupId>com.familya.platform</groupId><artifactId>familya-platform-resilience-starter</artifactId></dependency>
+        <dependency><groupId>com.familya.platform</groupId><artifactId>familya-platform-grpc-starter</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+    </dependencies>
+    <build>
+        <finalName>${project.artifactId}</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.jooq</groupId>
+                <artifactId>jooq-codegen-maven</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

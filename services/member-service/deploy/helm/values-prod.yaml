@@ -1,0 +1,21 @@
+name: member-service
+namespace: familya-member
+replicaCount: 2
+image:
+  repository: ghcr.io/familya/member-service
+  digest: REPLACE_WITH_SIGNED_DIGEST
+  pullPolicy: IfNotPresent
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: prod
+  - name: SPRING_DATASOURCE_URL
+    value: jdbc:mysql://familya-member.example.internal:3306/member?sslMode=VERIFY_CA
+  - name: SPRING_DATASOURCE_USERNAME
+    value: member
+  - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+    value: familya-example.kafka.example.com:9092
+serviceAccount:
+  name: member-workload
+keda:
+  enabled: true
+  lagThreshold: "50"

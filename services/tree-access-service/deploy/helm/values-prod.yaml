@@ -1,0 +1,21 @@
+name: tree-access-service
+namespace: familya-tree-access
+replicaCount: 2
+image:
+  repository: ghcr.io/familya/tree-access-service
+  digest: REPLACE_WITH_SIGNED_DIGEST
+  pullPolicy: IfNotPresent
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: prod
+  - name: SPRING_DATASOURCE_URL
+    value: jdbc:mysql://familya-tree-access.example.internal:3306/tree?sslMode=VERIFY_CA
+  - name: SPRING_DATASOURCE_USERNAME
+    value: tree-access
+  - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+    value: familya-example.kafka.example.com:9092
+serviceAccount:
+  name: tree-access-workload
+keda:
+  enabled: true
+  lagThreshold: "50"

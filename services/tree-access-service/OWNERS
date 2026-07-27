@@ -1,0 +1,4 @@
+name: tree-access-service
+team: tree-access
+slack: "#familya-tree-access"
+oncall: tree-access-oncall@example.com

@@ -1,0 +1,7 @@
+name: identity-service
+team: identity
+slack: "#familya-identity"
+oncall: identity-oncall@example.com
+runbooks:
+  - ../../infra/runbooks/identity-cutterover.md
+  - ../../infra/runbooks/identity-credentials-rehash.md

@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.familya.platform</groupId>
+    <artifactId>familya-platform-bom</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <name>Family Tree Platform BOM</name>
+    <description>
+        Authoritative Maven BOM for the Family Tree platform. Pins the
+        Java 25 / Spring Boot 4.1.x baseline plus the production and
+        test libraries from ADR-009. The compatibility gate at
+        platform/ci/baseline-spike.sh MUST resolve every artifact
+        listed here before any service scaffold lands.
+    </description>
+
+    <properties>
+        <maven.compiler.source>25</maven.compiler.source>
+        <maven.compiler.target>25</maven.compiler.target>
+        <maven.compiler.release>25</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <java.version>25</java.version>
+        <spring-boot.version>4.1.0</spring-boot.version>
+        <spring-kafka.version>4.0.0</spring-kafka.version>
+        <grpc.version>1.70.0</grpc.version>
+        <protobuf.version>3.25.5</protobuf.version>
+        <resilience4j.version>2.3.0</resilience4j.version>
+        <micrometer.version>1.14.0</micrometer.version>
+        <opentelemetry.version>1.44.0</opentelemetry.version>
+        <flyway.version>11.0.0</flyway.version>
+        <jooq.version>3.19.15</jooq.version>
+        <spring-data-jdbc.version>4.0.0</spring-data-jdbc.version>
+        <mysql-connector.version>9.0.0</mysql-connector.version>
+        <testcontainers.version>1.20.4</testcontainers.version>
+        <archunit.version>1.3.0</archunit.version>
+        <junit-jupiter.version>5.11.0</junit-jupiter.version>
+        <assertj.version>3.26.3</assertj.version>
+        <mockito.version>5.14.2</mockito.version>
+        <bcrypt.version>0.10.2</bcrypt.version>
+        <nimbus-jose-jwt.version>9.41.2</nimbus-jose-jwt.version>
+        <hypersistence-utils.version>3.9.0</hypersistence-utils.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.familya.platform</groupId>
+                <artifactId>familya-platform-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.familya.platform</groupId>
+                <artifactId>familya-platform-grpc-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.familya.platform</groupId>
+                <artifactId>familya-platform-outbox-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.familya.platform</groupId>
+                <artifactId>familya-platform-resilience-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.familya.platform</groupId>
+                <artifactId>familya-platform-observability-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.familya.platform</groupId>
+                <artifactId>familya-platform-security-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring-boot.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.13.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.flywaydb</groupId>
+                    <artifactId>flyway-maven-plugin</artifactId>
+                    <version>${flyway.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.jooq</groupId>
+                    <artifactId>jooq-codegen-maven</artifactId>
+                    <version>${jooq.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>com.google.cloud.tools</groupId>
+                    <artifactId>jib-maven-plugin</artifactId>
+                    <version>3.4.4</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.xrangler</groupId>
+                    <artifactId>protoc-jar-maven-plugin</artifactId>
+                    <version>3.11.4</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>

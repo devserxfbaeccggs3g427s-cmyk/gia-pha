@@ -1,0 +1,25 @@
+# Redaction fixtures (sanitised)
+# Used by Audit & Operations projection tests to prove PII removal.
+input:
+  payload: |
+    {
+      "userId": "11111111-1111-1111-1111-111111111111",
+      "email": "[email protected]",
+      "phone": "+84-901-234-567",
+      "address": "1 Le Loi, Da Nang",
+      "reason": "user.requested.exported.data"
+    }
+expected:
+  payload: |
+    {
+      "userId": "11111111-1111-1111-1111-111111111111",
+      "emailSha256": "5e9b…",
+      "phoneSha256": "9b4f…",
+      "addressRemoved": true,
+      "reason": "user.requested.exported.data"
+    }
+rules:
+  - replaceEmailWithSha256: true
+  - replacePhoneWithSha256: true
+  - removeAddress: true
+  - keepUserIdHashStable: true
