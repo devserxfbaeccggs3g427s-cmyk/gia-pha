@@ -64,37 +64,37 @@ All tasks are intentionally unchecked. Execute in dependency order. No task in t
   - **Acceptance:** golden auth contracts pass; duplicate identity races are constraint-safe; tokens do not persist in browser storage/logs; tests prove exactly one identity writer and exact reconciliation
   - _Requirements: 5, 9.4, 10.6_
 
-- [ ] 6. Implement Tree Access Service and authorization projection contract
-  - [ ] 6.1 Implement tree lifecycle, ownership, membership, roles, owner-admin invariant, and authoritative revision/epoch
-  - [ ] 6.2 Publish ordered tree/membership/revision events by `treeId`
-  - [ ] 6.3 Provide deadline-bound emergency authorization lookup
-  - [ ] 6.4 Build a reusable projection protocol/SDK for version, freshness, replay, and reconciliation without shared business models
-  - [ ] 6.5 Verify revocation propagation, deny-on-stale mutation, fail-closed sensitive reads, and owner immutability
+- [x] 6. Implement Tree Access Service and authorization projection contract
+  - [x] 6.1 Implement tree lifecycle, ownership, membership, roles, owner-admin invariant, and authoritative revision/epoch
+  - [x] 6.2 Publish ordered tree/membership/revision events by `treeId`
+  - [x] 6.3 Provide deadline-bound emergency authorization lookup
+  - [x] 6.4 Build a reusable projection protocol/SDK for version, freshness, replay, and reconciliation without shared business models
+  - [x] 6.5 Verify revocation propagation, deny-on-stale mutation, fail-closed sensitive reads, and owner immutability
   - **Acceptance:** role-by-operation and IDOR matrices pass; stale/missing projections never fail open; revocation objective and alerts pass under Kafka delay/outage
   - _Requirements: 6, 10.6_
 
-- [ ] 7. Implement Member Service
-  - [ ] 7.1 Implement profile CRUD, validation, tombstones, legacy avatar fallback, duplicate detection, and internal merge
-  - [ ] 7.2 Consume membership projection and expose member/tombstone events
-  - [ ] 7.3 Add migration loader, reconciliation endpoint, outbox/inbox, and independent deploy/rollback
-  - [ ] 7.4 Verify optimistic concurrency, parity corpus, stale authorization, replay, and database isolation
+- [x] 7. Implement Member Service
+  - [x] 7.1 Implement profile CRUD, validation, tombstones, legacy avatar fallback, duplicate detection, and internal merge
+  - [x] 7.2 Consume membership projection and expose member/tombstone events
+  - [x] 7.3 Add migration loader, reconciliation endpoint, outbox/inbox, and independent deploy/rollback
+  - [x] 7.4 Verify optimistic concurrency, parity corpus, stale authorization, replay, and database isolation
   - **Acceptance:** member golden/property tests pass; duplicates/replays do not duplicate effects; tombstoned members stay hidden; service independently rolls back
   - _Requirements: 1, 6, 7.1, 9_
 
-- [ ] 8. Implement Relationship Service
-  - [ ] 8.1 Implement relationship CRUD, canonical logical keys, local unique constraints, cycle validation, and genealogy algorithms
-  - [ ] 8.2 Serialize graph commands by `treeId` partition and aggregate version
-  - [ ] 8.3 Consume membership and member/tombstone projections
-  - [ ] 8.4 Add migration loader, reconciliation endpoint, outbox/inbox, and independent deploy/rollback
-  - [ ] 8.5 Verify concurrent cycle prevention, duplicate/reorder/gap handling, algorithm parity, and hot-partition behavior
+- [x] 8. Implement Relationship Service
+  - [x] 8.1 Implement relationship CRUD, canonical logical keys, local unique constraints, cycle validation, and genealogy algorithms
+  - [x] 8.2 Serialize graph commands by `treeId` partition and aggregate version
+  - [x] 8.3 Consume membership and member/tombstone projections
+  - [x] 8.4 Add migration loader, reconciliation endpoint, outbox/inbox, and independent deploy/rollback
+  - [x] 8.5 Verify concurrent cycle prevention, duplicate/reorder/gap handling, algorithm parity, and hot-partition behavior
   - **Acceptance:** adversarial graph tests preserve acyclicity and deterministic results without cross-service locks or transactions
   - _Requirements: 3, 6, 7.2, 9_
 
-- [ ] 9. Implement Event Service
-  - [ ] 9.1 Implement event CRUD, recurrence, deterministic ordering, and local member/media references
-  - [ ] 9.2 Consume membership, member, and media projections and reconcile dangling references
-  - [ ] 9.3 Add migration loader, reconciliation endpoint, outbox/inbox, and independent deploy/rollback
-  - [ ] 9.4 Verify leap-day parity, tombstone handling, stale projections, and event replay
+- [x] 9. Implement Event Service
+  - [x] 9.1 Implement event CRUD, recurrence, deterministic ordering, and local member/media references
+  - [x] 9.2 Consume membership, member, and media projections and reconcile dangling references
+  - [x] 9.3 Add migration loader, reconciliation endpoint, outbox/inbox, and independent deploy/rollback
+  - [x] 9.4 Verify leap-day parity, tombstone handling, stale projections, and event replay
   - **Acceptance:** event fixtures pass; cross-domain references use no foreign keys; projection lag cannot expose invalid active links
   - _Requirements: 1, 3, 6, 7.3, 9_
 

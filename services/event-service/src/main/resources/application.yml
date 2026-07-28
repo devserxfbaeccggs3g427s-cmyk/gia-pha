@@ -10,7 +10,12 @@ spring:
 
 familya:
   outbox:
-    relay: { enabled: false, interval-ms: 500 }
-  grpc:
-    server: { enabled: false, port: 9090 }
-  kafka: { partitions: 12, replication-factor: 3 }
+    relay:
+      enabled: true
+      interval-ms: 500
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true

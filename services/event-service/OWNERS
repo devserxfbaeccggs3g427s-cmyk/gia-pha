@@ -2,3 +2,6 @@ name: event-service
 team: event
 slack: "#familya-event"
 oncall: event-oncall@example.com
+runbooks:
+  - ../../infra/runbooks/event-leap-day.md
+  - ../../infra/runbooks/event-dangling-reference.md
