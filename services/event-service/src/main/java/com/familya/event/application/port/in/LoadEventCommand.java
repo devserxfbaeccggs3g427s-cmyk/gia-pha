@@ -1,7 +1,7 @@
 package com.familya.event.application.port.in;
 
 import com.familya.event.domain.model.DomainEvent;
-import com.familya.event.domain.recurrence.RecurrenceRule;
+import com.familya.event.domain.model.RecurrenceRule;
 
 import java.time.LocalDate;
 import java.util.List;

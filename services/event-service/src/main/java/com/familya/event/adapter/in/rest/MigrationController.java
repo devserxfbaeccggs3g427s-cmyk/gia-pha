@@ -3,7 +3,7 @@ package com.familya.event.adapter.in.rest;
 import com.familya.event.application.port.in.LoadEventCommand;
 import com.familya.event.application.usecase.LoadEventUseCase;
 import com.familya.event.domain.model.DomainEvent;
-import com.familya.event.domain.recurrence.RecurrenceRule;
+import com.familya.event.domain.model.RecurrenceRule;
 import com.familya.platform.api.AsyncOperation;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;

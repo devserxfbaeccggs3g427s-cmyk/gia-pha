@@ -1,31 +1,29 @@
 package com.familya.platform.kafka;
 
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.kafka.annotation.KafkaListenerConfigurer;
-import org.springframework.kafka.config.KafkaListenerContainerFactory;
-import org.springframework.kafka.config.KafkaListenerEndpointRegistrar;
-import org.springframework.kafka.config.MethodKafkaListenerEndpoint;
-import org.springframework.kafka.core.ConsumerFactory;
-import org.springframework.kafka.listener.DefaultErrorHandler;
-import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
-import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
-import org.springframework.kafka.support.serializer.JsonDeserializer;
-import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.clients.producer.ProducerFactory;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.kafka.annotation.KafkaListenerConfigurer;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.config.KafkaListenerContainerFactory;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistrar;
+import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
+import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
+import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.util.backoff.FixedBackOff;
 
-import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -35,6 +33,11 @@ import java.util.Map;
  * routes the failed record to {@code <topic>.dlq}. Consumers SHOULD
  * declare an idempotency key (typically {@code event_id}) to make
  * replays safe.
+ *
+ * <p>Spring Boot 4 removed the {@code KafkaProperties} autoconfig
+ * class; we therefore read {@code spring.kafka.bootstrap-servers} and
+ * related properties directly from the {@link Environment} and merge
+ * them with the deserializer defaults required by the platform.</p>
  */
 @Configuration
 public class KafkaConsumerConfig implements KafkaListenerConfigurer {
@@ -44,19 +47,25 @@ public class KafkaConsumerConfig implements KafkaListenerConfigurer {
     @Value("${spring.application.name:unknown}")
     private String serviceName;
 
-    @Autowired
-    private KafkaProperties properties;
+    private final Environment environment;
 
-    @Autowired(required = false)
-    private ProducerFactory<Object, Object> producerFactory;
+    public KafkaConsumerConfig(Environment environment) {
+        this.environment = environment;
+    }
 
     @Bean
     public ConsumerFactory<String, Object> consumerFactory() {
-        Map<String, Object> cfg = new HashMap<>(properties.buildConsumerProperties());
+        Map<String, Object> cfg = new HashMap<>();
+        copyIfPresent("spring.kafka.bootstrap-servers", ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, cfg);
+        copyIfPresent("spring.kafka.consumer.group-id", ConsumerConfig.GROUP_ID_CONFIG, cfg);
+        copyIfPresent("spring.kafka.consumer.auto-offset-reset", ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, cfg);
+        copyIfPresent("spring.kafka.consumer.max-poll-records", ConsumerConfig.MAX_POLL_RECORDS_CONFIG, cfg);
+        copyIfPresent("spring.kafka.consumer.key-deserializer", ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, cfg);
+        copyIfPresent("spring.kafka.consumer.value-deserializer", ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, cfg);
+
         cfg.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
         cfg.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
-        cfg.put(ErrorHandlingDeserializer.KEY_DESERIALIZER_CLASS,
-                org.apache.kafka.common.serialization.StringDeserializer.class);
+        cfg.put(ErrorHandlingDeserializer.KEY_DESERIALIZER_CLASS, StringDeserializer.class);
         cfg.put(ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS, JsonDeserializer.class);
         cfg.put(JsonDeserializer.TRUSTED_PACKAGES, "com.familya.*,com.familya.platform.*");
         cfg.put(JsonDeserializer.USE_TYPE_INFO_HEADERS, false);
@@ -65,14 +74,18 @@ public class KafkaConsumerConfig implements KafkaListenerConfigurer {
     }
 
     @Bean
-    public KafkaListenerContainerFactory<?> kafkaListenerContainerFactory() {
+    public KafkaListenerContainerFactory<?> kafkaListenerContainerFactory(
+            org.springframework.beans.factory.ObjectProvider<ProducerFactory<?, ?>> producerFactory) {
         ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory());
         factory.setConcurrency(3);
         factory.getContainerProperties().setObservationEnabled(true);
-        if (producerFactory != null) {
+        ProducerFactory<?, ?> pf = producerFactory.getIfAvailable();
+        if (pf != null) {
+            @SuppressWarnings({"unchecked", "rawtypes"})
+            ProducerFactory<Object, Object> typedPf = (ProducerFactory) pf;
             DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(
-                    new KafkaTemplate<>(producerFactory),
+                    new KafkaTemplate<>(typedPf),
                     (record, ex) -> new TopicPartition(record.topic() + ".dlq", record.partition()));
             DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, new FixedBackOff(1000L, 3));
             factory.setCommonErrorHandler(errorHandler);
@@ -104,5 +117,12 @@ public class KafkaConsumerConfig implements KafkaListenerConfigurer {
     private static String headerString(ConsumerRecord<?, ?> record, String name) {
         var h = record.headers().lastHeader(name);
         return h == null ? null : new String(h.value());
+    }
+
+    private void copyIfPresent(String propertyKey, String kafkaKey, Map<String, Object> target) {
+        String value = environment.getProperty(propertyKey);
+        if (value != null && !value.isBlank()) {
+            target.put(kafkaKey, value);
+        }
     }
 }

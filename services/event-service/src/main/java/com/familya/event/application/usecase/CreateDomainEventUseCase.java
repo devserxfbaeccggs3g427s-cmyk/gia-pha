@@ -8,7 +8,7 @@ import com.familya.event.application.port.out.ReferenceAvailability;
 import com.familya.event.domain.event.EventCreated;
 import com.familya.event.domain.exception.DanglingReferenceException;
 import com.familya.event.domain.model.DomainEvent;
-import com.familya.event.domain.recurrence.RecurrenceRule;
+import com.familya.event.domain.model.RecurrenceRule;
 import com.familya.platform.error.ForbiddenException;
 import com.familya.platform.error.StaleProjectionException;
 import com.familya.platform.telemetry.PlatformMetrics;

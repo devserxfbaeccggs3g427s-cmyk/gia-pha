@@ -39,7 +39,6 @@ public class TracingClientInterceptor implements ClientInterceptor {
     }
 
     private static String headerOrNew(Metadata.Key<String> key) {
-        String existing = io.grpc.Context.current().getKey(ContextKeys.HEADER_KEYS.getOrDefault(key, key));
-        return existing != null ? existing : UUID.randomUUID().toString();
+        return UUID.randomUUID().toString();
     }
 }

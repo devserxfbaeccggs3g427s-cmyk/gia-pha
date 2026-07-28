@@ -70,7 +70,7 @@ public class AuthorizeUseCase {
             throw new StaleProjectionException(
                     "Projection revision " + p.revision() + " < expected " + expectedRevision);
         }
-        Instant age = Duration.between(p.lastUpdatedAt(), Instant.now());
+        Duration age = Duration.between(p.lastUpdatedAt(), Instant.now());
         if (age.compareTo(freshnessThreshold) > 0 && p.role() != null && p.role().canEdit()) {
             // Stale-by-freshness: only unsafe mutations must fail closed.
             // We surface stale for edit roles and let the caller decide.

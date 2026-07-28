@@ -13,12 +13,12 @@ public record RecurrenceRule(Frequency frequency, int interval, Termination term
 
     public enum Frequency { DAILY, WEEKLY, MONTHLY, YEARLY }
 
-    public sealed interface Termination permits Termination.Count, Termination.Until { }
+    public sealed interface Termination permits RecurrenceRule.Count, RecurrenceRule.Until { }
 
-    public record Count(int count) implements Termination {
+    public record Count(int count) implements RecurrenceRule.Termination {
         public Count { if (count < 1) throw new IllegalArgumentException("count must be >= 1"); }
     }
-    public record Until(LocalDate until) implements Termination {
+    public record Until(LocalDate until) implements RecurrenceRule.Termination {
         public Until { Objects.requireNonNull(until); }
     }
 
@@ -42,8 +42,8 @@ public record RecurrenceRule(Frequency frequency, int interval, Termination term
 
     public boolean isTerminated(LocalDate current) {
         return switch (termination) {
-            case Count c -> false; // count-based; caller tracks iteration
-            case Until u -> !current.isBefore(u.until());
+            case RecurrenceRule.Count c -> false; // count-based; caller tracks iteration
+            case RecurrenceRule.Until u -> !current.isBefore(u.until());
         };
     }
 
