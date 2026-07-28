@@ -6,6 +6,18 @@
     <version>1.0.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>Family Tree — audit-ops-service</name>
+    <description>
+        Audit &amp; Operations service. Owns the operation registry
+        ({@code operation_audit} projection), the shared Saga state-machine
+        primitives, the append-only audit log, and the operator retry
+        surface. It MUST NOT own business or authorization authority
+        (ADR-003 / ADR-007 / Task 13 of the migration spec).
+    </description>
+
+    <properties>
+        <service.name>audit-ops-service</service.name>
+    </properties>
+
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -15,29 +27,59 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-
         </dependencies>
     </dependencyManagement>
+
     <dependencies>
-        <dependency><groupId>com.familya.platform</groupId><artifactId>familya-platform-spring-boot-starter</artifactId></dependency>
-        <dependency><groupId>com.familya.platform</groupId><artifactId>familya-platform-outbox-starter</artifactId></dependency>
-        <dependency><groupId>com.familya.platform</groupId><artifactId>familya-platform-security-starter</artifactId></dependency>
-        <dependency><groupId>com.familya.platform</groupId><artifactId>familya-platform-observability-starter</artifactId></dependency>
-        <dependency><groupId>com.familya.platform</groupId><artifactId>familya-platform-resilience-starter</artifactId></dependency>
-        <dependency><groupId>com.familya.platform</groupId><artifactId>familya-platform-grpc-starter</artifactId></dependency>
-        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+        <dependency>
+            <groupId>com.familya.platform</groupId>
+            <artifactId>familya-platform-spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.familya.platform</groupId>
+            <artifactId>familya-platform-outbox-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.familya.platform</groupId>
+            <artifactId>familya-platform-security-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.familya.platform</groupId>
+            <artifactId>familya-platform-observability-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.familya.platform</groupId>
+            <artifactId>familya-platform-resilience-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.familya.platform</groupId>
+            <artifactId>familya-platform-grpc-starter</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>com.tngtech.archunit</groupId>
             <artifactId>archunit-junit5</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
+
     <build>
         <finalName>${project.artifactId}</finalName>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.familya.auditops.AuditOpsServiceApplication</mainClass>
+                    <image>
+                        <name>ghcr.io/familya/${project.artifactId}</name>
+                    </image>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.flywaydb</groupId>
@@ -54,7 +96,6 @@
                     <release>25</release>
                 </configuration>
             </plugin>
-
         </plugins>
     </build>
 </project>

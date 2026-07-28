@@ -5,6 +5,8 @@ image:
   repository: ghcr.io/familya/audit-ops-service
   digest: REPLACE_WITH_SIGNED_DIGEST
   pullPolicy: IfNotPresent
+serviceAccount:
+  name: audit-ops-workload
 env:
   - name: SPRING_PROFILES_ACTIVE
     value: prod
@@ -14,8 +16,69 @@ env:
     value: audit-ops
   - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
     value: familya-example.kafka.example.com:9092
-serviceAccount:
-  name: audit-ops-workload
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
 keda:
   enabled: true
   lagThreshold: "50"
+podDisruptionBudget:
+  minAvailable: 1
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: audit-ops-service
+networkPolicy:
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: familya-gateway
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 9090
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: familya-kafka
+      ports:
+        - protocol: TCP
+          port: 9092
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: familya-mysql
+      ports:
+        - protocol: TCP
+          port: 3306
+probes:
+  liveness:
+    path: /actuator/health/liveness
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  readiness:
+    path: /actuator/health/readiness
+    initialDelaySeconds: 10
+    periodSeconds: 5
+service:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: grpc
+      port: 9090
+      targetPort: 9090
+metrics:
+  enabled: true
+  path: /actuator/prometheus

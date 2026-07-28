@@ -5,12 +5,42 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/auditops?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
     username: ${SPRING_DATASOURCE_USERNAME:familya}
     password: ${SPRING_DATASOURCE_PASSWORD:familya}
+  jpa:
+    open-in-view: false
   flyway:
     locations: classpath:db/migration
 
 familya:
   outbox:
-    relay: { enabled: false, interval-ms: 500 }
+    relay:
+      enabled: true
+      interval-ms: 500
   grpc:
-    server: { enabled: false, port: 9090 }
+    server:
+      enabled: true
+      port: 9090
   kafka: { partitions: 12, replication-factor: 3 }
+  auditops:
+    saga:
+      max-attempts: 5
+      retry-base-ms: 500
+      retry-max-ms: 30000
+    operator:
+      admin-roles: AUDIT_OPERATOR,PLATFORM
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+logging:
+  level:
+    com.familya.auditops: INFO
+    com.familya.platform: INFO
