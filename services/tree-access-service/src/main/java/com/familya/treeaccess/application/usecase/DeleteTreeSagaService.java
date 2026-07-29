@@ -11,7 +11,6 @@ import com.familya.treeaccess.domain.exception.TreeNotFoundException;
 import com.familya.treeaccess.domain.model.DeleteTreeSagaState;
 import com.familya.treeaccess.domain.model.DeleteTreeSagaStep;
 import com.familya.treeaccess.domain.model.Tree;
-import com.familya.treeaccess.domain.model.AuthorizationProjection;
 import com.familya.platform.error.ForbiddenException;
 import com.familya.platform.error.OptimisticConcurrencyException;
 import com.familya.platform.telemetry.PlatformMetrics;
@@ -68,7 +67,7 @@ public class DeleteTreeSagaService {
         if (tree.isTombstoned()) {
             throw new OptimisticConcurrencyException("Tree " + tree.id() + " is already tombstoned");
         }
-        requireOwnerOrAdmin(tree, cmd.actingUser());
+        requireOwner(tree, cmd.actingUser());
 
         Instant now = clock.now();
         UUID operationId = UUID.randomUUID();
@@ -123,18 +122,13 @@ public class DeleteTreeSagaService {
         return operationId;
     }
 
-    private void requireOwnerOrAdmin(Tree tree, UUID userId) {
+    private void requireOwner(Tree tree, UUID userId) {
         if (userId == null) {
             throw new ForbiddenException("Missing acting user");
         }
-        if (tree.ownerUserId().equals(userId)) return;
-        AuthorizationProjection projection = treeRepo.findProjection(tree.id(), userId)
-                .orElseThrow(() -> new ForbiddenException(
-                        "User " + userId + " has no membership on tree " + tree.id()));
-        if (projection.revoked() || projection.role() == null
-                || !projection.role().grantsMembership()) {
+        if (!tree.ownerUserId().equals(userId)) {
             throw new ForbiddenException(
-                    "User " + userId + " lacks ADMIN on tree " + tree.id());
+                    "User " + userId + " is not the owner of tree " + tree.id());
         }
     }
 
