@@ -36,13 +36,15 @@ message OperationStateChanged {
   string schema_version = 9;
 }
 
+// Mirrors the public `AsyncOperation.status` enum in
+// contracts/api/v2/openapi.yaml exactly; keep the two in sync.
 enum OperationState {
   OPERATION_STATE_UNSPECIFIED = 0;
   OPERATION_STATE_PENDING        = 1;
-  OPERATION_STATE_DISPATCHED     = 2;
+  OPERATION_STATE_RUNNING        = 2;
   OPERATION_STATE_COMPENSATING   = 3;
   OPERATION_STATE_SUCCEEDED      = 4;
   OPERATION_STATE_FAILED         = 5;
   OPERATION_STATE_MANUAL_REVIEW  = 6;
-  OPERATION_STATE_CANCELLED      = 7;
+  OPERATION_STATE_COMPENSATED    = 7;
 }
