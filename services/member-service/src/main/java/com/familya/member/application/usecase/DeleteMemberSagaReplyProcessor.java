@@ -56,8 +56,11 @@ public class DeleteMemberSagaReplyProcessor {
         }
 
         List<DeleteMemberSagaStep> steps = sagaRepo.listSteps(cmd.operationId());
+        // The step row always stores the forward stepCode, but a compensation
+        // reply carries the compensation stepCode (see
+        // OutboxDeleteMemberSagaGateway#compensationStepCode), so match on the
+        // participant service alone rather than stepCode equality.
         DeleteMemberSagaStep current = steps.stream()
-                .filter(s -> s.stepCode().equals(cmd.stepCode()))
                 .filter(s -> s.participantService().equals(cmd.participantService()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException(
