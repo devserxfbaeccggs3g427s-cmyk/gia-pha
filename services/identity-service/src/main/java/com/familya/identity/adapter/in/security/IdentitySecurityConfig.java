@@ -1,8 +1,8 @@
 package com.familya.identity.adapter.in.security;
 
 import com.familya.identity.application.port.out.IdentityRepository;
-import com.familya.platform.security.BridgeTokenIssuer;
-import com.nimbusds.jwt.SignedJWT;
+import com.familya.platform.security.BridgeTokenVerifier;
+import com.nimbusds.jwt.JWTClaimsSet;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,14 +14,17 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.UUID;
 
 @Configuration
@@ -50,13 +53,15 @@ class SessionAuthenticationFilter extends OncePerRequestFilter {
     private static final Logger LOG = LoggerFactory.getLogger(SessionAuthenticationFilter.class);
 
     private final IdentityRepository repo;
-    private final BridgeTokenIssuer bridge;
+    private final BridgeTokenVerifier bridge;
     private final boolean bridgeRequired;
 
     public SessionAuthenticationFilter(IdentityRepository repo,
+                                       @Value("${familya.identity.bridge.jwks-uri}") String bridgeJwksUri,
+                                       @Value("${familya.identity.bridge.audience:familya}") String bridgeAudience,
                                        @Value("${familya.identity.bridge.required:true}") boolean bridgeRequired) throws Exception {
         this.repo = repo;
-        this.bridge = new BridgeTokenIssuer("familya", 300L);
+        this.bridge = new BridgeTokenVerifier(bridgeJwksUri, bridgeAudience);
         this.bridgeRequired = bridgeRequired;
     }
 
@@ -73,13 +78,11 @@ class SessionAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
         try {
-            if (!bridge.verify(token)) {
-                unauthorized(response, "bridge token invalid");
-                return;
-            }
-            SignedJWT jwt = SignedJWT.parse(token);
-            UUID userId = UUID.fromString(jwt.getJWTClaimsSet().getSubject());
+            JWTClaimsSet claims = bridge.verify(token);
+            UUID userId = UUID.fromString(claims.getSubject());
             request.setAttribute("familya.principal", userId);
+            SecurityContextHolder.getContext().setAuthentication(
+                    UsernamePasswordAuthenticationToken.authenticated(userId, null, List.of()));
         } catch (Exception e) {
             LOG.debug("Bridge token validation failed", e);
             unauthorized(response, "bridge token malformed");
