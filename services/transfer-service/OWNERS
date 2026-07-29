@@ -1,0 +1,4 @@
+name: transfer-service
+team: transfer
+slack: "#familya-transfer"
+oncall: transfer-oncall@example.com

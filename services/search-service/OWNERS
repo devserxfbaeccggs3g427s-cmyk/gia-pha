@@ -1,0 +1,4 @@
+name: search-service
+team: search
+slack: "#familya-search"
+oncall: search-oncall@example.com

@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package com.familya.contracts.saga.v1;
+
+import "saga_common.proto";
+
+option java_multiple_files = true;
+option java_package = "com.familya.contracts.saga.v1";
+option java_outer_classname = "DeleteMemberSagaProto";
+
+// Forward Saga commands emitted by the Member Service during delete-member Saga.
+// Each step's recipient service is implicit by the oneof field.
+message DeleteMemberSagaCommand {
+  SagaEnvelope envelope = 1;
+  string member_id = 2;
+
+  oneof step {
+    TombstoneMemberStep            tombstone_member            = 10;
+    DisableMemberRelationshipsStep  disable_relationships      = 11;
+    DetachMemberEventReferencesStep detach_event_references    = 12;
+    DetachMemberMediaReferencesStep detach_media_references    = 13;
+    AdvanceDeleteMemberRevisionStep advance_delete_member_rev  = 14;
+  }
+}
+
+// Step 1: tombstone the member in its owning service.
+message TombstoneMemberStep {
+  int64 expected_aggregate_version = 1;
+  string reason = 2;
+}
+
+// Step 2: disable every active edge in/out of the member.
+message DisableMemberRelationshipsStep {
+  repeated string relationship_ids = 1; // optional hint; recipient is authoritative
+}
+
+// Step 3: remove the member from primary/additional references in events.
+message DetachMemberEventReferencesStep {
+  repeated string event_ids = 1;
+}
+
+// Step 4: detach MEMBER-kind associations in the Media service.
+message DetachMemberMediaReferencesStep {
+  repeated string media_ids = 1;
+}
+
+// Step 5: Tree Access advances authoritative revision for the tree.
+message AdvanceDeleteMemberRevisionStep {
+  int64 expected_tree_version = 1;
+  string reason = 2;
+}
+
+// Compensation commands emitted in reverse order on Saga failure.
+message DeleteMemberSagaCompensation {
+  SagaEnvelope envelope = 1;
+  string member_id = 2;
+
+  oneof step {
+    RestoreMemberVisibilityStep          restore_member           = 10;
+    RestoreMemberRelationshipsStep       restore_relationships    = 11;
+    RestoreMemberEventReferencesStep     restore_event_references = 12;
+    RestoreMemberMediaReferencesStep     restore_media_references = 13;
+  }
+}
+
+message RestoreMemberVisibilityStep {
+  int64 expected_aggregate_version = 1;
+}
+
+message RestoreMemberRelationshipsStep {
+  repeated string relationship_ids = 1;
+  int64 expected_aggregate_version = 2;
+}
+
+message RestoreMemberEventReferencesStep {
+  repeated string event_ids = 1;
+}
+
+message RestoreMemberMediaReferencesStep {
+  repeated string media_ids = 1;
+}

@@ -1,0 +1,22 @@
+name: identity-service
+on:
+  push:
+    paths: [services/identity-service/**, platform/starters/**]
+  pull_request:
+    paths: [services/identity-service/**, platform/starters/**]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '25' }
+      - name: Build
+        run: mvn -B -ntp -f services/identity-service/pom.xml -DskipTests package
+      - name: ArchUnit
+        run: mvn -B -ntp -f services/identity-service/pom.xml -Dtest=ArchitectureTest test
+      - name: Build OCI image
+        run: mvn -B -ntp -f services/identity-service/pom.xml jib:build
+      - name: Sign image (cosign)
+        run: |
+          cosign sign --yes ghcr.io/familya/identity-service:${{ github.sha }}

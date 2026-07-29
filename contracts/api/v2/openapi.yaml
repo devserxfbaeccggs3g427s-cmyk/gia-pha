@@ -1,0 +1,222 @@
+openapi: 3.0.3
+info:
+  title: Family Tree Gateway — V2
+  version: "2.0.0"
+  description: |
+    V2 Gateway contract for the Family Tree platform. The Gateway retains
+    the public `/api/**` routes during strangler migration but **does not
+    preserve** legacy synchronous-success semantics for cross-service
+    mutations. Every cross-service mutation returns the
+    `202 Accepted` envelope defined in `AsyncOperation` and must be
+    polled via `GET /api/v2/operations/{operationId}`.
+  contact:
+    name: Family Tree Platform Team
+servers:
+  - url: https://api.example.com
+    description: Production
+  - url: https://api.staging.example.com
+    description: Staging
+security:
+  - identitySession: []
+tags:
+  - name: Operations
+    description: Async operation polling
+  - name: Identity
+    description: Identity service facade
+  - name: TreeAccess
+    description: Tree access / membership facade
+  - name: Members
+    description: Member service facade
+  - name: Relationships
+    description: Relationship service facade
+  - name: Events
+    description: Event service facade
+  - name: Media
+    description: Media and album service facade
+  - name: Sharing
+    description: Public sharing facade
+  - name: Search
+    description: Search and reporting facade
+  - name: Transfer
+    description: Import / export / snapshot / restore
+paths:
+  /api/v2/operations/{operationId}:
+    get:
+      tags: [Operations]
+      summary: Poll an async operation
+      operationId: getOperation
+      parameters:
+        - $ref: '#/components/parameters/OperationId'
+      responses:
+        '200':
+          description: Operation status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncOperation'
+              examples:
+                pending:
+                  value: { operationId: 11111111-1111-1111-1111-111111111111, status: PENDING, statusUrl: /api/v2/operations/11111111-1111-1111-1111-111111111111 }
+                running:
+                  value: { operationId: 11111111-1111-1111-1111-111111111111, status: RUNNING, statusUrl: /api/v2/operations/11111111-1111-1111-1111-111111111111 }
+                succeeded:
+                  value: { operationId: 11111111-1111-1111-1111-111111111111, status: SUCCEEDED, statusUrl: /api/v2/operations/11111111-1111-1111-1111-111111111111, result: { treeRevision: 42 } }
+                failed:
+                  value: { operationId: 11111111-1111-1111-1111-111111111111, status: FAILED, statusUrl: /api/v2/operations/11111111-1111-1111-1111-111111111111, error: { code: "validation.failed", message: "Cycle detected in relationship graph", traceId: "0af7651916cd43dd8448eb211c80319c" } }
+                manualReview:
+                  value: { operationId: 11111111-1111-1111-1111-111111111111, status: MANUAL_REVIEW, statusUrl: /api/v2/operations/11111111-1111-1111-1111-111111111111 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v2/identity/sessions:
+    post:
+      tags: [Identity]
+      summary: Start a session (NextAuth bridge → Identity Service)
+      operationId: startSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StartSessionRequest' }
+      responses:
+        '200':
+          description: Session created; opaque cookie set
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+              description: HttpOnly, Secure, SameSite=Lax session cookie
+        '202':
+          description: Asynchronous operation accepted (verification flow)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AsyncOperation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      security: []
+  /api/v2/identity/sessions/current:
+    delete:
+      tags: [Identity]
+      summary: Revoke the current session
+      operationId: revokeCurrentSession
+      responses:
+        '204': { description: Session revoked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v2/trees/{treeId}/members:
+    parameters:
+      - $ref: '#/components/parameters/TreeId'
+    post:
+      tags: [Members]
+      summary: Create a member (cross-service mutation)
+      operationId: createMember
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateMemberRequest' }
+      responses:
+        '202':
+          description: Accepted as an async operation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AsyncOperation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ExpectedVersion'
+components:
+  securitySchemes:
+    identitySession:
+      type: apiKey
+      in: cookie
+      name: identity-session
+  parameters:
+    OperationId:
+      name: operationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TreeId:
+      name: treeId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: { type: string, maxLength: 128 }
+      description: |
+        Stable client-generated key. The Gateway records the first
+        payload hash and returns the recorded response on reuse. A
+        different payload with the same key returns 409.
+    ExpectedVersion:
+      name: If-Match
+      in: header
+      required: false
+      schema: { type: string }
+      description: Aggregate version (ETag) used for optimistic concurrency.
+  responses:
+    BadRequest:
+      description: Validation failed
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthorized:
+      description: Missing or invalid session
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Forbidden:
+      description: RBAC denied or projection stale
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Resource missing
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: Idempotency-key reuse with different payload, or version conflict
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    AsyncOperation:
+      type: object
+      required: [operationId, status, statusUrl]
+      properties:
+        operationId: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [PENDING, RUNNING, SUCCEEDED, FAILED, COMPENSATING, COMPENSATED, MANUAL_REVIEW]
+        statusUrl: { type: string }
+        result: { type: object, additionalProperties: true }
+        error: { $ref: '#/components/schemas/Error' }
+        watermarks: { type: object, additionalProperties: { type: string } }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        traceId: { type: string }
+        details: { type: object, additionalProperties: true }
+    StartSessionRequest:
+      type: object
+      required: [provider]
+      properties:
+        provider: { type: string, enum: [password, google, facebook, nextauth-bridge] }
+        nextAuthToken: { type: string, description: Short-lived asymmetric internal token from NextAuth bridge. }
+    CreateMemberRequest:
+      type: object
+      required: [displayName]
+      properties:
+        displayName: { type: string, maxLength: 200 }
+        givenName: { type: string, maxLength: 100 }
+        surname: { type: string, maxLength: 100 }
+        gender: { type: string, enum: [male, female, other, unknown] }
+        birth: { $ref: '#/components/schemas/Lifespan' }
+        death: { $ref: '#/components/schemas/Lifespan' }
+        normalizedEmail: { type: string, format: email }
+    Lifespan:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        approximate: { type: boolean, default: false }
+        place: { type: string, maxLength: 200 }

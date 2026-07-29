@@ -1,0 +1,48 @@
+# Import fixtures (sanitised)
+# Used by Transfer service to validate the cross-domain manifest
+# before any tree is frozen.
+gedcomSample: |
+  0 HEAD
+  1 SOUR FamilyTree
+  1 GEDC
+  2 VERS 5.5.1
+  2 FORM LINEAGE-LINKED
+  1 CHAR UTF-8
+  0 @I1@ INDI
+  1 NAME Nguyen /Van A/
+  1 SEX M
+  1 BIRT
+  2 DATE 1 JAN 1950
+  2 PLAC Da Nang, Vietnam
+  1 DEAT
+  2 DATE 1 JAN 2020
+  0 @I2@ INDI
+  1 NAME Nguyen /Thi B/
+  1 SEX F
+  0 @F1@ FAM
+  1 HUSB @I1@
+  1 WIFE @I2@
+  1 CHIL @I3@
+  0 @I3@ INDI
+  1 NAME Nguyen /Van C/
+  0 TRLR
+jsonSample: |
+  {
+    "members": [
+      { "externalId": "m1", "displayName": "Nguyen Van A" },
+      { "externalId": "m2", "displayName": "Nguyen Thi B" }
+    ],
+    "relationships": [
+      { "type": "spouse", "from": "m1", "to": "m2" }
+    ]
+  }
+csvSample: |
+  externalId,displayName,gender,birthDate,deathDate
+  m1,Nguyen Van A,male,1950-01-01,2020-01-01
+  m2,Nguyen Thi B,female,1952-05-05,
+manifest:
+  expectedCounts: { members: 3, relationships: 2 }
+  forbidden:
+    - crossTreeReferences
+    - duplicateExternalIds
+    - cyclicEdges

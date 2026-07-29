@@ -1,0 +1,7 @@
+name: tree-access-service
+team: treeaccess
+slack: "#familya-treeaccess"
+oncall: treeaccess-oncall@example.com
+runbooks:
+  - ../../infra/runbooks/tree-revocation.md
+  - ../../infra/runbooks/tree-frozen-recovery.md

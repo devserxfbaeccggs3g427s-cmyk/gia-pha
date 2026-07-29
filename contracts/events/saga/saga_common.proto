@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package com.familya.contracts.saga.v1;
+
+option java_multiple_files = true;
+option java_package = "com.familya.contracts.saga.v1";
+option java_outer_classname = "SagaCommonProto";
+
+// Common envelope shared by every Saga command and reply.
+// All fields are required at the wire level and validated by the platform inbox/outbox.
+message SagaEnvelope {
+  string event_id = 1;            // globally unique per published message
+  string correlation_id = 2;      // stable across the entire Saga
+  string causation_id = 3;        // immediate predecessor message id
+  string operation_id = 4;        // durable Saga/operation id owned by initiator
+  string tree_id = 5;             // partition key
+  string initiating_user_id = 6;  // user authorization was captured at initiation
+  string schema_version = 7;      // semver of the protobuf schema
+  int64  occurred_at_epoch_ms = 8;
+  string traceparent = 9;         // W3C trace context, opaque to Saga logic
+
+  // Aggregate target version. Every reply must ack >= this value to satisfy the barrier.
+  int64  target_aggregate_version = 10;
+
+  // Target epoch. Every reply must ack >= this value to satisfy the barrier.
+  int64  target_epoch = 11;
+
+  // True for compensation commands. Recipients must apply the inverse of the
+  // forward step using locally stored compensation data.
+  bool   is_compensation = 12;
+}
+
+// Outcomes reported back by a participant.
+enum SagaReplyStatus {
+  SAGA_REPLY_STATUS_UNSPECIFIED = 0;
+  SAGA_REPLY_STATUS_ACK         = 1; // applied forward step successfully
+  SAGA_REPLY_STATUS_COMPENSATED = 2; // applied compensation successfully
+  SAGA_REPLY_STATUS_FAILED      = 3; // unrecoverable failure -> manual review
+}
+
+// Per-step result reported by a participant. The orchestrator records
+// applied_aggregate_version / applied_epoch as the acknowledgement values.
+message SagaParticipantReply {
+  SagaEnvelope envelope = 1;
+  SagaReplyStatus status = 2;
+  string participant_service = 3; // "relationship-service", "media-service", ...
+  string step_code           = 4; // matches SagaStep.code
+  string failure_code        = 5; // populated when status = FAILED
+  string failure_message     = 6; // human-readable, never PII
+  int64  applied_aggregate_version = 7;
+  int64  applied_epoch = 8;
+}

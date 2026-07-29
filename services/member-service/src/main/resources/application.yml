@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: member-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/member?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME:familya}
+    password: ${SPRING_DATASOURCE_PASSWORD:familya}
+  flyway:
+    locations: classpath:db/migration
+
+familya:
+  outbox:
+    relay:
+      enabled: true
+      interval-ms: 500
+  member:
+    authz:
+      freshness-seconds: 60
+      emergency-budget-ms: 250
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true

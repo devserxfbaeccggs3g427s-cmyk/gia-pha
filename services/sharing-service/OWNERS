@@ -1,0 +1,4 @@
+name: sharing-service
+team: sharing
+slack: "#familya-sharing"
+oncall: sharing-oncall@example.com

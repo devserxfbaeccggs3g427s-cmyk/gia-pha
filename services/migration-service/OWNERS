@@ -1,0 +1,4 @@
+name: migration-service
+team: migration
+slack: "#familya-migration"
+oncall: migration-oncall@example.com

@@ -1,0 +1,29 @@
+// IdentityUserCreated — v1
+syntax = "proto3";
+
+package com.familya.events.identity.v1;
+
+option java_package = "com.familya.events.identity.v1";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+
+message IdentityUserCreated {
+  string event_id = 1;
+  google.protobuf.Timestamp occurred_at = 2;
+  string correlation_id = 3;
+  string causation_id = 4;
+  string operation_id = 5;
+  string schema_version = 6;
+
+  string user_id = 10;
+  string normalized_email = 11;
+  repeated OAuthProvider providers = 12;
+  bool verification_required = 13;
+  int32 schema_revision = 20;
+
+  message OAuthProvider {
+    string provider = 1;
+    string provider_subject = 2;
+  }
+}

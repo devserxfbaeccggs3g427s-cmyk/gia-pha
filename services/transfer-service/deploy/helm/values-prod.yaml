@@ -1,0 +1,21 @@
+name: transfer-service
+namespace: familya-transfer
+replicaCount: 2
+image:
+  repository: ghcr.io/familya/transfer-service
+  digest: REPLACE_WITH_SIGNED_DIGEST
+  pullPolicy: IfNotPresent
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: prod
+  - name: SPRING_DATASOURCE_URL
+    value: jdbc:mysql://familya-transfer.example.internal:3306/transfer?sslMode=VERIFY_CA
+  - name: SPRING_DATASOURCE_USERNAME
+    value: transfer
+  - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+    value: familya-example.kafka.example.com:9092
+serviceAccount:
+  name: transfer-workload
+keda:
+  enabled: true
+  lagThreshold: "50"

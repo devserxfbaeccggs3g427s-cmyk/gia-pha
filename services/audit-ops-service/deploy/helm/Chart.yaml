@@ -1,0 +1,17 @@
+apiVersion: v2
+name: audit-ops-service
+description: Audit & Operations service. Owns the operation registry and the shared Saga primitives.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - family-tree
+  - saga
+  - audit
+  - operations
+maintainers:
+  - name: audit-ops
+    email: audit-ops-oncall@example.com
+annotations:
+  category: Application
+  licenses: Apache-2.0

@@ -1,0 +1,29 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.name }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector: {{- toYaml .Values.networkPolicy.ingressNamespaceSelector | nindent 10 }}
+      ports:
+        - { port: 8080, protocol: TCP }
+        {{- if .Values.grpc.enabled }}
+        - { port: 9090, protocol: TCP }
+        {{- end }}
+  egress:
+    - to:
+        - namespaceSelector: { matchLabels: { name: familya-kafka } }
+      ports: [ { port: 9092, protocol: TCP } ]
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }
+      ports: [ { port: 53, protocol: UDP }, { port: 53, protocol: TCP } ]
+    - to: []
+      ports: [ { port: 443, protocol: TCP } ]
+{{- end }}

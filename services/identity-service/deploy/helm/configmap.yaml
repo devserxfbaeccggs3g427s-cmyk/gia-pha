@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: identity-service-platform
+data:
+  platform.yaml: |
+    # service-specific overrides for the platform starter
+    familya:
+      outbox:
+        relay:
+          interval-ms: 250
+      grpc:
+        server:
+          enabled: true
+          port: 9090

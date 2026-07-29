@@ -1,0 +1,24 @@
+# Recurrence fixtures (sanitised)
+# Used by Event service property tests to prove deterministic ordering
+# and leap-day behaviour.
+events:
+  - id: "e1"
+    title: "Death anniversary of Nguyen Van A"
+    type: "death-anniversary"
+    anchorDate: "2024-02-29"   # leap day
+    recurrence: "YEARLY"
+    expectedOccurrences:
+      - "2024-02-29"
+      - "2025-02-28"           # leap-day rule
+      - "2026-02-28"
+      - "2027-02-28"
+      - "2028-02-29"
+  - id: "e2"
+    title: "Family gathering"
+    type: "gathering"
+    anchorDate: "2026-01-15"
+    recurrence: "MONTHLY"
+    expectedOccurrences:
+      - "2026-01-15"
+      - "2026-02-15"
+      - "2026-03-15"

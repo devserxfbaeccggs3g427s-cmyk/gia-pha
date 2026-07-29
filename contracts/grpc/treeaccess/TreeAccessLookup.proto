@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package familya.treeaccess.v1;
+
+option java_multiple_files = true;
+option java_package = "com.familya.treeaccess.grpc.v1";
+option java_outer_classname = "TreeAccessProto";
+
+// Emergency authorization lookup used by other services when their
+// local authorization projection is missing or stale. The call MUST be
+// deadline-bound; the deadline policy is 250 ms in the calling
+// services and is enforced by Resilience4j (time limiter) on the
+// client side. The response includes the tree's current
+// revision/epoch so the caller can compare against its projection.
+
+service TreeAccessLookup {
+  // Returns the effective role for a (tree, user) pair, or NOT_FOUND
+  // if the user has no membership. The owner is always ADMIN.
+  rpc Authorize (AuthorizeRequest) returns (AuthorizeResponse);
+
+  // Returns the tree's current revision and epoch. Used by
+  // orchestrators and import/restore coordinators.
+  rpc GetTreeRevision (GetTreeRevisionRequest) returns (GetTreeRevisionResponse);
+}
+
+message AuthorizeRequest {
+  string tree_id = 1;
+  string user_id = 2;
+  int64  expected_revision = 3;
+}
+
+message AuthorizeResponse {
+  enum Outcome { UNKNOWN = 0; AUTHORIZED = 1; DENIED = 2; NOT_FOUND = 3; STALE = 4; }
+  Outcome outcome = 1;
+  string role = 2;            // "ADMIN" | "EDITOR" | "VIEWER" when AUTHORIZED
+  bool can_edit = 3;
+  bool can_view = 4;
+  int64 revision = 5;
+  int64 epoch = 6;
+  string trace_id = 7;
+}
+
+message GetTreeRevisionRequest { string tree_id = 1; }
+
+message GetTreeRevisionResponse {
+  bool found = 1;
+  int64 revision = 2;
+  int64 epoch = 3;
+  string state = 4;            // ACTIVE | FROZEN | TOMBSTONED
+}

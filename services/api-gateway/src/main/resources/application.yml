@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: api-gateway
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  flyway:
+    locations: classpath:db/migration
+
+familya:
+  outbox:
+    relay: { enabled: false, interval-ms: 500 }
+  grpc:
+    server: { enabled: false, port: 9090 }
+  kafka: { partitions: 12, replication-factor: 3 }

@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: identity-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/identity?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME:familya}
+    password: ${SPRING_DATASOURCE_PASSWORD:familya}
+  jpa:
+    open-in-view: false
+  flyway:
+    locations: classpath:db/migration
+
+familya:
+  outbox:
+    relay:
+      enabled: true
+      interval-ms: 500
+  grpc:
+    server:
+      enabled: true
+      port: 9090
+  identity:
+    verification-window-hours: 24
+    failed-attempts-limit: 5
+    lockout-window-minutes: 15
+    session-idle-minutes: 30
+    session-absolute-hours: 12
+    bridge:
+      required: true
+      audience: familya
+      jwks-uri: ${FAMILYA_BRIDGE_JWKS_URI}
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true

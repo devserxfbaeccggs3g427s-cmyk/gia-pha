@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.familya.platform</groupId>
+        <artifactId>familya-platform-bom</artifactId>
+        <version>1.0.0</version>
+        <relativePath>../bom/pom.xml</relativePath>
+    </parent>
+    <artifactId>familya-platform-resilience-starter</artifactId>
+    <name>Family Tree Platform — Resilience Starter</name>
+    <description>Resilience4j time-limiter, circuit-breaker, retry, bulkhead defaults.</description>
+    <dependencies>
+        <dependency><groupId>com.familya.platform</groupId><artifactId>familya-platform-spring-boot-starter</artifactId></dependency>
+        <dependency><groupId>io.github.resilience4j</groupId><artifactId>resilience4j-spring-boot3</artifactId></dependency>
+    </dependencies>
+</project>

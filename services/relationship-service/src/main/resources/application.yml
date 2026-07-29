@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: relationship-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/relationship?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME:familya}
+    password: ${SPRING_DATASOURCE_PASSWORD:familya}
+  flyway:
+    locations: classpath:db/migration
+
+familya:
+  outbox:
+    relay:
+      enabled: true
+      interval-ms: 500
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true

@@ -1,0 +1,20 @@
+# Vietnamese search fixtures (sanitised)
+# Used by Search service property tests to prove diacritics-insensitive
+# matching and autocomplete behaviour.
+queries:
+  - input: "nguyen"
+    matches: ["Nguyễn Văn A", "Nguyen Thi B"]
+  - input: "Nguye~n"
+    matches: ["Nguyễn Văn A", "Nguyen Thi B"]
+  - input: "tran"
+    matches: ["Trần Thị D", "Tran Van E"]
+  - input: "Pham"
+    matches: ["Phạm Văn F"]
+  - input: "phạm"
+    matches: ["Phạm Văn F"]
+rules:
+  - diacriticsInsensitive: true
+  - caseInsensitive: true
+  - whitespaceCollapsed: true
+  - maxPrefixLength: 64
+  - maxResults: 50

@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: identity-service
+  namespace: argocd
+spec:
+  project: familya
+  source:
+    repoURL: https://github.com/familya/gitops.git
+    targetRevision: main
+    path: apps/identity-service
+    helm:
+      valueFiles: [values-prod.yaml]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: familya-identity
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ServerSideApply=true]
+  revisionHistoryLimit: 10
