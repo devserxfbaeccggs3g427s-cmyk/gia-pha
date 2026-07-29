@@ -47,11 +47,12 @@ CREATE TABLE registration_attempt (
     PRIMARY KEY (ip_address, bucket_hour)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE verification_token (
+CREATE TABLE email_verification_token (
     token               CHAR(36)      NOT NULL,
     user_id             CHAR(36)      NOT NULL,
     issued_at           TIMESTAMP(6)  NOT NULL,
     expires_at          TIMESTAMP(6)  NOT NULL,
     consumed_at         TIMESTAMP(6)  NULL,
-    PRIMARY KEY (token)
+    PRIMARY KEY (token),
+    KEY ix_verification_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
