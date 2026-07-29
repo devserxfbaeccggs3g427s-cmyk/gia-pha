@@ -111,6 +111,9 @@ public class DeleteTreeSagaService {
                 tree.id(), tree.revision(), tree.epoch(),
                 operationId, "delete-tree-saga:freeze", now));
 
+        state.transitionTo(DeleteTreeSagaState.State.FREEZING, now);
+        state.transitionTo(DeleteTreeSagaState.State.TOMBSTONING, now);
+
         gateway.stageOperationStarted(state);
         gateway.stageFirstStep(state, steps.get(2)); // first participant step
         state.transitionTo(DeleteTreeSagaState.State.PURGING, now);
