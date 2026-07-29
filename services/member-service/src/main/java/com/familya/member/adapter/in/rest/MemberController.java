@@ -1,12 +1,12 @@
 package com.familya.member.adapter.in.rest;
 
 import com.familya.member.application.port.in.CreateMemberCommand;
+import com.familya.member.application.port.in.InitiateDeleteMemberCommand;
 import com.familya.member.application.port.in.MergeMembersCommand;
-import com.familya.member.application.port.in.TombstoneMemberCommand;
 import com.familya.member.application.port.in.UpdateMemberCommand;
 import com.familya.member.application.usecase.CreateMemberUseCase;
+import com.familya.member.application.usecase.DeleteMemberSagaService;
 import com.familya.member.application.usecase.MergeMembersUseCase;
-import com.familya.member.application.usecase.TombstoneMemberUseCase;
 import com.familya.member.application.usecase.UpdateMemberUseCase;
 import com.familya.member.domain.model.Member;
 import com.familya.platform.api.AsyncOperation;
@@ -27,14 +27,14 @@ public class MemberController {
 
     private final CreateMemberUseCase createMember;
     private final UpdateMemberUseCase updateMember;
-    private final TombstoneMemberUseCase tombstoneMember;
+    private final DeleteMemberSagaService deleteMemberSaga;
     private final MergeMembersUseCase mergeMembers;
 
     public MemberController(CreateMemberUseCase createMember, UpdateMemberUseCase updateMember,
-                            TombstoneMemberUseCase tombstoneMember, MergeMembersUseCase mergeMembers) {
+                            DeleteMemberSagaService deleteMemberSaga, MergeMembersUseCase mergeMembers) {
         this.createMember = createMember;
         this.updateMember = updateMember;
-        this.tombstoneMember = tombstoneMember;
+        this.deleteMemberSaga = deleteMemberSaga;
         this.mergeMembers = mergeMembers;
     }
 
@@ -74,16 +74,26 @@ public class MemberController {
         return ResponseEntity.accepted().body(AsyncOperation.accepted(memberId, "/api/v2/operations/" + memberId));
     }
 
+    /**
+     * Initiates the delete-member Saga. The HTTP response carries the durable
+     * {@code operationId} (not the member id). Clients poll
+     * {@code /api/v2/operations/{operationId}} for Saga status.
+     */
     @DeleteMapping("/{memberId}")
     public ResponseEntity<AsyncOperation> tombstone(@RequestHeader("X-Acting-User") UUID actingUser,
                                                      @PathVariable UUID treeId,
                                                      @PathVariable UUID memberId,
                                                      @RequestHeader(value = "If-Match", required = false) Long expectedVersion,
-                                                     @RequestHeader(value = "X-Tree-Revision", required = false) Long expectedTreeRevision) {
+                                                     @RequestHeader(value = "X-Tree-Revision", required = false) Long expectedTreeRevision,
+                                                     @RequestHeader(value = "X-Tree-Epoch", required = false) Long expectedTreeEpoch) {
         long ev = expectedVersion == null ? 0L : expectedVersion;
         long er = expectedTreeRevision == null ? 0L : expectedTreeRevision;
-        tombstoneMember.execute(new TombstoneMemberCommand(memberId, actingUser, ev, er));
-        return ResponseEntity.accepted().body(AsyncOperation.accepted(memberId, "/api/v2/operations/" + memberId));
+        long ee = expectedTreeEpoch == null ? 0L : expectedTreeEpoch;
+        UUID operationId = deleteMemberSaga.initiate(new InitiateDeleteMemberCommand(
+                treeId, memberId, actingUser, ev, er, ee));
+        return ResponseEntity.accepted()
+                .header("Location", "/api/v2/operations/" + operationId)
+                .body(AsyncOperation.accepted(operationId, "/api/v2/operations/" + operationId));
     }
 
     @PostMapping("/{memberId}/merge")

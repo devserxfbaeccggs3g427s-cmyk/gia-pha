@@ -12,4 +12,6 @@ public interface EventSearchRepository {
                                      String normalizedQuery,
                                      UUID treeId,
                                      int limit);
+
+    default long deleteByTree(UUID treeId) { return 0L; }
 }

@@ -64,6 +64,43 @@ public class JdbcEventRepository implements EventRepository {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<DomainEvent> listReferencingMember(UUID treeId, UUID memberId) {
+        var rows = jdbc.queryForList(
+                "SELECT id, tree_id, title, description, kind, start_date, end_date, "
+                        + "recurrence_json, primary_member_id, additional_member_ids, media_refs, location, "
+                        + "revision, created_at, updated_at, tombstoned_at, version "
+                        + "FROM domain_event WHERE tree_id = :t AND tombstoned_at IS NULL "
+                        + "AND (primary_member_id = :m OR JSON_CONTAINS(additional_member_ids, JSON_QUOTE(:m)))",
+                new MapSqlParameterSource()
+                        .addValue("t", treeId.toString())
+                        .addValue("m", memberId.toString()));
+        return rows.stream().map(this::fromRow).toList();
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void saveCompensationSnapshot(UUID operationId, String snapshotJson) {
+        jdbc.update(
+                "INSERT INTO saga_compensation_snapshot (operation_id, snapshot_json, recorded_at) "
+                        + "VALUES (:id, :snap, :ts) "
+                        + "ON DUPLICATE KEY UPDATE snapshot_json = VALUES(snapshot_json), recorded_at = VALUES(recorded_at)",
+                new MapSqlParameterSource()
+                        .addValue("id", operationId.toString())
+                        .addValue("snap", snapshotJson)
+                        .addValue("ts", Timestamp.from(java.time.Instant.now())));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public String loadCompensationSnapshot(UUID operationId) {
+        var rows = jdbc.queryForList(
+                "SELECT snapshot_json FROM saga_compensation_snapshot WHERE operation_id = :id",
+                new MapSqlParameterSource("id", operationId.toString()));
+        return rows.isEmpty() ? null : (String) rows.get(0).get("snapshot_json");
+    }
+
+    @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void update(DomainEvent ev) {
         jdbc.update(

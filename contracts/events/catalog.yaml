@@ -11,6 +11,9 @@ enforced by `platform/ci/schema-compat.sh`.
 - Partition key: `treeId` for tree-scoped contexts, `userId` for Identity.
 - Headers: `eventId`, `correlationId`, `causationId`, `operationId`,
   `aggregateVersion`, `occurredAt`, `schemaVersion`, `traceparent`.
+- Saga participants MUST publish replies on `<participant-context>.replies.v<n>`
+  partitioned by `treeId`. Operation lifecycle events MUST be published by the
+  Saga owner (not by Audit Ops) on `operations.events.v1`.
 
 ## Catalog
 
@@ -35,8 +38,14 @@ enforced by `platform/ci/schema-compat.sh`.
 | `MediaTombstoned` | v1 | Media | `media.events.v1` | `treeId` | 7y | LOW |
 | `ShareLinkCreated` | v1 | Sharing | `sharing.events.v1` | `treeId` | 90d | NONE |
 | `ShareLinkRevoked` | v1 | Sharing | `sharing.events.v1` | `treeId` | 90d | NONE |
-| `OperationStarted` | v1 | AuditOps | `operations.events.v1` | `operationId` | 365d | NONE |
-| `OperationStateChanged` | v1 | AuditOps | `operations.events.v1` | `operationId` | 365d | NONE |
+| `OperationStarted` | v1 | Owner service | `operations.events.v1` | `operationId` | 365d | NONE |
+| `OperationStateChanged` | v1 | Owner service | `operations.events.v1` | `operationId` | 365d | NONE |
+| `DeleteMemberSagaCommand` | v1 | Member | `member.commands.v1` | `treeId` | 90d | NONE |
+| `DeleteMemberSagaCompensation` | v1 | Member | `member.commands.v1` | `treeId` | 90d | NONE |
+| `SagaParticipantReply` (delete-member) | v1 | Relationship/Event/Media/TreeAccess | `<participant>.replies.v1` | `treeId` | 90d | NONE |
+| `DeleteTreeSagaCommand` | v1 | TreeAccess | `tree.commands.v1` | `treeId` | 90d | NONE |
+| `DeleteTreeSagaCompensation` | v1 | TreeAccess | `tree.commands.v1` | `treeId` | 90d | NONE |
+| `SagaParticipantReply` (delete-tree) | v1 | Member/Relationship/Event/Media/Sharing/Search | `<participant>.replies.v1` | `treeId` | 90d | NONE |
 
 ## Forbidden payloads
 

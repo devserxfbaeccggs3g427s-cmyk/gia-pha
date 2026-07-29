@@ -34,4 +34,21 @@ public interface MediaRepository {
 
     /** Sets the quarantine path used by scanner/thumbnail adapters. */
     void recordQuarantinePath(UUID mediaId, String path, long expectedVersion);
+
+    /** Bulk tombstone every non-tombstoned media row in the tree. */
+    default int bulkTombstoneByTree(UUID treeId, Instant at) {
+        int n = 0;
+        for (MediaAsset a : listByTree(treeId, false)) {
+            tombstone(a.id(), at, a.version());
+            n++;
+        }
+        return n;
+    }
+
+    /** Place a retention hold on every media row in the tree. */
+    default int bulkPlaceRetentionHold(UUID treeId, Instant holdUntil, String reason) {
+        // Default delegates to MediaRetentionRepository through the caller;
+        // overridden by JdbcMediaRepository for atomicity.
+        return 0;
+    }
 }

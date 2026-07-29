@@ -10,4 +10,6 @@ public interface StatisticsRepository {
     StatisticsSnapshot compute(UUID treeId, long watermark);
 
     Optional<StatisticsSnapshot> latest(UUID treeId);
+
+    default long deleteByTree(UUID treeId) { return 0L; }
 }

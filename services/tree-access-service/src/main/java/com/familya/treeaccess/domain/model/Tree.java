@@ -111,6 +111,30 @@ public final class Tree {
         bump();
     }
 
+    /**
+     * Advance the revision/epoch for a Saga participant command. Unlike
+     * {@link #advanceRevision(long, long, long)}, this method does NOT
+     * require the tree to be ACTIVE because delete-member and delete-tree
+     * Sagas operate on a FROZEN or PENDING_DELETION tree.
+     */
+    public void advanceRevisionForSaga(long expectedVersion, long newRevision, long newEpoch) {
+        requireVersion(expectedVersion);
+        if (state == State.TOMBSTONED) {
+            throw new IllegalStateException("Tree is TOMBSTONED; cannot advance revision");
+        }
+        if (newRevision <= this.revision) {
+            throw new IllegalArgumentException(
+                    "newRevision " + newRevision + " must be greater than current " + this.revision);
+        }
+        if (newEpoch < this.epoch) {
+            throw new IllegalArgumentException(
+                    "newEpoch " + newEpoch + " must be >= current " + this.epoch);
+        }
+        this.revision = newRevision;
+        this.epoch = newEpoch;
+        bump();
+    }
+
     public void requireMutable(String op) {
         if (state != State.ACTIVE) {
             throw new IllegalStateException(
@@ -130,6 +154,16 @@ public final class Tree {
     }
 
     public enum State {
-        ACTIVE, FROZEN, TOMBSTONED
+        ACTIVE,
+        FROZEN,
+        TOMBSTONED,
+        DELETE_FROZEN,
+        PENDING_DELETION,
+        DELETION_FINALIZED;
+
+        public boolean isActive()   { return this == ACTIVE; }
+        public boolean isFrozen()   { return this == FROZEN || this == DELETE_FROZEN; }
+        public boolean isTombstoned(){ return this == TOMBSTONED || this == DELETION_FINALIZED; }
+        public boolean isPendingDeletion() { return this == PENDING_DELETION; }
     }
 }

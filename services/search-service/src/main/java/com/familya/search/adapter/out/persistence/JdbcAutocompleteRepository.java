@@ -19,6 +19,13 @@ public class JdbcAutocompleteRepository implements AutocompleteRepository {
     }
 
     @Override
+    public long deleteByTree(UUID treeId) {
+        return jdbc.update(
+                "DELETE FROM autocomplete_entry WHERE tree_id = :t",
+                new MapSqlParameterSource("t", treeId.toString()));
+    }
+
+    @Override
     public List<AutocompleteEntry> suggestions(String normalizedPrefix, UUID treeId, int limit) {
         var rows = jdbc.queryForList(
                 "SELECT tree_id, owner_id, surface, normalized_prefix, weight "

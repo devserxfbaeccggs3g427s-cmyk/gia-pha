@@ -21,6 +21,14 @@ public class JdbcMemberSearchRepository implements MemberSearchRepository {
     }
 
     @Override
+    public long deleteByTree(UUID treeId) {
+        int rows = jdbc.update(
+                "DELETE FROM search_member_doc WHERE tree_id = :t",
+                new MapSqlParameterSource("t", treeId.toString()));
+        return rows;
+    }
+
+    @Override
     public List<MemberSearchDocument> search(SearchMembersCommand.MemberFilter filter,
                                               String normalizedQuery, UUID treeId, int limit) {
         StringBuilder sql = new StringBuilder(

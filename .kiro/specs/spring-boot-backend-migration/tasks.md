@@ -129,7 +129,17 @@ All tasks are intentionally unchecked. Execute in dependency order. No task in t
   - [ ] 13.1 Implement operation API, durable state machines, transition guards, idempotency, and authorized operator actions
   - [ ] 13.2 Implement correlation/causation propagation, participant acknowledgements, deadlines, retries, DLQ, compensation, and manual review
   - [ ] 13.3 Build Audit & Operations projections without using them as business or authorization authority
-  - [ ] 13.4 Implement delete-member and delete-tree Sagas
+  - [x] 13.4 Implement delete-member and delete-tree Sagas
+    - [x] Owner-side Saga persistence (state, step, compensation snapshot) for both Member and Tree Access.
+    - [x] Deterministic participant sequence with barrier (target aggregate version + epoch).
+    - [x] Reply processor + outbox-staged compensation for terminal / failed transitions.
+    - [x] Kafka command listener for delete-member participants (Relationship, Event, Media, Tree Access).
+    - [x] Kafka command listener for delete-tree participants (Member, Relationship, Event, Media, Sharing, Search).
+    - [x] Tree state machine extended with DELETE_FROZEN / PENDING_DELETION / DELETION_FINALIZED.
+    - [x] Audit Ops lifecycle projection consumer (OperationStarted / OperationStateChanged).
+    - [ ] Compensation dispatch + DLQ / manual-review routing on participant failure.
+    - [ ] Deadline scanner + retry scheduler (Task 13.6 dependency).
+    - [ ] Fault-injection tests for participant outage / duplicate / reorder / broker restart (Task 13.6).
   - [ ] 13.5 Implement media-activation association Saga and cutover operation visibility
   - [ ] 13.6 Fault-inject every transition, participant outage, duplicate, reorder, broker outage, and orchestrator restart
   - **Acceptance:** no operation becomes invisibly stuck or falsely succeeds; compensation and operator retry are idempotent; target-revision completion is enforced

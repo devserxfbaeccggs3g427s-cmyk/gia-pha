@@ -20,6 +20,13 @@ public class JdbcReportRepository implements ReportRepository {
     }
 
     @Override
+    public long deleteByTree(UUID treeId) {
+        return jdbc.update(
+                "DELETE FROM report_snapshot WHERE tree_id = :t",
+                new MapSqlParameterSource("t", treeId.toString()));
+    }
+
+    @Override
     public void save(ReportSnapshot snapshot) {
         jdbc.update(
                 "INSERT INTO report_snapshot (id, tree_id, kind, payload, watermark, computed_at) "

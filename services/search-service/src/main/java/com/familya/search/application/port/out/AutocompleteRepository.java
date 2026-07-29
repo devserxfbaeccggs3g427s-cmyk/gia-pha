@@ -8,4 +8,6 @@ import java.util.UUID;
 public interface AutocompleteRepository {
 
     List<AutocompleteEntry> suggestions(String normalizedPrefix, UUID treeId, int limit);
+
+    default long deleteByTree(UUID treeId) { return 0L; }
 }

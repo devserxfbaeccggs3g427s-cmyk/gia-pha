@@ -21,6 +21,13 @@ public class JdbcStatisticsRepository implements StatisticsRepository {
     }
 
     @Override
+    public long deleteByTree(UUID treeId) {
+        return jdbc.update(
+                "DELETE FROM statistics_snapshot WHERE tree_id = :t",
+                new MapSqlParameterSource("t", treeId.toString()));
+    }
+
+    @Override
     public StatisticsSnapshot compute(UUID treeId, long watermark) {
         long members = count(treeId, "search_member_doc");
         long events = count(treeId, "search_event_doc");

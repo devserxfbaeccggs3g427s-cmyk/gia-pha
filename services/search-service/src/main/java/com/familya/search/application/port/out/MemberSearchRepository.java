@@ -6,16 +6,17 @@ import com.familya.search.domain.model.MemberSearchDocument;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * jOOQ / explicit SQL search over the member projection. All
- * string comparisons are performed by the database using
- * {@code utf8mb4_unicode_ci} collation; the application layer
- * never pre-normalises.
- */
 public interface MemberSearchRepository {
 
     List<MemberSearchDocument> search(SearchMembersCommand.MemberFilter filter,
                                       String normalizedQuery,
                                       UUID treeId,
                                       int limit);
+
+    /**
+     * Delete every member document for the tree. Default returns 0 so existing
+     * services stay binary-compatible; JdbcMemberSearchRepository overrides
+     * this with a real DELETE statement.
+     */
+    default long deleteByTree(UUID treeId) { return 0L; }
 }

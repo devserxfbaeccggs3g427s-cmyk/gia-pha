@@ -22,6 +22,13 @@ public class JdbcEventSearchRepository implements EventSearchRepository {
     }
 
     @Override
+    public long deleteByTree(UUID treeId) {
+        return jdbc.update(
+                "DELETE FROM search_event_doc WHERE tree_id = :t",
+                new MapSqlParameterSource("t", treeId.toString()));
+    }
+
+    @Override
     public List<EventSearchDocument> search(SearchEventsCommand.EventFilter filter,
                                              String normalizedQuery, UUID treeId, int limit) {
         StringBuilder sql = new StringBuilder(

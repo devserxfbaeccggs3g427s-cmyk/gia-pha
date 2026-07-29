@@ -55,6 +55,42 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<Relationship> listActiveByMember(UUID treeId, UUID memberId) {
+        var rows = jdbc.queryForList(
+                "SELECT id, tree_id, kind, from_member_id, to_member_id, metadata_json, "
+                        + "revision, created_at, tombstoned_at, version "
+                        + "FROM relationship WHERE tree_id = :t AND tombstoned_at IS NULL "
+                        + "AND (from_member_id = :m OR to_member_id = :m)",
+                new MapSqlParameterSource()
+                        .addValue("t", treeId.toString())
+                        .addValue("m", memberId.toString()));
+        return rows.stream().map(this::fromRow).toList();
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void saveCompensationSnapshot(UUID operationId, String snapshotJson) {
+        jdbc.update(
+                "INSERT INTO saga_compensation_snapshot (operation_id, snapshot_json, recorded_at) "
+                        + "VALUES (:id, :snap, :ts) "
+                        + "ON DUPLICATE KEY UPDATE snapshot_json = VALUES(snapshot_json), recorded_at = VALUES(recorded_at)",
+                new MapSqlParameterSource()
+                        .addValue("id", operationId.toString())
+                        .addValue("snap", snapshotJson)
+                        .addValue("ts", Timestamp.from(java.time.Instant.now())));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public String loadCompensationSnapshot(UUID operationId) {
+        var rows = jdbc.queryForList(
+                "SELECT snapshot_json FROM saga_compensation_snapshot WHERE operation_id = :id",
+                new MapSqlParameterSource("id", operationId.toString()));
+        return rows.isEmpty() ? null : (String) rows.get(0).get("snapshot_json");
+    }
+
+    @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public long nextCommandSeq(UUID treeId) {
         // Per-tree monotonic sequence. We rely on MySQL row-level
@@ -101,6 +137,17 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
                         .addValue("tomb", rel.tombstonedAt() == null ? null : Timestamp.from(rel.tombstonedAt()))
                         .addValue("v", rel.version())
                         .addValue("id", rel.id().toString()));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void untombstone(UUID id, java.time.Instant at, long expectedVersion) {
+        jdbc.update(
+                "UPDATE relationship SET tombstoned_at = NULL, version = :v WHERE id = :id AND version = :ev",
+                new MapSqlParameterSource()
+                        .addValue("id", id.toString())
+                        .addValue("ev", expectedVersion)
+                        .addValue("v", expectedVersion + 1));
     }
 
     @Override

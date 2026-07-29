@@ -5,11 +5,13 @@ import com.familya.treeaccess.application.port.in.AdvanceRevisionCommand;
 import com.familya.treeaccess.application.port.in.CreateTreeCommand;
 import com.familya.treeaccess.application.port.in.FreezeTreeCommand;
 import com.familya.treeaccess.application.port.in.GrantMembershipCommand;
+import com.familya.treeaccess.application.port.in.InitiateDeleteTreeCommand;
 import com.familya.treeaccess.application.port.in.RevokeMembershipCommand;
 import com.familya.treeaccess.application.port.in.TombstoneTreeCommand;
 import com.familya.treeaccess.application.port.in.UnfreezeTreeCommand;
 import com.familya.treeaccess.application.usecase.AuthorizeUseCase;
 import com.familya.treeaccess.application.usecase.CreateTreeUseCase;
+import com.familya.treeaccess.application.usecase.DeleteTreeSagaService;
 import com.familya.treeaccess.application.usecase.GrantMembershipUseCase;
 import com.familya.treeaccess.application.usecase.RevokeMembershipUseCase;
 import com.familya.treeaccess.application.usecase.TreeLifecycleUseCases;
@@ -33,17 +35,20 @@ public class TreeAccessController {
     private final RevokeMembershipUseCase revokeMembership;
     private final TreeLifecycleUseCases lifecycle;
     private final AuthorizeUseCase authorize;
+    private final DeleteTreeSagaService deleteTreeSaga;
 
     public TreeAccessController(CreateTreeUseCase createTree,
                                 GrantMembershipUseCase grantMembership,
                                 RevokeMembershipUseCase revokeMembership,
                                 TreeLifecycleUseCases lifecycle,
-                                AuthorizeUseCase authorize) {
+                                AuthorizeUseCase authorize,
+                                DeleteTreeSagaService deleteTreeSaga) {
         this.createTree = createTree;
         this.grantMembership = grantMembership;
         this.revokeMembership = revokeMembership;
         this.lifecycle = lifecycle;
         this.authorize = authorize;
+        this.deleteTreeSaga = deleteTreeSaga;
     }
 
     @PostMapping
@@ -95,6 +100,27 @@ public class TreeAccessController {
                                                     @RequestHeader(value = "If-Match", required = false) Long expectedVersion) {
         lifecycle.tombstone(new TombstoneTreeCommand(treeId, actingUser, expectedVersion == null ? 0L : expectedVersion));
         return ResponseEntity.accepted().body(AsyncOperation.accepted(UUID.randomUUID(), "/api/v2/operations/" + UUID.randomUUID()));
+    }
+
+    /**
+     * Initiates the delete-tree Saga. The HTTP response carries the durable
+     * {@code operationId}. Clients poll {@code /api/v2/operations/{id}} for
+     * Saga status. Physical binary deletion is deferred to the Media service
+     * delayed cleanup worker and is NOT part of this Saga's barrier.
+     */
+    @DeleteMapping("/{treeId}")
+    public ResponseEntity<AsyncOperation> deleteTree(@RequestHeader("X-Acting-User") UUID actingUser,
+                                                      @PathVariable UUID treeId,
+                                                      @RequestHeader(value = "If-Match", required = false) Long expectedVersion,
+                                                      @RequestHeader(value = "X-Tree-Epoch", required = false) Long expectedEpoch,
+                                                      @RequestParam(value = "placeRetentionHolds", required = false, defaultValue = "true") boolean placeRetentionHolds) {
+        long ev = expectedVersion == null ? 0L : expectedVersion;
+        long ee = expectedEpoch == null ? 0L : expectedEpoch;
+        UUID operationId = deleteTreeSaga.initiate(new InitiateDeleteTreeCommand(
+                treeId, actingUser, ev, ee, placeRetentionHolds));
+        return ResponseEntity.accepted()
+                .header("Location", "/api/v2/operations/" + operationId)
+                .body(AsyncOperation.accepted(operationId, "/api/v2/operations/" + operationId));
     }
 
     @PostMapping("/{treeId}/revisions")

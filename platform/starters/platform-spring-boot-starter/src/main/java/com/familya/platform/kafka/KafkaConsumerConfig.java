@@ -13,6 +13,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.kafka.annotation.KafkaListenerConfigurer;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.config.KafkaListenerContainerFactory;
+import org.springframework.kafka.config.KafkaListenerContainerFactory;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistrar;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
@@ -75,6 +76,22 @@ public class KafkaConsumerConfig implements KafkaListenerConfigurer {
 
     @Bean
     public KafkaListenerContainerFactory<?> kafkaListenerContainerFactory(
+            org.springframework.beans.factory.ObjectProvider<ProducerFactory<?, ?>> producerFactory) {
+        ConcurrentKafkaListenerContainerFactory<String, Object> factory = buildFactory(producerFactory);
+        return factory;
+    }
+
+    /**
+     * Named factory used by Saga command listeners across the platform.
+     * Reuses the default consumer factory, concurrency and error handler.
+     */
+    @Bean("sagaCommandListenerContainerFactory")
+    public KafkaListenerContainerFactory<?> sagaCommandListenerContainerFactory(
+            org.springframework.beans.factory.ObjectProvider<ProducerFactory<?, ?>> producerFactory) {
+        return buildFactory(producerFactory);
+    }
+
+    private ConcurrentKafkaListenerContainerFactory<String, Object> buildFactory(
             org.springframework.beans.factory.ObjectProvider<ProducerFactory<?, ?>> producerFactory) {
         ConcurrentKafkaListenerContainerFactory<String, Object> factory = new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory());

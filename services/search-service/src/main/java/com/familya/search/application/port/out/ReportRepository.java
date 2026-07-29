@@ -12,4 +12,6 @@ public interface ReportRepository {
     Optional<ReportSnapshot> findById(UUID reportId);
 
     boolean exists(UUID treeId, ReportSnapshot.Kind kind, long watermark);
+
+    default long deleteByTree(UUID treeId) { return 0L; }
 }

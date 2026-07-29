@@ -21,6 +21,13 @@ public class JdbcMediaSearchRepository implements MediaSearchRepository {
     }
 
     @Override
+    public long deleteByTree(UUID treeId) {
+        return jdbc.update(
+                "DELETE FROM search_media_doc WHERE tree_id = :t",
+                new MapSqlParameterSource("t", treeId.toString()));
+    }
+
+    @Override
     public List<MediaSearchDocument> search(SearchMediaCommand.MediaFilter filter,
                                             String normalizedQuery, UUID treeId, int limit) {
         StringBuilder sql = new StringBuilder(
