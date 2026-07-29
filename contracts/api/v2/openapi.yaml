@@ -16,6 +16,8 @@ servers:
     description: Production
   - url: https://api.staging.example.com
     description: Staging
+security:
+  - identitySession: []
 tags:
   - name: Operations
     description: Async operation polling
@@ -92,6 +94,7 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
+      security: []
   /api/v2/identity/sessions/current:
     delete:
       tags: [Identity]
@@ -126,6 +129,11 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/ExpectedVersion'
 components:
+  securitySchemes:
+    identitySession:
+      type: apiKey
+      in: cookie
+      name: identity-session
   parameters:
     OperationId:
       name: operationId
