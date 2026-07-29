@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -72,6 +73,19 @@ public class JdbcAlbumRepository implements AlbumRepository {
                 .addValue("updated", Timestamp.from(a.updatedAt()))
                 .addValue("v", a.version())
                 .addValue("tomb", a.tombstonedAt() == null ? null : Timestamp.from(a.tombstonedAt()));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void tombstone(UUID id, Instant at, long expectedVersion) {
+        jdbc.update(
+                "UPDATE album SET tombstoned_at = :t, updated_at = :u, version = version + 1 "
+                        + "WHERE id = :id AND version = :v",
+                new MapSqlParameterSource()
+                        .addValue("t", Timestamp.from(at))
+                        .addValue("u", Timestamp.from(at))
+                        .addValue("id", id.toString())
+                        .addValue("v", expectedVersion));
     }
 
     private Album fromRow(Map<String, Object> r) {

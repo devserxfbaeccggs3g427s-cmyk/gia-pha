@@ -7,7 +7,9 @@ public record MediaQuarantined(
         UUID treeId,
         UUID mediaId,
         long revision,
-        Instant occurredAt
+        Instant occurredAt,
+        String phase,
+        String reason
 ) implements MediaChange {
     @Override public String eventType() { return "MediaQuarantined"; }
     @Override public int eventVersion() { return 1; }

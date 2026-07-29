@@ -15,4 +15,6 @@ public interface AlbumRepository {
     List<Album> listByTree(UUID treeId, boolean includeTombstoned);
 
     void update(Album album);
+
+    void tombstone(java.util.UUID id, java.time.Instant at, long expectedVersion);
 }

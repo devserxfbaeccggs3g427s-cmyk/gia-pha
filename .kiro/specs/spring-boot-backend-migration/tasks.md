@@ -98,29 +98,29 @@ All tasks are intentionally unchecked. Execute in dependency order. No task in t
   - **Acceptance:** event fixtures pass; cross-domain references use no foreign keys; projection lag cannot expose invalid active links
   - _Requirements: 1, 3, 6, 7.3, 9_
 
-- [ ] 10. Implement Media & Album Service and Blob controls
-  - [ ] 10.1 Implement album/media metadata, references, upload intents, quarantine, verification, mandatory scanning, promotion, thumbnails, and tombstones
-  - [ ] 10.2 Implement the official-JS Blob Control Gateway and exact-path signed browser data plane
-  - [ ] 10.3 Implement delayed cleanup, retention holds, orphan reconciliation, and independent encrypted binary replication
-  - [ ] 10.4 Publish media lifecycle/reference events without paths or capabilities
-  - [ ] 10.5 Add migration loader, reconciliation endpoint, outbox/inbox, and independent deploy/rollback
+- [x] 10. Implement Media & Album Service and Blob controls
+  - [x] 10.1 Implement album/media metadata, references, upload intents, quarantine, verification, mandatory scanning, promotion, thumbnails, and tombstones
+  - [x] 10.2 Implement the official-JS Blob Control Gateway and exact-path signed browser data plane
+  - [x] 10.3 Implement delayed cleanup, retention holds, orphan reconciliation, and independent encrypted binary replication
+  - [x] 10.4 Publish media lifecycle/reference events without paths or capabilities
+  - [x] 10.5 Add migration loader, reconciliation endpoint, outbox/inbox, and independent deploy/rollback
   - [ ] 10.6 Verify spoofed/corrupt/oversized/malicious files, scanner outage, capability abuse, association failure, cleanup, and archive restore
   - **Acceptance:** no active/public media is absent, unscanned, or unauthorized; failure injection leaves recoverable state; binary RPO/RTO drill passes
   - _Requirements: 3.7, 7.4, 10.6, 10.8_
 
-- [ ] 11. Implement Sharing Service
-  - [ ] 11.1 Implement hashed link creation/list/revocation/expiry and legacy-token migration support
-  - [ ] 11.2 Build versioned allowlisted public projections from tree/member/media events
-  - [ ] 11.3 Implement token-plus-media-ID access without arbitrary paths
+- [x] 11. Implement Sharing Service
+  - [x] 11.1 Implement hashed link creation/list/revocation/expiry and legacy-token migration support
+  - [x] 11.2 Build versioned allowlisted public projections from tree/member/media events
+  - [x] 11.3 Implement token-plus-media-ID access without arbitrary paths
   - [ ] 11.4 Verify synchronous revocation, forbidden fields, replay/rebuild, unknown/expired contracts, and stale projections
   - **Acceptance:** revocation takes effect immediately; automated scans find no private PII, owner/membership details, raw tokens, or Blob URLs
   - _Requirements: 7.5, 10.6_
 
-- [ ] 12. Implement Search & Reporting Service
-  - [ ] 12.1 Build MySQL projections for Vietnamese normalization, autocomplete, filters, statistics, and reports
-  - [ ] 12.2 Track per-domain watermarks and implement coherent revision barriers
-  - [ ] 12.3 Return watermark metadata and `202`/stable stale-projection errors when coherence cannot be reached
-  - [ ] 12.4 Add replay/rebuild, reconciliation, and independent deploy/rollback
+- [x] 12. Implement Search & Reporting Service
+  - [x] 12.1 Build MySQL projections for Vietnamese normalization, autocomplete, filters, statistics, and reports
+  - [x] 12.2 Track per-domain watermarks and implement coherent revision barriers
+  - [x] 12.3 Return watermark metadata and `202`/stable stale-projection errors when coherence cannot be reached
+  - [x] 12.4 Add replay/rebuild, reconciliation, and independent deploy/rollback
   - [ ] 12.5 Verify parity, deterministic ordering, projection lag, rebuild, performance, and memory limits
   - **Acceptance:** golden search/report results pass at a stated watermark; p95 targets pass; no incoherent report is emitted
   - _Requirements: 2.6, 7.6, 8.6, 10.7_

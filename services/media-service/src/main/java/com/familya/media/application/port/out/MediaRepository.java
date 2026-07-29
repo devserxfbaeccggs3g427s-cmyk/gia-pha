@@ -2,6 +2,7 @@ package com.familya.media.application.port.out;
 
 import com.familya.media.domain.model.MediaAsset;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,8 +19,19 @@ public interface MediaRepository {
 
     void update(MediaAsset asset);
 
-    void tombstone(UUID id, java.time.Instant at, long expectedVersion);
+    void tombstone(UUID id, Instant at, long expectedVersion);
 
-    /** Watermark-based delta read used by the reconciliation endpoint. */
-    List<MediaAsset> listAfter(java.time.Instant watermark, int limit);
+    List<MediaAsset> listAfter(Instant watermark, int limit);
+
+    /** Atomically claim a media row for processing; returns true if the row was claimed. */
+    boolean claimForProcessing(UUID mediaId, long expectedVersion);
+
+    void markScanning(UUID mediaId, long expectedVersion, Instant at);
+
+    void markReady(UUID mediaId, long expectedVersion, Instant at);
+
+    void markFailed(UUID mediaId, long expectedVersion, Instant at, String reason);
+
+    /** Sets the quarantine path used by scanner/thumbnail adapters. */
+    void recordQuarantinePath(UUID mediaId, String path, long expectedVersion);
 }

@@ -1,9 +1,9 @@
 package com.familya.media.adapter.out.events;
 
 import com.familya.media.application.port.out.MediaChangePublisher;
+import com.familya.media.application.port.out.MediaOutbox;
 import com.familya.media.domain.event.MediaChange;
 import com.familya.platform.outbox.JdbcOutboxWriter;
-import com.familya.platform.outbox.OutboxWriter;
 import com.familya.platform.telemetry.PlatformMetrics;
 import org.springframework.stereotype.Component;
 
@@ -13,10 +13,10 @@ import java.util.Map;
 @Component
 public class OutboxMediaChangePublisher implements MediaChangePublisher {
 
-    private final OutboxWriter outbox;
+    private final MediaOutbox outbox;
     private final PlatformMetrics metrics;
 
-    public OutboxMediaChangePublisher(OutboxWriter outbox, PlatformMetrics metrics) {
+    public OutboxMediaChangePublisher(MediaOutbox outbox, PlatformMetrics metrics) {
         this.outbox = outbox;
         this.metrics = metrics;
     }
@@ -30,9 +30,9 @@ public class OutboxMediaChangePublisher implements MediaChangePublisher {
         payload.put("eventVersion", change.eventVersion());
         payload.put("revision", change.revision());
         payload.put("occurredAt", change.occurredAt().toString());
-        // attach kind if present (AlbumCreated/MediaQuarantined don't carry one)
-        if (change instanceof com.familya.media.domain.event.MediaQuarantined) {
-            payload.put("phase", "QUARANTINED");
+        if (change instanceof com.familya.media.domain.event.MediaQuarantined q) {
+            payload.put("phase", q.phase());
+            payload.put("reason", q.reason());
         } else if (change instanceof com.familya.media.domain.event.MediaScanned s) {
             payload.put("verdict", s.verdict());
         } else if (change instanceof com.familya.media.domain.event.MediaAssociated a) {
@@ -42,6 +42,8 @@ public class OutboxMediaChangePublisher implements MediaChangePublisher {
             payload.put("relationKind", d.relationKind());
         } else if (change instanceof com.familya.media.domain.event.AlbumCreated ac) {
             payload.put("name", ac.name());
+        } else if (change instanceof com.familya.media.domain.event.MediaActivated ma) {
+            payload.put("activatedAt", ma.activatedAt().toString());
         }
         JdbcOutboxWriter.Builder b = JdbcOutboxWriter.builder()
                 .create("media", change.mediaId().toString(), change.revision(),

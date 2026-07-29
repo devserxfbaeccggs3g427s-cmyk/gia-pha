@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 public sealed interface MediaChange
-        permits MediaQuarantined, MediaScanned, MediaAssociated, MediaDetached, AlbumCreated {
+        permits MediaQuarantined, MediaScanned, MediaAssociated, MediaDetached, AlbumCreated, MediaActivated {
 
     UUID treeId();
     UUID mediaId();

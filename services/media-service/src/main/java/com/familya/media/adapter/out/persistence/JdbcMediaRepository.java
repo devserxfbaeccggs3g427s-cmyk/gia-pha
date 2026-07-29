@@ -121,6 +121,68 @@ public class JdbcMediaRepository implements MediaRepository {
         return rows.stream().map(this::fromRow).toList();
     }
 
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public boolean claimForProcessing(UUID mediaId, long expectedVersion) {
+        int rows = jdbc.update(
+                "UPDATE media_asset SET status = 'SCANNING', updated_at = :u, version = version + 1 "
+                        + "WHERE id = :id AND version = :v AND status IN ('QUARANTINED','READY')",
+                new MapSqlParameterSource()
+                        .addValue("u", Timestamp.from(Instant.now()))
+                        .addValue("id", mediaId.toString())
+                        .addValue("v", expectedVersion));
+        return rows == 1;
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void markScanning(UUID mediaId, long expectedVersion, Instant at) {
+        jdbc.update(
+                "UPDATE media_asset SET status = 'SCANNING', updated_at = :u, version = :v "
+                        + "WHERE id = :id",
+                new MapSqlParameterSource()
+                        .addValue("u", Timestamp.from(at))
+                        .addValue("id", mediaId.toString())
+                        .addValue("v", expectedVersion + 1));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void markReady(UUID mediaId, long expectedVersion, Instant at) {
+        jdbc.update(
+                "UPDATE media_asset SET status = 'READY', promoted = TRUE, updated_at = :u, version = :v "
+                        + "WHERE id = :id",
+                new MapSqlParameterSource()
+                        .addValue("u", Timestamp.from(at))
+                        .addValue("id", mediaId.toString())
+                        .addValue("v", expectedVersion + 1));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void markFailed(UUID mediaId, long expectedVersion, Instant at, String reason) {
+        jdbc.update(
+                "UPDATE media_asset SET status = 'FAILED', updated_at = :u, version = :v WHERE id = :id",
+                new MapSqlParameterSource()
+                        .addValue("u", Timestamp.from(at))
+                        .addValue("id", mediaId.toString())
+                        .addValue("v", expectedVersion + 1));
+        jdbc.update(
+                "UPDATE media_quarantine SET scanner_verdict = 'INFECTED', infected = TRUE WHERE media_id = :id",
+                new MapSqlParameterSource("id", mediaId.toString()));
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordQuarantinePath(UUID mediaId, String path, long expectedVersion) {
+        jdbc.update(
+                "UPDATE media_asset SET quarantine_path = :p, updated_at = :u WHERE id = :id",
+                new MapSqlParameterSource()
+                        .addValue("p", path)
+                        .addValue("u", Timestamp.from(Instant.now()))
+                        .addValue("id", mediaId.toString()));
+    }
+
     private MapSqlParameterSource params(MediaAsset a) {
         return new MapSqlParameterSource()
                 .addValue("id", a.id().toString())

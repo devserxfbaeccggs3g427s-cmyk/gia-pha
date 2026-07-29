@@ -59,4 +59,16 @@ public class PlatformMetrics {
     public Counter mutationAcceptedCounter(String service, String operation) {
         return registry.counter("familya.mutation.accepted", Tags.of("service", service, "operation", operation));
     }
+
+    public void cleanupReleased(String service) {
+        registry.counter("familya.cleanup.released", Tags.of("service", service)).increment();
+    }
+
+    public void capabilityIssued(String service, String outcome) {
+        registry.counter("familya.blob.capability_issued", Tags.of("service", service, "outcome", outcome)).increment();
+    }
+
+    public void scanCompleted(String service, String verdict) {
+        registry.counter("familya.media.scan_completed", Tags.of("service", service, "verdict", verdict)).increment();
+    }
 }
