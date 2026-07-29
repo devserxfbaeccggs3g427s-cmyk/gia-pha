@@ -38,14 +38,22 @@ public interface MemberRepository {
      * implementation falls back to per-row update so the interface stays
      * binary-compatible; the JdbcMemberRepository override is the
      * optimised path used in production.
+     *
+     * @return the number of members tombstoned and the highest per-member
+     *     version actually reached, so callers can report the version they
+     *     truly advanced to rather than an assumed target.
      */
-    default int bulkTombstoneByTree(UUID treeId, Instant at) {
+    default BulkTombstoneResult bulkTombstoneByTree(UUID treeId, Instant at) {
         int n = 0;
+        long maxVersion = 0L;
         for (Member m : listByTree(treeId, false)) {
             m.tombstone(m.version(), at);
             update(m);
+            maxVersion = Math.max(maxVersion, m.version());
             n++;
         }
-        return n;
+        return new BulkTombstoneResult(n, maxVersion);
     }
+
+    record BulkTombstoneResult(int affectedCount, long maxAppliedVersion) { }
 }

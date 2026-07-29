@@ -2,6 +2,7 @@ package com.familya.member.application.usecase;
 
 import com.familya.member.application.port.in.PurgeMemberTreeCommand;
 import com.familya.member.application.port.out.MemberRepository;
+import com.familya.member.application.port.out.MemberRepository.BulkTombstoneResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,10 +29,10 @@ public class PurgeMemberTreeUseCase {
     @Transactional
     public Result execute(PurgeMemberTreeCommand cmd) {
         Instant now = Instant.now();
-        int affected = repo.bulkTombstoneByTree(cmd.treeId(), now);
+        BulkTombstoneResult result = repo.bulkTombstoneByTree(cmd.treeId(), now);
         LOG.info("Bulk-tombstoned {} members on tree {} operationId={}",
-                affected, cmd.treeId(), cmd.operationId());
-        return new Result(affected, Math.max(0L, cmd.targetAggregateVersion()), cmd.targetEpoch());
+                result.affectedCount(), cmd.treeId(), cmd.operationId());
+        return new Result(result.affectedCount(), result.maxAppliedVersion(), cmd.targetEpoch());
     }
 
     public record Result(int affectedCount, long appliedAggregateVersion, long appliedEpoch) { }
