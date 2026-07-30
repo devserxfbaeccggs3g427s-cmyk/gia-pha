@@ -137,9 +137,9 @@ All tasks are intentionally unchecked. Execute in dependency order. No task in t
     - [x] Kafka command listener for delete-tree participants (Member, Relationship, Event, Media, Sharing, Search).
     - [x] Tree state machine extended with DELETE_FROZEN / PENDING_DELETION / DELETION_FINALIZED.
     - [x] Audit Ops lifecycle projection consumer (OperationStarted / OperationStateChanged).
-    - [ ] Compensation dispatch + DLQ / manual-review routing on participant failure.
-    - [ ] Deadline scanner + retry scheduler (Task 13.6 dependency).
-    - [ ] Fault-injection tests for participant outage / duplicate / reorder / broker restart (Task 13.6).
+     - [x] Compensation dispatch + DLQ / manual-review routing on participant failure.
+     - [ ] Deadline scanner + retry scheduler (Task 13.6 dependency).
+     - [ ] Fault-injection tests for participant outage / duplicate / reorder / broker restart (Task 13.6).
   - [ ] 13.5 Implement media-activation association Saga and cutover operation visibility
   - [ ] 13.6 Fault-inject every transition, participant outage, duplicate, reorder, broker outage, and orchestrator restart
   - **Acceptance:** no operation becomes invisibly stuck or falsely succeeds; compensation and operator retry are idempotent; target-revision completion is enforced

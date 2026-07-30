@@ -21,15 +21,16 @@ public final class OperationLifecycleRow {
     private final Long targetEpoch;
     private final String failureCode;
     private final String failureMessage;
+    private final String failureRouting;
     private final Instant startedAt;
     private final Instant updatedAt;
     private final Instant finalizedAt;
 
     public OperationLifecycleRow(UUID operationId, String ownerService, String sagaType,
                                  UUID treeId, UUID initiatingUserId, String state,
-                                 Long targetVersion, Long targetEpoch,
-                                 String failureCode, String failureMessage,
-                                 Instant startedAt, Instant updatedAt, Instant finalizedAt) {
+                                  Long targetVersion, Long targetEpoch,
+                                  String failureCode, String failureMessage, String failureRouting,
+                                  Instant startedAt, Instant updatedAt, Instant finalizedAt) {
         this.operationId = Objects.requireNonNull(operationId);
         this.ownerService = Objects.requireNonNull(ownerService);
         this.sagaType = Objects.requireNonNull(sagaType);
@@ -40,6 +41,7 @@ public final class OperationLifecycleRow {
         this.targetEpoch = targetEpoch;
         this.failureCode = failureCode;
         this.failureMessage = failureMessage;
+        this.failureRouting = failureRouting;
         this.startedAt = Objects.requireNonNull(startedAt);
         this.updatedAt = Objects.requireNonNull(updatedAt);
         this.finalizedAt = finalizedAt;
@@ -55,6 +57,7 @@ public final class OperationLifecycleRow {
     public Long targetEpoch() { return targetEpoch; }
     public String failureCode() { return failureCode; }
     public String failureMessage() { return failureMessage; }
+    public String failureRouting() { return failureRouting; }
     public Instant startedAt() { return startedAt; }
     public Instant updatedAt() { return updatedAt; }
     public Instant finalizedAt() { return finalizedAt; }

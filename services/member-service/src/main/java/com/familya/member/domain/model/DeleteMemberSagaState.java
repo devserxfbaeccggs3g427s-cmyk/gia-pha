@@ -77,9 +77,6 @@ public final class DeleteMemberSagaState {
         if (next.isTerminal()) {
             this.finalizedAt = now;
         }
-        if (next == State.COMPENSATING && irreversibleAt == null) {
-            this.irreversibleAt = now;
-        }
     }
 
     public void markIrreversible(Instant now) {

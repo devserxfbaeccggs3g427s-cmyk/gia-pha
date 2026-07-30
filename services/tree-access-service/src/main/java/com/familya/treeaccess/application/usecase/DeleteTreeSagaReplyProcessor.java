@@ -1,5 +1,6 @@
 package com.familya.treeaccess.application.usecase;
 
+import com.familya.treeaccess.adapter.in.kafka.DeleteTreeSagaDeadLetterStore;
 import com.familya.treeaccess.application.port.in.DeleteTreeSagaReplyCommand;
 import com.familya.treeaccess.application.port.out.DeleteTreeSagaGateway;
 import com.familya.treeaccess.application.port.out.DeleteTreeSagaRepository;
@@ -21,15 +22,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Owner-side processor for delete-tree participant replies. Performs the
- * per-step barrier check (aggregate version + epoch), advances the Saga to
- * the next step or {@code FINALIZING}, and dispatches compensation on
- * failure. Tree Access is the only service that performs the
- * {@code FINALIZE_TREE_DELETION} step; this method runs that step in the
- * same transaction as the reply handling so the tree is tombstoned only
- * after every required participant has acked.
- */
 @Service
 public class DeleteTreeSagaReplyProcessor {
 
@@ -37,6 +29,7 @@ public class DeleteTreeSagaReplyProcessor {
 
     private final DeleteTreeSagaRepository sagaRepo;
     private final DeleteTreeSagaGateway gateway;
+    private final DeleteTreeSagaDeadLetterStore deadLetterStore;
     private final TreeRepository treeRepo;
     private final TreeEventPublisher publisher;
     private final PlatformMetrics metrics;
@@ -44,12 +37,14 @@ public class DeleteTreeSagaReplyProcessor {
 
     public DeleteTreeSagaReplyProcessor(DeleteTreeSagaRepository sagaRepo,
                                         DeleteTreeSagaGateway gateway,
+                                        DeleteTreeSagaDeadLetterStore deadLetterStore,
                                         TreeRepository treeRepo,
                                         TreeEventPublisher publisher,
                                         PlatformMetrics metrics,
                                         Clock clock) {
         this.sagaRepo = sagaRepo;
         this.gateway = gateway;
+        this.deadLetterStore = deadLetterStore;
         this.treeRepo = treeRepo;
         this.publisher = publisher;
         this.metrics = metrics;
@@ -81,10 +76,126 @@ public class DeleteTreeSagaReplyProcessor {
         Instant now = clock.now();
         metrics.mutationAccepted("tree-access-service", "deleteTree.reply");
 
+        if (cmd.compensationApplied()) {
+            if (cmd.failed()) {
+                handleCompensationFailure(state, current, cmd.failureCode(), cmd.failureMessage(), now);
+            } else {
+                handleCompensationReply(state, steps, current, now);
+            }
+            return;
+        }
+        if (current.state() != DeleteTreeSagaStep.State.DISPATCHED) {
+            LOG.info("Ignoring stale delete-tree reply operationId={} step={} state={}",
+                    state.operationId(), current.stepCode(), current.state());
+            return;
+        }
+
         if (cmd.failed()) {
-            current.fail(cmd.failureCode(), cmd.failureMessage(), now);
+            handleParticipantFailure(state, steps, current, cmd.failureCode(), cmd.failureMessage(), now);
+            return;
+        }
+
+        if (!satisfiesBarrier(state, cmd)) {
+            handleBarrierFailure(state, current, now);
+            return;
+        }
+
+        current.ack(now, cmd.appliedAggregateVersion(), cmd.appliedEpoch());
+        sagaRepo.updateStep(current);
+
+        DeleteTreeSagaStep next = nextPendingStep(steps, current.sequenceNo());
+        if (next == null || "FINALIZE_TREE_DELETION".equals(next.stepCode())) {
+            runFinalize(state, now);
+            sagaRepo.saveState(state);
+            gateway.stageOperationStateChanged(state);
+            return;
+        }
+
+        dispatchStep(state, next, now);
+        sagaRepo.saveState(state);
+        gateway.stageOperationStateChanged(state);
+    }
+
+    private void runFinalize(DeleteTreeSagaState state, Instant now) {
+        DeleteTreeSagaStep finalizeStep = sagaRepo.listSteps(state.operationId()).stream()
+                .filter(s -> s.stepCode().equals("FINALIZE_TREE_DELETION"))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "FINALIZE_TREE_DELETION step missing for operation " + state.operationId()));
+        state.transitionTo(DeleteTreeSagaState.State.FINALIZING, now);
+        finalizeStep.dispatch(now);
+        sagaRepo.updateStep(finalizeStep);
+        finalizeTree(state, now);
+        finalizeStep.ack(now, state.targetAggregateVersion(), state.targetEpoch());
+        sagaRepo.updateStep(finalizeStep);
+        state.transitionTo(DeleteTreeSagaState.State.SUCCEEDED, now);
+    }
+
+    private void handleCompensationReply(DeleteTreeSagaState state,
+                                         List<DeleteTreeSagaStep> steps,
+                                         DeleteTreeSagaStep current,
+                                         Instant now) {
+        if (state.state() != DeleteTreeSagaState.State.COMPENSATING
+                || current.state() != DeleteTreeSagaStep.State.DISPATCHED) {
+            return;
+        }
+        current.compensate(now);
+        sagaRepo.updateStep(current);
+        boolean complete = sagaRepo.listSteps(state.operationId()).stream()
+                .filter(s -> !"tree-access-service".equals(s.participantService()))
+                .filter(DeleteTreeSagaStep::compensatable)
+                .noneMatch(s -> s.state() == DeleteTreeSagaStep.State.ACK
+                        || s.state() == DeleteTreeSagaStep.State.DISPATCHED);
+        if (complete) {
+            state.transitionTo(DeleteTreeSagaState.State.FAILED, now);
+            sagaRepo.saveState(state);
+            gateway.stageOperationStateChanged(state);
+        }
+    }
+
+    private void handleCompensationFailure(DeleteTreeSagaState state,
+                                           DeleteTreeSagaStep current,
+                                           String code, String message,
+                                           Instant now) {
+        if (state.state() != DeleteTreeSagaState.State.COMPENSATING
+                || current.state() != DeleteTreeSagaStep.State.DISPATCHED) return;
+        if (current.attemptCount() < current.maxAttempts()) {
+            current.dispatch(now);
             sagaRepo.updateStep(current);
-            state.recordFailure(cmd.failureCode(), cmd.failureMessage(), now);
+            gateway.stageCompensation(state, current);
+            return;
+        }
+        current.markDeadLettered(code, message, now);
+        sagaRepo.updateStep(current);
+        state.recordFailure(code, message, now);
+        state.transitionTo(DeleteTreeSagaState.State.MANUAL_REVIEW, now);
+        sagaRepo.saveState(state);
+        deadLetterStore.saveRetryExhausted(
+                state.operationId(), current.participantService(), current.stepCode(),
+                current.attemptCount(), new IllegalStateException("Compensation failed: " + code + " " + message));
+        gateway.stageOperationStateChanged(state);
+    }
+
+    private void handleParticipantFailure(DeleteTreeSagaState state,
+                                          List<DeleteTreeSagaStep> steps,
+                                          DeleteTreeSagaStep current,
+                                          String code, String message, Instant now) {
+        current.fail(code, message, now);
+        sagaRepo.updateStep(current);
+        state.recordFailure(code, message, now);
+
+        if (current.attemptCount() < current.maxAttempts()) {
+            dispatchStep(state, current, now);
+            sagaRepo.saveState(state);
+            gateway.stageOperationStateChanged(state);
+            return;
+        }
+
+        if (!passedIrreversibleBoundary(state, current)) {
+            deadLetterStore.saveRetryExhausted(
+                    state.operationId(), current.participantService(), current.stepCode(),
+                    current.attemptCount(),
+                    new IllegalStateException("Participant retry exhausted: " + code + " " + message));
             if (state.state() != DeleteTreeSagaState.State.COMPENSATING) {
                 state.transitionTo(DeleteTreeSagaState.State.COMPENSATING, now);
             }
@@ -94,47 +205,37 @@ public class DeleteTreeSagaReplyProcessor {
             return;
         }
 
-        if (!satisfiesBarrier(state, cmd)) {
-            current.fail("BARRIER_NOT_MET",
-                    "applied aggregateVersion=" + cmd.appliedAggregateVersion()
-                            + " epoch=" + cmd.appliedEpoch() + " below target", now);
-            sagaRepo.updateStep(current);
-            state.recordFailure("BARRIER_NOT_MET",
-                    "step " + current.stepCode() + " did not meet barrier", now);
-            state.transitionTo(DeleteTreeSagaState.State.MANUAL_REVIEW, now);
-            sagaRepo.saveState(state);
-            gateway.stageOperationStateChanged(state);
-            return;
-        }
-
-        current.ack(now, cmd.appliedAggregateVersion(), cmd.appliedEpoch());
+        current.markDeadLettered(code, message, now);
         sagaRepo.updateStep(current);
+        state.transitionTo(DeleteTreeSagaState.State.MANUAL_REVIEW, now);
+        sagaRepo.saveState(state);
+        deadLetterStore.saveRetryExhausted(
+                state.operationId(), current.participantService(), current.stepCode(),
+                current.attemptCount(),
+                new IllegalStateException("Participant retry exhausted: " + code + " " + message));
+        gateway.stageOperationStateChanged(state);
+    }
 
-        // FINALIZE is the owner-local barrier-close step: tombstone the tree,
-        // emit the final TreeAdvancedRevision, and mark the Saga SUCCEEDED.
-        DeleteTreeSagaStep next = nextPendingStep(steps, current.sequenceNo());
-        if (current.stepCode().equals("FINALIZE_TREE_DELETION")) {
-            finalizeTree(state, now);
-            state.transitionTo(DeleteTreeSagaState.State.SUCCEEDED, now);
-            sagaRepo.saveState(state);
-            gateway.stageOperationStateChanged(state);
-            return;
-        }
-        if (next == null) {
-            // Last participant just acked; move into FINALIZING and dispatch
-            // the owner-local finalize step.
-            state.transitionTo(DeleteTreeSagaState.State.FINALIZING, now);
-            sagaRepo.saveState(state);
-            finalizeTree(state, now);
-            state.transitionTo(DeleteTreeSagaState.State.SUCCEEDED, now);
-            sagaRepo.saveState(state);
-            gateway.stageOperationStateChanged(state);
-            return;
-        }
-
-        gateway.stageFirstStep(state, next);
+    private void handleBarrierFailure(DeleteTreeSagaState state,
+                                      DeleteTreeSagaStep current, Instant now) {
+        String code = "BARRIER_NOT_MET";
+        String message = "step " + current.stepCode() + " did not meet barrier";
+        current.fail(code, message, now);
+        sagaRepo.updateStep(current);
+        state.recordFailure(code, message, now);
+        state.transitionTo(DeleteTreeSagaState.State.MANUAL_REVIEW, now);
         sagaRepo.saveState(state);
         gateway.stageOperationStateChanged(state);
+    }
+
+    private void dispatchStep(DeleteTreeSagaState state, DeleteTreeSagaStep step, Instant now) {
+        step.dispatch(now);
+        sagaRepo.updateStep(step);
+        gateway.stageFirstStep(state, step);
+    }
+
+    private static boolean passedIrreversibleBoundary(DeleteTreeSagaState state, DeleteTreeSagaStep failed) {
+        return state.irreversibleAt() != null;
     }
 
     private boolean satisfiesBarrier(DeleteTreeSagaState state, DeleteTreeSagaReplyCommand cmd) {
@@ -157,7 +258,12 @@ public class DeleteTreeSagaReplyProcessor {
             int seq = i;
             steps.stream().filter(s -> s.sequenceNo() == seq).findFirst()
                     .ifPresent(prev -> {
-                        if (prev.compensatable() && prev.state() == DeleteTreeSagaStep.State.ACK) {
+                        if (!"tree-access-service".equals(prev.participantService())
+                                && prev.compensatable()
+                                && prev.state() == DeleteTreeSagaStep.State.ACK
+                                && !passedIrreversibleBoundary(state, prev)) {
+                            prev.dispatch(clock.now());
+                            sagaRepo.updateStep(prev);
                             gateway.stageCompensation(state, prev);
                         }
                     });

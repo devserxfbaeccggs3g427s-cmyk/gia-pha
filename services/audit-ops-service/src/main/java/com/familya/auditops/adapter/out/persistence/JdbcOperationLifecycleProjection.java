@@ -27,9 +27,9 @@ public class JdbcOperationLifecycleProjection implements OperationLifecycleProje
         jdbc.update("""
                 INSERT INTO operation_lifecycle_projection
                     (operation_id, owner_service, saga_type, tree_id, initiating_user_id,
-                     state, target_version, target_epoch, failure_code, failure_message,
+state, target_version, target_epoch, failure_code, failure_message, failure_routing,
                      started_at, updated_at, finalized_at, last_event_id)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL,?)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON DUPLICATE KEY UPDATE
                     owner_service = VALUES(owner_service),
                     saga_type = VALUES(saga_type),
@@ -40,7 +40,9 @@ public class JdbcOperationLifecycleProjection implements OperationLifecycleProje
                     target_epoch = VALUES(target_epoch),
                     failure_code = VALUES(failure_code),
                     failure_message = VALUES(failure_message),
+                    failure_routing = VALUES(failure_routing),
                     updated_at = VALUES(updated_at),
+                    finalized_at = COALESCE(finalized_at, VALUES(finalized_at)),
                     last_event_id = VALUES(last_event_id)
                 """,
                 row.operationId().toString(),
@@ -53,8 +55,10 @@ public class JdbcOperationLifecycleProjection implements OperationLifecycleProje
                 row.targetEpoch(),
                 row.failureCode(),
                 row.failureMessage(),
+                row.failureRouting(),
                 Timestamp.from(row.startedAt()),
                 Timestamp.from(row.updatedAt()),
+                row.finalizedAt() == null ? null : Timestamp.from(row.finalizedAt()),
                 lastEventId);
     }
 
@@ -64,13 +68,14 @@ public class JdbcOperationLifecycleProjection implements OperationLifecycleProje
         jdbc.update("""
                 INSERT INTO operation_lifecycle_projection
                     (operation_id, owner_service, saga_type, tree_id, initiating_user_id,
-                     state, target_version, target_epoch, failure_code, failure_message,
+                     state, target_version, target_epoch, failure_code, failure_message, failure_routing,
                      started_at, updated_at, finalized_at, last_event_id)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON DUPLICATE KEY UPDATE
                     state = VALUES(state),
                     failure_code = VALUES(failure_code),
                     failure_message = VALUES(failure_message),
+                    failure_routing = VALUES(failure_routing),
                     updated_at = VALUES(updated_at),
                     finalized_at = COALESCE(VALUES(finalized_at), finalized_at),
                     last_event_id = VALUES(last_event_id)
@@ -85,6 +90,7 @@ public class JdbcOperationLifecycleProjection implements OperationLifecycleProje
                 row.targetEpoch(),
                 row.failureCode(),
                 row.failureMessage(),
+                row.failureRouting(),
                 Timestamp.from(row.startedAt()),
                 Timestamp.from(row.updatedAt()),
                 finalizedAt == null ? null : Timestamp.from(finalizedAt),
@@ -109,6 +115,7 @@ public class JdbcOperationLifecycleProjection implements OperationLifecycleProje
             (Long) rs.getObject("target_epoch"),
             rs.getString("failure_code"),
             rs.getString("failure_message"),
+            rs.getString("failure_routing"),
             rs.getTimestamp("started_at").toInstant(),
             rs.getTimestamp("updated_at").toInstant(),
             rs.getTimestamp("finalized_at") == null ? null : rs.getTimestamp("finalized_at").toInstant());

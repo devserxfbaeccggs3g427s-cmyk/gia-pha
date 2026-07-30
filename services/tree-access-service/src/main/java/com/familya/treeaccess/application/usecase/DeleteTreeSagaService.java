@@ -105,6 +105,14 @@ public class DeleteTreeSagaService {
         // tree before the irreversible boundary.
         tree.freeze(cmd.expectedTreeVersion());
         treeRepo.updateTree(tree);
+        DeleteTreeSagaStep freezeStep = steps.get(0);
+        freezeStep.dispatch(now);
+        freezeStep.ack(now, tree.revision(), tree.epoch());
+        sagaRepo.updateStep(freezeStep);
+        DeleteTreeSagaStep tombstoneStep = steps.get(1);
+        tombstoneStep.dispatch(now);
+        tombstoneStep.ack(now, tree.revision(), tree.epoch());
+        sagaRepo.updateStep(tombstoneStep);
         publisher.publishTreeEvent(new TreeFrozen(tree.id(), tree.revision(), tree.epoch(), now));
 
         publisher.publishTreeEvent(new TreeAdvancedRevision(
@@ -112,12 +120,20 @@ public class DeleteTreeSagaService {
                 operationId, "delete-tree-saga:freeze", now));
 
         gateway.stageOperationStarted(state);
-        gateway.stageFirstStep(state, steps.get(2)); // first participant step
+        dispatchFirstParticipant(state, steps.get(2), now); // first participant step
+        state.transitionTo(DeleteTreeSagaState.State.FREEZING, now);
+        state.transitionTo(DeleteTreeSagaState.State.TOMBSTONING, now);
         state.transitionTo(DeleteTreeSagaState.State.PURGING, now);
         sagaRepo.saveState(state);
 
         LOG.info("Initiated delete-tree Saga operationId={} treeId={}", operationId, tree.id());
         return operationId;
+    }
+
+    private void dispatchFirstParticipant(DeleteTreeSagaState state, DeleteTreeSagaStep step, Instant now) {
+        step.dispatch(now);
+        sagaRepo.updateStep(step);
+        gateway.stageFirstStep(state, step);
     }
 
     private void requireOwnerOrAdmin(Tree tree, UUID userId) {

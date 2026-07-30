@@ -11,18 +11,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * Consumes Saga participant replies for the delete-tree Saga. The owner
- * (Tree Access) is the only legitimate consumer; replies for unknown
- * operations are dropped and dedup is enforced via the platform inbox.
- *
- * <p>Participant reply topics follow the catalog convention:
- * {@code <participant-context>.replies.v1} partitioned by {@code treeId}.
- */
 @Component
 public class DeleteTreeSagaReplyListener {
 
@@ -32,13 +25,16 @@ public class DeleteTreeSagaReplyListener {
     private final DeleteTreeSagaReplyProcessor processor;
     private final InboxStore inbox;
     private final PlatformMetrics metrics;
+    private final DeleteTreeSagaDeadLetterStore deadLetterStore;
 
     public DeleteTreeSagaReplyListener(DeleteTreeSagaReplyProcessor processor,
                                        InboxStore inbox,
-                                       PlatformMetrics metrics) {
+                                       PlatformMetrics metrics,
+                                       DeleteTreeSagaDeadLetterStore deadLetterStore) {
         this.processor = processor;
         this.inbox = inbox;
         this.metrics = metrics;
+        this.deadLetterStore = deadLetterStore;
     }
 
     @KafkaListener(
@@ -51,57 +47,79 @@ public class DeleteTreeSagaReplyListener {
                     "search.replies.v1"
             },
             groupId = "${spring.application.name:tree-access-service}.delete-tree")
+    @Transactional
     public void onReply(ConsumerRecord<String, Object> record) {
         String eventId = headerString(record, "event_id");
         if (eventId == null) {
-            eventId = String.valueOf(record.value()).hashCode() + ":" + record.offset();
+            eventId = "offset:" + record.topic() + ":" + record.partition() + ":" + record.offset();
         }
         if (inbox.exists(eventId, CONSUMER)) {
             metrics.consumerDuplicate(CONSUMER, record.topic());
             return;
         }
+
+        DeleteTreeSagaReplyCommand cmd;
+        try {
+            cmd = parseReply(record);
+        } catch (RuntimeException parseError) {
+            deadLetterStore.savePoison(record, parseError);
+            inbox.markProcessed(new InboxRecord(
+                    eventId, CONSUMER, record.topic(), record.partition(), record.offset(), Instant.now()));
+            return;
+        }
+        if (cmd == null) {
+            deadLetterStore.savePoison(record, new IllegalArgumentException("Empty delete-tree reply"));
+            inbox.markProcessed(new InboxRecord(
+                    eventId, CONSUMER, record.topic(), record.partition(), record.offset(), Instant.now()));
+            return;
+        }
+
+        processor.process(cmd);
         inbox.markProcessed(new InboxRecord(
                 eventId, CONSUMER, record.topic(), record.partition(), record.offset(), Instant.now()));
-
-        try {
-            DeleteTreeSagaReplyCommand cmd = parseReply(record);
-            if (cmd == null) {
-                LOG.warn("Dropping malformed delete-tree reply topic={} offset={}",
-                        record.topic(), record.offset());
-                return;
-            }
-            processor.process(cmd);
-            metrics.consumerProcessed(CONSUMER, record.topic());
-        } catch (RuntimeException e) {
-            LOG.error("delete-tree Saga reply processing failed topic={} offset={}",
-                    record.topic(), record.offset(), e);
-        }
+        metrics.consumerProcessed(CONSUMER, record.topic());
     }
 
     private static DeleteTreeSagaReplyCommand parseReply(ConsumerRecord<String, Object> record) {
         Object v = record.value();
         if (!(v instanceof String s) || s.isBlank()) return null;
+        JsonNode n;
         try {
-            JsonNode n = new com.fasterxml.jackson.databind.ObjectMapper().readTree(s);
-            UUID operationId = UUID.fromString(requiredText(n, "operationId"));
-            String participant = requiredText(n, "participantService");
-            String stepCode = requiredText(n, "stepCode");
-            String status = requiredText(n, "status");
-            boolean failed = "FAILED".equals(status);
-            boolean compensationApplied = "COMPENSATED".equals(status);
-            Long appliedVersion = n.hasNonNull("appliedAggregateVersion")
-                    ? n.path("appliedAggregateVersion").asLong() : null;
-            Long appliedEpoch = n.hasNonNull("appliedEpoch")
-                    ? n.path("appliedEpoch").asLong() : null;
-            String failureCode = n.hasNonNull("failureCode") ? n.path("failureCode").asText() : null;
-            String failureMessage = n.hasNonNull("failureMessage") ? n.path("failureMessage").asText() : null;
-            return new DeleteTreeSagaReplyCommand(operationId, participant, stepCode,
-                    appliedVersion == null ? 0L : appliedVersion,
-                    appliedEpoch == null ? 0L : appliedEpoch,
-                    compensationApplied, failed, failureCode, failureMessage);
+            n = new com.fasterxml.jackson.databind.ObjectMapper().readTree(s);
         } catch (Exception e) {
-            return null;
+            throw new IllegalArgumentException("Malformed JSON", e);
         }
+        UUID operationId = UUID.fromString(requiredText(n, "operationId"));
+        String participant = requiredText(n, "participantService");
+        String stepCode = requiredText(n, "stepCode");
+        String status = requiredText(n, "status");
+        boolean compensationReply = stepCode.startsWith("RESTORE_");
+        boolean failed = "FAILED".equals(status);
+        boolean compensationApplied = compensationReply || "COMPENSATED".equals(status);
+        stepCode = forwardStepCode(stepCode);
+        Long appliedVersion = n.hasNonNull("appliedAggregateVersion")
+                ? n.path("appliedAggregateVersion").asLong() : null;
+        Long appliedEpoch = n.hasNonNull("appliedEpoch")
+                ? n.path("appliedEpoch").asLong() : null;
+        String failureCode = n.hasNonNull("failureCode") ? n.path("failureCode").asText() : null;
+        String failureMessage = n.hasNonNull("failureMessage") ? n.path("failureMessage").asText() : null;
+        return new DeleteTreeSagaReplyCommand(operationId, participant, stepCode,
+                appliedVersion == null ? 0L : appliedVersion,
+                appliedEpoch == null ? 0L : appliedEpoch,
+                compensationApplied, failed, failureCode, failureMessage);
+    }
+
+    private static String forwardStepCode(String stepCode) {
+        return switch (stepCode) {
+            case "RESTORE_MEMBER_TREE" -> "PURGE_MEMBER_TREE";
+            case "RESTORE_RELATIONSHIP_TREE" -> "PURGE_RELATIONSHIP_TREE";
+            case "RESTORE_EVENT_TREE" -> "PURGE_EVENT_TREE";
+            case "RESTORE_MEDIA_METADATA_TREE" -> "PURGE_MEDIA_METADATA_TREE";
+            case "RESTORE_SHARING_TREE" -> "REVOKE_SHARING_TREE";
+            case "RESTORE_SEARCH_TREE" -> "PURGE_SEARCH_TREE";
+            case "RESTORE_TREE" -> "TOMBSTONE_TREE";
+            default -> stepCode;
+        };
     }
 
     private static String requiredText(JsonNode n, String field) {

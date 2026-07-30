@@ -83,5 +83,17 @@ public final class DeleteTreeSagaStep {
 
     public boolean exhausted() { return attemptCount >= maxAttempts; }
 
-    public enum State { PENDING, DISPATCHED, ACK, FAILED, COMPENSATED }
+    public void compensate(Instant now) {
+        this.state = State.COMPENSATED;
+        this.lastReplyAt = now;
+    }
+
+    public void markDeadLettered(String code, String message, Instant now) {
+        this.state = State.DEAD_LETTERED;
+        this.lastReplyAt = now;
+        this.failureCode = code;
+        this.failureMessage = message;
+    }
+
+    public enum State { PENDING, DISPATCHED, ACK, FAILED, COMPENSATED, DEAD_LETTERED }
 }

@@ -112,18 +112,27 @@ public class DeleteMemberSagaService {
         sagaRepo.saveState(state);
         sagaRepo.saveSteps(steps);
 
-        // Mark step 1 ACK locally (owner-local) before dispatching step 2.
+        // Step 1 is the owner-local tombstone (compensatable=false, no Kafka
+        // command needed). Mark it ACK locally so the attempt counter starts
+        // at 1 for the first dispatched participant.
         DeleteMemberSagaStep first = steps.get(0);
+        first.dispatch(now);
         first.ack(now, m.version(), targetEpoch);
         sagaRepo.updateStep(first);
 
         gateway.stageOperationStarted(state);
-        gateway.stageFirstStep(state, steps.get(1));
+        dispatchFirstParticipant(state, steps.get(1), now);
         gateway.stageOperationStateChanged(state);
 
         LOG.info("Initiated delete-member Saga operationId={} memberId={} treeId={}",
                 operationId, cmd.memberId(), cmd.treeId());
         return operationId;
+    }
+
+    private void dispatchFirstParticipant(DeleteMemberSagaState state, DeleteMemberSagaStep step, Instant now) {
+        step.dispatch(now);
+        sagaRepo.updateStep(step);
+        gateway.stageFirstStep(state, step);
     }
 
     private static DeleteMemberSagaStep step(UUID operationId, int seq, String code,

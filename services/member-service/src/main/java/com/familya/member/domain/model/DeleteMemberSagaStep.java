@@ -88,11 +88,24 @@ public final class DeleteMemberSagaStep {
     public boolean isReadyForNext() { return state == State.ACK; }
     public boolean exhausted() { return attemptCount >= maxAttempts; }
 
+    public void compensate(Instant now) {
+        this.state = State.COMPENSATED;
+        this.lastReplyAt = now;
+    }
+
+    public void markDeadLettered(String code, String message, Instant now) {
+        this.state = State.DEAD_LETTERED;
+        this.lastReplyAt = now;
+        this.failureCode = code;
+        this.failureMessage = message;
+    }
+
     public enum State {
         PENDING,
         DISPATCHED,
         ACK,
         FAILED,
-        COMPENSATED
+        COMPENSATED,
+        DEAD_LETTERED
     }
 }
