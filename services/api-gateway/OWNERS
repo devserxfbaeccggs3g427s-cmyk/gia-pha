@@ -1,0 +1,4 @@
+name: api-gateway
+team: api-gateway
+slack: "#familya-api-gateway"
+oncall: api-gateway-oncall@example.com

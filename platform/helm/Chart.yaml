@@ -1,0 +1,16 @@
+apiVersion: v2
+name: familya-service
+description: |
+  Reusable Helm chart for Family Tree platform services. One chart, many
+  values.yaml files. ADR-006 / ADR-012.
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - family-tree
+  - spring-boot
+  - microservice
+maintainers:
+  - name: Family Tree Platform
+sources:
+  - https://example.com/familya

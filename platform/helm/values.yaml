@@ -1,0 +1,58 @@
+name: ""
+namespace: ""
+replicaCount: 2
+image:
+  repository: ghcr.io/familya/identity-service
+  tag: ""
+  digest: ""           # required; set in GitOps per environment
+  pullPolicy: IfNotPresent
+serviceAccount:
+  create: true
+  name: ""
+containerSecurityContext:
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+resources:
+  requests: { cpu: 500m, memory: 768Mi }
+  limits:   { cpu: 2,    memory: 2Gi }
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: prod
+  - name: JAVA_TOOL_OPTIONS
+    value: "-XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
+service:
+  type: ClusterIP
+  port: 8080
+grpc:
+  enabled: false
+  port: 9090
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+keda:
+  enabled: false
+  lagThreshold: "50"
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels: {}
+networkPolicy:
+  enabled: true
+  ingressNamespaceSelector:
+    matchLabels: { name: familya-gateway }
+serviceMonitor:
+  enabled: true
+service:
+  portName: http
+podLabels: {}
+annotations: {}

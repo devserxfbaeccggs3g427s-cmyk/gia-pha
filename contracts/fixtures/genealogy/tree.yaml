@@ -1,0 +1,23 @@
+# Genealogy fixtures (sanitised)
+# Used by property tests in Member and Relationship services to prove
+# generational, ancestry, spouse, and adoption parity.
+trees:
+  - treeId: "33333333-3333-3333-3333-333333333333"
+    name: "Nguyen family"
+    rootGeneration: 1
+    members:
+      - { id: "m1", displayName: "Nguyen Van A", generation: 1 }
+      - { id: "m2", displayName: "Nguyen Thi B", generation: 1 }
+      - { id: "m3", displayName: "Nguyen Van C", generation: 2 }
+      - { id: "m4", displayName: "Tran Thi D", generation: 2 }
+      - { id: "m5", displayName: "Nguyen Van E", generation: 3, adopted: true }
+    relationships:
+      - { type: spouse, fromMemberId: "m1", toMemberId: "m2" }
+      - { type: parent-child, fromMemberId: "m1", toMemberId: "m3" }
+      - { type: parent-child, fromMemberId: "m2", toMemberId: "m3" }
+      - { type: spouse, fromMemberId: "m3", toMemberId: "m4" }
+      - { type: parent-child, fromMemberId: "m3", toMemberId: "m5" }
+    invariants:
+      noCycles: true
+      generationsAreConsistent: true
+      spousesAreAtMostOneGenerationApart: true

@@ -1,0 +1,13 @@
+org.springframework.boot.autoconfigure.AutoConfiguration.imports=\
+com.familya.platform.config.PlatformAutoConfiguration,\
+com.familya.platform.error.GlobalErrorHandler,\
+com.familya.platform.outbox.JdbcOutboxWriter,\
+com.familya.platform.outbox.OutboxRelay,\
+com.familya.platform.inbox.JdbcInboxStore,\
+com.familya.platform.idempotency.JdbcIdempotencyStore,\
+com.familya.platform.kafka.KafkaTopicConfig,\
+com.familya.platform.kafka.KafkaConsumerConfig,\
+com.familya.platform.telemetry.ObservabilityConfig,\
+com.familya.platform.telemetry.PlatformMetrics,\
+com.familya.platform.health.PlatformHealthIndicator,\
+com.familya.platform.api.OperationController

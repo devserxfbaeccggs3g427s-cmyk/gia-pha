@@ -1,0 +1,8 @@
+package com.familya.search.application.port.in;
+
+import java.util.UUID;
+
+public record RestoreSearchTreeCommand(
+        UUID operationId,
+        UUID treeId) {
+}

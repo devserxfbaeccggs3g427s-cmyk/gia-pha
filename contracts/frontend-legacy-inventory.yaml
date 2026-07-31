@@ -1,0 +1,87 @@
+# Frontend legacy inventory (sanitised, migration input only)
+#
+# Every route, header, cookie, and binary behaviour we observed in the
+# legacy Next.js app. The V2 contracts in `contracts/api/v2/openapi.yaml`
+# replace each entry; nothing in this file is the target.
+version: "0.0.0"
+routes:
+  - method: POST
+    path: /api/auth/[...nextauth]
+    owner: legacy-nextauth
+    action: SUPERSEDED
+    replacement: POST /api/v2/identity/sessions
+  - method: GET
+    path: /api/trees
+    owner: legacy-tree
+    action: SUPERSEDED
+    replacement: GET /api/v2/trees
+  - method: POST
+    path: /api/trees
+    owner: legacy-tree
+    action: SUPERSEDED
+    replacement: POST /api/v2/trees
+  - method: GET
+    path: /api/trees/:id/members
+    owner: legacy-member
+    action: SUPERSEDED
+    replacement: GET /api/v2/trees/{treeId}/members
+  - method: POST
+    path: /api/trees/:id/members
+    owner: legacy-member
+    action: SUPERSEDED
+    replacement: POST /api/v2/trees/{treeId}/members (202 Accepted)
+  - method: POST
+    path: /api/trees/:id/relationships
+    owner: legacy-relationship
+    action: SUPERSEDED
+    replacement: POST /api/v2/trees/{treeId}/relationships (202 Accepted)
+  - method: GET
+    path: /api/trees/:id/events
+    owner: legacy-event
+    action: SUPERSEDED
+    replacement: GET /api/v2/trees/{treeId}/events
+  - method: POST
+    path: /api/trees/:id/events
+    owner: legacy-event
+    action: SUPERSEDED
+    replacement: POST /api/v2/trees/{treeId}/events (202 Accepted)
+  - method: POST
+    path: /api/trees/:id/media/intent
+    owner: legacy-media
+    action: SUPERSEDED
+    replacement: POST /api/v2/trees/{treeId}/media/intents (202 Accepted)
+  - method: POST
+    path: /api/trees/:id/shares
+    owner: legacy-share
+    action: SUPERSEDED
+    replacement: POST /api/v2/trees/{treeId}/shares (202 Accepted)
+  - method: GET
+    path: /api/search
+    owner: legacy-search
+    action: SUPERSEDED
+    replacement: GET /api/v2/search
+  - method: POST
+    path: /api/transfer/import
+    owner: legacy-transfer
+    action: SUPERSEDED
+    replacement: POST /api/v2/transfer/import (202 Accepted)
+  - method: POST
+    path: /api/transfer/restore
+    owner: legacy-transfer
+    action: SUPERSEDED
+    replacement: POST /api/v2/transfer/restore (202 Accepted)
+cookies:
+  - name: next-auth.session-token
+    action: SUPERSEDED
+    replacement: identity-session (HttpOnly, Secure, SameSite=Lax)
+headers:
+  - name: x-legacy-role
+    action: SUPERSEDED
+    note: Client-supplied role headers were never authoritative.
+binaries:
+  - name: avatars
+    action: SUPERSEDED
+    replacement: media-service exact-path signed upload
+  - name: exports
+    action: SUPERSEDED
+    replacement: transfer-service generated artifacts

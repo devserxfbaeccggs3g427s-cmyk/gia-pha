@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: tree-access-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/tree?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME:familya}
+    password: ${SPRING_DATASOURCE_PASSWORD:familya}
+  flyway:
+    locations: classpath:db/migration
+
+familya:
+  outbox:
+    relay:
+      enabled: true
+      interval-ms: 500
+  grpc:
+    server:
+      enabled: true
+      port: 9090
+  kafka: { partitions: 12, replication-factor: 3 }
+  treeauth:
+    freshness-threshold-seconds: 60
+    saga:
+      scheduler-enabled: true
+      deadline:
+        scan-interval-ms: 60000
+        batch-size: 100
+        step-timeout-ms: 30000
+      retry:
+        base-backoff-ms: 1000
+        max-backoff-ms: 60000
+        jitter-percent: 20
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true

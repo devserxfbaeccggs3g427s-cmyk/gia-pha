@@ -1,0 +1,30 @@
+# Identity fixtures (sanitised)
+# BCrypt hashes are precomputed from the same input on the platform;
+# they are stable and are used by property tests to prove compatibility
+# and rehash thresholds.
+users:
+  - userId: "11111111-1111-1111-1111-111111111111"
+    normalizedEmail: "[email protected]"
+    bcrypt: "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
+    providers:
+      - provider: password
+      - provider: google
+        providerSubject: "google-1234567890"
+    failedAttempts: 0
+    lockedUntil: null
+    verificationRequired: false
+  - userId: "22222222-2222-2222-2222-222222222222"
+    normalizedEmail: "[email protected]"
+    bcrypt: "$2a$10$abcdefghijklmnopqrstuvIjZAgcfl7p92ldGxad68LJZdL17lhW0"
+    providers:
+      - provider: password
+    failedAttempts: 5
+    lockedUntil: "2026-07-27T11:00:00Z"
+    verificationRequired: true
+limits:
+  registrationPerIpPerHour: 5
+  failedAttemptsBeforeLockout: 5
+  lockoutWindowMinutes: 15
+  verificationWindowHours: 24
+  sessionIdleMinutes: 30
+  bridgeTokenLifetimeSeconds: 300

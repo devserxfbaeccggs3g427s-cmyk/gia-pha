@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package com.familya.contracts.saga.v1;
+
+import "saga_common.proto";
+
+option java_multiple_files = true;
+option java_package = "com.familya.contracts.saga.v1";
+option java_outer_classname = "DeleteTreeSagaProto";
+
+// Forward Saga commands emitted by the Tree Access Service during delete-tree Saga.
+// The Saga is owned by Tree Access; participants are Member/Relationship/Event/
+// Media/Sharing/Search.
+message DeleteTreeSagaCommand {
+  SagaEnvelope envelope = 1;
+
+  oneof step {
+    FreezeTreeStep                freeze_tree               = 10;
+    TombstoneTreeStep             tombstone_tree            = 11;
+    PurgeMemberTreeStep           purge_member_tree         = 12;
+    PurgeRelationshipTreeStep      purge_relationship_tree   = 13;
+    PurgeEventTreeStep            purge_event_tree          = 14;
+    PurgeMediaMetadataTreeStep    purge_media_metadata_tree = 15;
+    RevokeSharingTreeStep          revoke_sharing_tree       = 16;
+    PurgeSearchTreeStep           purge_search_tree         = 17;
+    FinalizeTreeDeletionStep      finalize_tree_deletion    = 18;
+  }
+}
+
+message FreezeTreeStep {
+  int64 expected_tree_version = 1;
+  string reason = 2;
+}
+
+message TombstoneTreeStep {
+  int64 expected_tree_version = 1;
+  string reason = 2;
+}
+
+message PurgeMemberTreeStep {
+  // empty: tree_id in envelope scopes the purge
+}
+
+message PurgeRelationshipTreeStep {
+  // empty: tree_id in envelope scopes the purge
+}
+
+message PurgeEventTreeStep {
+  // empty: tree_id in envelope scopes the purge
+}
+
+message PurgeMediaMetadataTreeStep {
+  // Stage only. Physical binary deletion is performed by a separate delayed
+  // cleanup worker that is NOT part of this Saga's reversible boundary.
+  bool place_retention_holds = 1;
+}
+
+message RevokeSharingTreeStep {
+  // empty: tree_id in envelope scopes the revocation
+}
+
+message PurgeSearchTreeStep {
+  // empty: tree_id in envelope scopes the purge
+}
+
+message FinalizeTreeDeletionStep {
+  int64 expected_tree_version = 1;
+}
+
+// Compensation commands emitted in reverse order on Saga failure before the
+// irreversible finalization step has completed.
+message DeleteTreeSagaCompensation {
+  SagaEnvelope envelope = 1;
+
+  oneof step {
+    UnhideTreeStep                 unhide_tree                = 10;
+    UnfreezeTreeStep               unfreeze_tree              = 11;
+    RestoreMemberTreeStep          restore_member_tree        = 12;
+    RestoreRelationshipTreeStep     restore_relationship_tree  = 13;
+    RestoreEventTreeStep           restore_event_tree         = 14;
+    RestoreMediaMetadataTreeStep   restore_media_metadata     = 15;
+    RestoreSharingTreeStep         restore_sharing_tree       = 16;
+    RestoreSearchTreeStep          restore_search_tree        = 17;
+  }
+}
+
+message UnhideTreeStep {
+  int64 expected_tree_version = 1;
+}
+
+message UnfreezeTreeStep {
+  int64 expected_tree_version = 1;
+}
+
+message RestoreMemberTreeStep {}
+message RestoreRelationshipTreeStep {}
+message RestoreEventTreeStep {}
+message RestoreMediaMetadataTreeStep {}
+message RestoreSharingTreeStep {}
+message RestoreSearchTreeStep {}

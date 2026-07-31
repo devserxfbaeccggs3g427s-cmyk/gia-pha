@@ -1,0 +1,84 @@
+spring:
+  application:
+    name: ${SERVICE_NAME:familya-service}
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/${spring.application.name}?sslMode=VERIFY_CA&useSSL=true&serverTimezone=UTC}
+    username: ${SPRING_DATASOURCE_USERNAME:familya}
+    password: ${SPRING_DATASOURCE_PASSWORD:familya}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 4
+      pool-name: ${spring.application.name}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration,filesystem:./db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+      retries: 5
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+    consumer:
+      group-id: ${spring.application.name}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+
+server:
+  port: 8080
+  shutdown: graceful
+  forward-headers-strategy: framework
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        familya.mutation.latency: true
+    tags:
+      service: ${spring.application.name}
+
+familya:
+  outbox:
+    relay:
+      enabled: true
+      interval-ms: 500
+  grpc:
+    server:
+      enabled: false
+      port: 9090
+  kafka:
+    partitions: 12
+    replication-factor: 3
+  security:
+    bridge:
+      audience: familya
+      max-lifetime-seconds: 300
+
+logging:
+  level:
+    root: INFO
+    com.familya: INFO
+    org.springframework.kafka: WARN
+  pattern:
+    level: "%5p [${spring.application.name},%X{traceId:-},%X{spanId:-}]"

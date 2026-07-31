@@ -1,0 +1,21 @@
+name: search-service
+namespace: familya-search
+replicaCount: 2
+image:
+  repository: ghcr.io/familya/search-service
+  digest: REPLACE_WITH_SIGNED_DIGEST
+  pullPolicy: IfNotPresent
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: prod
+  - name: SPRING_DATASOURCE_URL
+    value: jdbc:mysql://familya-search.example.internal:3306/search?sslMode=VERIFY_CA
+  - name: SPRING_DATASOURCE_USERNAME
+    value: search
+  - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+    value: familya-example.kafka.example.com:9092
+serviceAccount:
+  name: search-workload
+keda:
+  enabled: true
+  lagThreshold: "50"

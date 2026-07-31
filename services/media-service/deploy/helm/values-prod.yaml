@@ -1,0 +1,21 @@
+name: media-service
+namespace: familya-media
+replicaCount: 2
+image:
+  repository: ghcr.io/familya/media-service
+  digest: REPLACE_WITH_SIGNED_DIGEST
+  pullPolicy: IfNotPresent
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: prod
+  - name: SPRING_DATASOURCE_URL
+    value: jdbc:mysql://familya-media.example.internal:3306/media?sslMode=VERIFY_CA
+  - name: SPRING_DATASOURCE_USERNAME
+    value: media
+  - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+    value: familya-example.kafka.example.com:9092
+serviceAccount:
+  name: media-workload
+keda:
+  enabled: true
+  lagThreshold: "50"

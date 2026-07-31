@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package com.familya.contracts.operations.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option java_multiple_files = true;
+option java_package = "com.familya.contracts.operations.v1";
+option java_outer_classname = "OperationLifecycleProto";
+
+// Operation lifecycle events emitted by the owning service. Audit Ops
+// consumes these to maintain its operator projection; it MUST NOT be a
+// business participant or owner.
+message OperationStarted {
+  string operation_id = 1;
+  string owner_service = 2;        // "member-service", "tree-access-service", ...
+  string saga_type = 3;            // "delete-member", "delete-tree", ...
+  string tree_id = 4;
+  string initiating_user_id = 5;
+  google.protobuf.Timestamp started_at = 6;
+  int64 target_aggregate_version = 7;
+  int64 target_epoch = 8;
+  int64 deadline_at_epoch_ms = 9;
+  string schema_version = 10;
+}
+
+message OperationStateChanged {
+  string operation_id = 1;
+  string owner_service = 2;
+  OperationState state = 3;
+  google.protobuf.Timestamp occurred_at = 4;
+  int64 ack_aggregate_version = 5;
+  int64 ack_epoch = 6;
+  string failure_code = 7;
+  string failure_message = 8;
+  string schema_version = 9;
+}
+
+enum OperationState {
+  OPERATION_STATE_UNSPECIFIED = 0;
+  OPERATION_STATE_PENDING        = 1;
+  OPERATION_STATE_DISPATCHED     = 2;
+  OPERATION_STATE_COMPENSATING   = 3;
+  OPERATION_STATE_SUCCEEDED      = 4;
+  OPERATION_STATE_FAILED         = 5;
+  OPERATION_STATE_MANUAL_REVIEW  = 6;
+  OPERATION_STATE_CANCELLED      = 7;
+}

@@ -1,0 +1,21 @@
+name: migration-service
+namespace: familya-migration
+replicaCount: 2
+image:
+  repository: ghcr.io/familya/migration-service
+  digest: REPLACE_WITH_SIGNED_DIGEST
+  pullPolicy: IfNotPresent
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: prod
+  - name: SPRING_DATASOURCE_URL
+    value: jdbc:mysql://familya-migration.example.internal:3306/migration?sslMode=VERIFY_CA
+  - name: SPRING_DATASOURCE_USERNAME
+    value: migration
+  - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+    value: familya-example.kafka.example.com:9092
+serviceAccount:
+  name: migration-workload
+keda:
+  enabled: true
+  lagThreshold: "50"

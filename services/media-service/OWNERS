@@ -1,0 +1,4 @@
+name: media-service
+team: media
+slack: "#familya-media"
+oncall: media-oncall@example.com

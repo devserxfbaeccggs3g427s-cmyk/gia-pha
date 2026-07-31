@@ -1,0 +1,55 @@
+# Frontend / PWA migration contract
+#
+# This document records the contract the frontend/PWA must honour when
+# consuming the V2 Gateway. It is the source of truth for migration tests
+# under `tests/contract/`.
+version: "2.0.0"
+migrations:
+  - id: "mutations-return-202"
+    description: |
+      The frontend MUST treat any 2xx other than 200 on a cross-service
+      mutation as acceptance, not completion. The body always contains
+      an `AsyncOperation` envelope with `operationId`, `status`, and
+      `statusUrl`.
+    appliesTo:
+      - POST /api/v2/trees/{treeId}/members
+      - POST /api/v2/trees/{treeId}/relationships
+      - POST /api/v2/trees/{treeId}/events
+      - POST /api/v2/trees/{treeId}/media/intents
+      - POST /api/v2/transfer/import
+      - POST /api/v2/transfer/restore
+    legacyBehavior: forbidden
+  - id: "poll-operation"
+    description: |
+      The frontend MUST poll `GET /api/v2/operations/{operationId}` at
+      a capped exponential backoff (1s, 2s, 4s, …, 60s) until the
+      status is terminal.
+    terminalStates: [SUCCEEDED, FAILED, COMPENSATED, MANUAL_REVIEW]
+  - id: "idempotency-key"
+    description: |
+      The frontend MUST generate a stable `Idempotency-Key` per logical
+      user action. The key is bound to the payload hash by the Gateway.
+      A new logical retry must rotate the key.
+    header: Idempotency-Key
+  - id: "private-cache-invalidation"
+    description: |
+      The frontend MUST clear private caches and the offline queue on
+      identity change (`identity:changed` event from the Gateway).
+    appliesTo:
+      - TanStack Query cache
+      - Zustand stores tagged `private`
+      - Service worker offline queue
+  - id: "no-immediate-success-assumption"
+    description: |
+      The frontend MUST NOT render success UI based on a 2xx mutation
+      response. The mutation response indicates acceptance only.
+    legacyBehavior: forbidden
+  - id: "shadow-reads-only"
+    description: |
+      The frontend MAY issue shadow reads (read-only) against the new
+      Gateway alongside legacy reads for comparison. Shadow writes are
+      forbidden.
+  - id: "redaction-on-errors"
+    description: |
+      The frontend MUST NOT log or render raw `nextAuthToken`,
+      `Set-Cookie`, or signed Blob URLs.

@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: migration-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/migration?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME:familya}
+    password: ${SPRING_DATASOURCE_PASSWORD:familya}
+  flyway:
+    locations: classpath:db/migration
+
+familya:
+  outbox:
+    relay: { enabled: false, interval-ms: 500 }
+  grpc:
+    server: { enabled: false, port: 9090 }
+  kafka: { partitions: 12, replication-factor: 3 }
