@@ -12,4 +12,6 @@ public interface DeleteTreeSagaGateway {
     void stageOperationStarted(DeleteTreeSagaState state);
 
     void stageOperationStateChanged(DeleteTreeSagaState state);
+
+    void stageOperationStateChanged(DeleteTreeSagaState state, String failureRouting);
 }

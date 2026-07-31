@@ -59,13 +59,19 @@ public class JdbcDeleteMemberSagaRepository implements DeleteMemberSagaRepositor
                 INSERT INTO delete_member_saga_step
                     (operation_id, sequence_no, step_code, participant_service,
                      required, compensatable, state, attempt_count, max_attempts,
-                     last_dispatched_at, last_reply_at, applied_aggregate_version, applied_epoch,
+                     next_attempt_at, last_dispatched_at, step_deadline_at,
+                     dispatch_token, last_failure_at,
+                     last_reply_at, applied_aggregate_version, applied_epoch,
                      failure_code, failure_message)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON DUPLICATE KEY UPDATE
                     state = VALUES(state),
                     attempt_count = VALUES(attempt_count),
+                    next_attempt_at = VALUES(next_attempt_at),
                     last_dispatched_at = VALUES(last_dispatched_at),
+                    step_deadline_at = VALUES(step_deadline_at),
+                    dispatch_token = VALUES(dispatch_token),
+                    last_failure_at = VALUES(last_failure_at),
                     last_reply_at = VALUES(last_reply_at),
                     applied_aggregate_version = VALUES(applied_aggregate_version),
                     applied_epoch = VALUES(applied_epoch),
@@ -118,6 +124,158 @@ public class JdbcDeleteMemberSagaRepository implements DeleteMemberSagaRepositor
                 STATE_MAPPER, Timestamp.from(Instant.now()));
     }
 
+    @Override
+    public List<DeleteMemberSagaStep> listRetryableSteps(Instant now, int limit) {
+        return jdbc.query(
+                "SELECT * FROM delete_member_saga_step " +
+                        "WHERE state = 'FAILED' " +
+                        "AND attempt_count < max_attempts " +
+                        "AND next_attempt_at IS NOT NULL " +
+                        "AND next_attempt_at <= ? " +
+                        "ORDER BY next_attempt_at " +
+                        "LIMIT ?",
+                STEP_MAPPER, Timestamp.from(now), limit);
+    }
+
+    @Override
+    public List<DeleteMemberSagaStep> listTimedOutSteps(Instant now, int limit) {
+        return jdbc.query(
+                "SELECT * FROM delete_member_saga_step " +
+                        "WHERE state = 'DISPATCHED' " +
+                        "AND dispatch_token IS NOT NULL " +
+                        "AND step_deadline_at IS NOT NULL " +
+                        "AND step_deadline_at <= ? " +
+                        "ORDER BY step_deadline_at " +
+                        "LIMIT ?",
+                STEP_MAPPER, Timestamp.from(now), limit);
+    }
+
+    @Override
+    public boolean tryClaimDispatch(UUID operationId, int sequenceNo, UUID dispatchToken,
+                                    Instant now, Instant stepDeadlineAt) {
+        int updated = jdbc.update("""
+                UPDATE delete_member_saga_step
+                   SET state = 'DISPATCHED',
+                       dispatch_token = ?,
+                       last_dispatched_at = ?,
+                       step_deadline_at = ?,
+                       next_attempt_at = NULL
+                 WHERE operation_id = ?
+                   AND sequence_no = ?
+                   AND dispatch_token IS NULL
+                   AND state IN ('PENDING','FAILED')
+                """,
+                dispatchToken.toString(),
+                Timestamp.from(now),
+                Timestamp.from(stepDeadlineAt),
+                operationId.toString(),
+                sequenceNo);
+        return updated == 1;
+    }
+
+    @Override
+    public boolean releaseOrScheduleRetry(UUID operationId, int sequenceNo, Instant now,
+                                          Instant nextAttemptAt, String failureCode, String failureMessage) {
+        int updated = jdbc.update("""
+                UPDATE delete_member_saga_step
+                   SET state = 'FAILED',
+                       dispatch_token = NULL,
+                       step_deadline_at = NULL,
+                       next_attempt_at = ?,
+                       last_failure_at = ?,
+                       failure_code = ?,
+                       failure_message = ?
+                 WHERE operation_id = ?
+                   AND sequence_no = ?
+                   AND state = 'DISPATCHED'
+                   AND dispatch_token IS NOT NULL
+                """,
+                Timestamp.from(nextAttemptAt),
+                Timestamp.from(now),
+                failureCode,
+                failureMessage,
+                operationId.toString(),
+                sequenceNo);
+        return updated == 1;
+    }
+
+    @Override
+    public boolean tryClaimCompensation(UUID operationId, int sequenceNo, UUID dispatchToken,
+                                        Instant now, Instant stepDeadlineAt) {
+        int updated = jdbc.update("""
+                UPDATE delete_member_saga_step
+                   SET state = 'DISPATCHED',
+                       dispatch_token = ?,
+                       last_dispatched_at = ?,
+                       step_deadline_at = ?,
+                       next_attempt_at = NULL
+                 WHERE operation_id = ?
+                   AND sequence_no = ?
+                   AND state = 'ACK'
+                   AND dispatch_token IS NULL
+                """,
+                dispatchToken.toString(),
+                Timestamp.from(now),
+                Timestamp.from(stepDeadlineAt),
+                operationId.toString(),
+                sequenceNo);
+        return updated == 1;
+    }
+
+    @Override
+    public boolean tryAcknowledgeStep(UUID operationId, int sequenceNo, Instant now,
+                                      long appliedAggregateVersion, long appliedEpoch) {
+        int updated = jdbc.update("""
+                UPDATE delete_member_saga_step
+                   SET state = 'ACK',
+                       last_reply_at = ?,
+                       applied_aggregate_version = ?,
+                       applied_epoch = ?,
+                       step_deadline_at = NULL
+                 WHERE operation_id = ?
+                   AND sequence_no = ?
+                   AND state = 'DISPATCHED'
+                   AND dispatch_token IS NOT NULL
+                """,
+                Timestamp.from(now),
+                appliedAggregateVersion,
+                appliedEpoch,
+                operationId.toString(),
+                sequenceNo);
+        return updated == 1;
+    }
+
+    @Override
+    public Optional<DeleteMemberSagaStep> findActiveStep(UUID operationId) {
+        var rows = jdbc.query("""
+                SELECT s.* FROM delete_member_saga_step s
+                WHERE s.operation_id = ?
+                  AND s.state NOT IN ('ACK','COMPENSATED','DEAD_LETTERED')
+                ORDER BY s.sequence_no
+                LIMIT 1
+                """, STEP_MAPPER, operationId.toString());
+        return rows.stream().findFirst();
+    }
+
+    @Override
+    public void markOperationManualReview(UUID operationId, String failureCode, String failureMessage, Instant now) {
+        jdbc.update("""
+                UPDATE delete_member_saga_state
+                   SET state = 'MANUAL_REVIEW',
+                       failure_code = ?,
+                       failure_message = ?,
+                       finalized_at = ?,
+                       last_updated_at = ?
+                 WHERE operation_id = ?
+                   AND state <> 'MANUAL_REVIEW'
+                """,
+                failureCode,
+                failureMessage,
+                Timestamp.from(now),
+                Timestamp.from(now),
+                operationId.toString());
+    }
+
     private void bindState(java.sql.PreparedStatement ps, DeleteMemberSagaState s) throws SQLException {
         ps.setString(1, s.operationId().toString());
         ps.setString(2, s.treeId().toString());
@@ -146,12 +304,16 @@ public class JdbcDeleteMemberSagaRepository implements DeleteMemberSagaRepositor
         ps.setString(7, s.state().name());
         ps.setInt(8, s.attemptCount());
         ps.setInt(9, s.maxAttempts());
-        if (s.lastDispatchedAt() != null) ps.setTimestamp(10, Timestamp.from(s.lastDispatchedAt())); else ps.setNull(10, java.sql.Types.TIMESTAMP);
-        if (s.lastReplyAt() != null)      ps.setTimestamp(11, Timestamp.from(s.lastReplyAt()));      else ps.setNull(11, java.sql.Types.TIMESTAMP);
-        if (s.appliedAggregateVersion() != null) ps.setLong(12, s.appliedAggregateVersion());    else ps.setNull(12, java.sql.Types.BIGINT);
-        if (s.appliedEpoch() != null)            ps.setLong(13, s.appliedEpoch());                else ps.setNull(13, java.sql.Types.BIGINT);
-        ps.setString(14, s.failureCode());
-        ps.setString(15, s.failureMessage());
+        if (s.nextAttemptAt() != null) ps.setTimestamp(10, Timestamp.from(s.nextAttemptAt())); else ps.setNull(10, java.sql.Types.TIMESTAMP);
+        if (s.lastDispatchedAt() != null) ps.setTimestamp(11, Timestamp.from(s.lastDispatchedAt())); else ps.setNull(11, java.sql.Types.TIMESTAMP);
+        if (s.stepDeadlineAt() != null) ps.setTimestamp(12, Timestamp.from(s.stepDeadlineAt())); else ps.setNull(12, java.sql.Types.TIMESTAMP);
+        if (s.dispatchToken() != null) ps.setString(13, s.dispatchToken().toString()); else ps.setNull(13, java.sql.Types.CHAR);
+        if (s.lastFailureAt() != null) ps.setTimestamp(14, Timestamp.from(s.lastFailureAt())); else ps.setNull(14, java.sql.Types.TIMESTAMP);
+        if (s.lastReplyAt() != null) ps.setTimestamp(15, Timestamp.from(s.lastReplyAt())); else ps.setNull(15, java.sql.Types.TIMESTAMP);
+        if (s.appliedAggregateVersion() != null) ps.setLong(16, s.appliedAggregateVersion()); else ps.setNull(16, java.sql.Types.BIGINT);
+        if (s.appliedEpoch() != null) ps.setLong(17, s.appliedEpoch()); else ps.setNull(17, java.sql.Types.BIGINT);
+        ps.setString(18, s.failureCode());
+        ps.setString(19, s.failureMessage());
     }
 
     private static final RowMapper<DeleteMemberSagaState> STATE_MAPPER = (ResultSet rs, int n) -> new DeleteMemberSagaState(
@@ -182,8 +344,12 @@ public class JdbcDeleteMemberSagaRepository implements DeleteMemberSagaRepositor
             DeleteMemberSagaStep.State.valueOf(rs.getString("state")),
             rs.getInt("attempt_count"),
             rs.getInt("max_attempts"),
+            rs.getTimestamp("next_attempt_at") == null ? null : rs.getTimestamp("next_attempt_at").toInstant(),
             rs.getTimestamp("last_dispatched_at") == null ? null : rs.getTimestamp("last_dispatched_at").toInstant(),
-            rs.getTimestamp("last_reply_at")      == null ? null : rs.getTimestamp("last_reply_at").toInstant(),
+            rs.getTimestamp("step_deadline_at") == null ? null : rs.getTimestamp("step_deadline_at").toInstant(),
+            rs.getString("dispatch_token") == null ? null : UUID.fromString(rs.getString("dispatch_token")),
+            rs.getTimestamp("last_failure_at") == null ? null : rs.getTimestamp("last_failure_at").toInstant(),
+            rs.getTimestamp("last_reply_at") == null ? null : rs.getTimestamp("last_reply_at").toInstant(),
             (Long) rs.getObject("applied_aggregate_version"),
             (Long) rs.getObject("applied_epoch"),
             rs.getString("failure_code"),

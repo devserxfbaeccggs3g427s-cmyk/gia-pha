@@ -50,6 +50,11 @@ public class OutboxDeleteTreeSagaGateway implements DeleteTreeSagaGateway {
 
     @Override
     public void stageOperationStateChanged(DeleteTreeSagaState state) {
+        stageOperationStateChanged(state, null);
+    }
+
+    @Override
+    public void stageOperationStateChanged(DeleteTreeSagaState state, String failureRouting) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("operationId", state.operationId().toString());
         payload.put("ownerService", "tree-access-service");
@@ -60,6 +65,9 @@ public class OutboxDeleteTreeSagaGateway implements DeleteTreeSagaGateway {
         payload.put("failureCode", state.failureCode());
         payload.put("failureMessage", state.failureMessage());
         payload.put("schemaVersion", "v1");
+        if (failureRouting != null) {
+            payload.put("failureRouting", failureRouting);
+        }
         lifecycle.stage(payload, "operations.events.v1", "OperationStateChanged");
     }
 

@@ -79,15 +79,16 @@ public class DeleteTreeSagaDeadLetterStore {
 
     private String serialisePayload(Object value) {
         if (value == null) return null;
-        if (value instanceof String s) return s;
-        if (value instanceof byte[] bytes) return new String(bytes, StandardCharsets.UTF_8);
+        if (value instanceof byte[] bytes) {
+            return "{\"valueClass\":\"[B\",\"length\":" + bytes.length + "}";
+        }
         Map<String, Object> safe = new LinkedHashMap<>();
         safe.put("valueClass", value.getClass().getName());
-        safe.put("value", String.valueOf(value));
+        safe.put("redacted", true);
         try {
             return json.writeValueAsString(safe);
         } catch (JsonProcessingException e) {
-            return String.valueOf(value);
+            return "{\"redacted\":true}";
         }
     }
 

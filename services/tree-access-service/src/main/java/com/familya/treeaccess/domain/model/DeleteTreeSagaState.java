@@ -76,6 +76,9 @@ public final class DeleteTreeSagaState {
     }
 
     public void recordFailure(String code, String message, Instant now) {
+        if (this.state.isTerminal()) {
+            return;
+        }
         this.failureCode = code;
         this.failureMessage = message;
         this.lastUpdatedAt = now;

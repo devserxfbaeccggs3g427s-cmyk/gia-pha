@@ -87,6 +87,9 @@ public final class DeleteMemberSagaState {
     }
 
     public void recordFailure(String code, String message, Instant now) {
+        if (this.state.isTerminal()) {
+            return;
+        }
         this.failureCode = code;
         this.failureMessage = message;
         this.lastUpdatedAt = now;

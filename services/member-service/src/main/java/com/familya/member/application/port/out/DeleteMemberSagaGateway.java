@@ -24,4 +24,7 @@ public interface DeleteMemberSagaGateway {
 
     /** Stage an OperationStateChanged event consumed by Audit Ops. */
     void stageOperationStateChanged(DeleteMemberSagaState state);
+
+    /** Stage OperationStateChanged with an explicit failureRouting tag for Audit Ops projection. */
+    void stageOperationStateChanged(DeleteMemberSagaState state, String failureRouting);
 }

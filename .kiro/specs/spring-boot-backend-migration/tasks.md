@@ -138,7 +138,7 @@ All tasks are intentionally unchecked. Execute in dependency order. No task in t
     - [x] Tree state machine extended with DELETE_FROZEN / PENDING_DELETION / DELETION_FINALIZED.
     - [x] Audit Ops lifecycle projection consumer (OperationStarted / OperationStateChanged).
      - [x] Compensation dispatch + DLQ / manual-review routing on participant failure.
-     - [ ] Deadline scanner + retry scheduler (Task 13.6 dependency).
+     - [x] Deadline scanner + retry scheduler (Session J sub-tasks 13.4.J.1 – 13.4.J.10; see docs/saga-rollout.md).
      - [ ] Fault-injection tests for participant outage / duplicate / reorder / broker restart (Task 13.6).
   - [ ] 13.5 Implement media-activation association Saga and cutover operation visibility
   - [ ] 13.6 Fault-inject every transition, participant outage, duplicate, reorder, broker outage, and orchestrator restart

@@ -58,6 +58,11 @@ public class OutboxDeleteMemberSagaGateway implements DeleteMemberSagaGateway {
 
     @Override
     public void stageOperationStateChanged(DeleteMemberSagaState state) {
+        stageOperationStateChanged(state, null);
+    }
+
+    @Override
+    public void stageOperationStateChanged(DeleteMemberSagaState state, String failureRouting) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("operationId", state.operationId().toString());
         payload.put("ownerService", "member-service");
@@ -68,6 +73,9 @@ public class OutboxDeleteMemberSagaGateway implements DeleteMemberSagaGateway {
         payload.put("failureCode", state.failureCode());
         payload.put("failureMessage", state.failureMessage());
         payload.put("schemaVersion", "v1");
+        if (failureRouting != null) {
+            payload.put("failureRouting", failureRouting);
+        }
         lifecycle.stage(payload, "operations.events.v1", "OperationStateChanged");
     }
 

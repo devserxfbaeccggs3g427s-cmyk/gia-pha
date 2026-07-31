@@ -60,8 +60,12 @@ public class DeleteMemberSagaReplyProcessor {
                 .filter(s -> s.stepCode().equals(cmd.stepCode()))
                 .filter(s -> s.participantService().equals(cmd.participantService()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException(
-                        "No step " + cmd.stepCode() + " for " + cmd.participantService()));
+                .orElse(null);
+        if (current == null) {
+            LOG.warn("Ignoring reply op={} step={} participant={} — no matching step",
+                    cmd.operationId(), cmd.stepCode(), cmd.participantService());
+            return;
+        }
 
         Instant now = clock.now();
         metrics.mutationAccepted("member-service", "deleteMember.reply");
@@ -72,6 +76,11 @@ public class DeleteMemberSagaReplyProcessor {
             } else {
                 handleCompensationReply(state, steps, current, now);
             }
+            return;
+        }
+        if (state.state() == DeleteMemberSagaState.State.COMPENSATING) {
+            LOG.info("Ignoring forward reply while compensating operationId={} step={}",
+                    state.operationId(), current.stepCode());
             return;
         }
         if (current.state() != DeleteMemberSagaStep.State.DISPATCHED) {
@@ -137,9 +146,14 @@ public class DeleteMemberSagaReplyProcessor {
         if (state.state() != DeleteMemberSagaState.State.COMPENSATING
                 || current.state() != DeleteMemberSagaStep.State.DISPATCHED) return;
         if (current.attemptCount() < current.maxAttempts()) {
-            current.dispatch(now);
-            sagaRepo.updateStep(current);
-            gateway.stageCompensation(state, current);
+            UUID token = UUID.randomUUID();
+            Instant stepDeadline = now.plusSeconds(30);
+            if (sagaRepo.tryClaimCompensation(current.operationId(), current.sequenceNo(),
+                    token, now, stepDeadline)) {
+                current.markCompensationDispatched(now, token, stepDeadline);
+                sagaRepo.updateStep(current);
+                gateway.stageCompensation(state, current);
+            }
             return;
         }
         current.markDeadLettered(code, message, now);
@@ -173,12 +187,15 @@ public class DeleteMemberSagaReplyProcessor {
                     state.operationId(), current.participantService(), current.stepCode(),
                     current.attemptCount(),
                     new IllegalStateException("Participant retry exhausted: " + code + " " + message));
-            if (state.state() != DeleteMemberSagaState.State.COMPENSATING) {
+            boolean stateChanged = state.state() != DeleteMemberSagaState.State.COMPENSATING;
+            if (stateChanged) {
                 state.transitionTo(DeleteMemberSagaState.State.COMPENSATING, now);
             }
             sagaRepo.saveState(state);
-            gateway.stageOperationStateChanged(state);
-            compensatePreviousSteps(state, steps, current);
+            if (stateChanged) {
+                gateway.stageOperationStateChanged(state);
+                compensatePreviousSteps(state, steps, current);
+            }
             return;
         }
 
@@ -206,7 +223,20 @@ public class DeleteMemberSagaReplyProcessor {
     }
 
     private void dispatchStep(DeleteMemberSagaState state, DeleteMemberSagaStep step, Instant now) {
-        step.dispatch(now);
+        if (step.attemptCount() > 0 && step.dispatchToken() != null && step.state() == DeleteMemberSagaStep.State.DISPATCHED) {
+            sagaRepo.updateStep(step);
+            gateway.stageFirstStep(state, step);
+            return;
+        }
+        UUID token = UUID.randomUUID();
+        Instant stepDeadline = now.plusSeconds(30);
+        boolean claimed = sagaRepo.tryClaimDispatch(step.operationId(), step.sequenceNo(), token, now, stepDeadline);
+        if (!claimed) {
+            LOG.warn("dispatchStep claim conflict op={} seq={} step.state={}; skipping publish to avoid double dispatch",
+                    step.operationId(), step.sequenceNo(), step.state());
+            return;
+        }
+        step.claimDispatch(token, now, stepDeadline);
         sagaRepo.updateStep(step);
         gateway.stageFirstStep(state, step);
     }
@@ -231,6 +261,7 @@ public class DeleteMemberSagaReplyProcessor {
     private void compensatePreviousSteps(DeleteMemberSagaState state,
                                          List<DeleteMemberSagaStep> steps,
                                          DeleteMemberSagaStep failedStep) {
+        Instant now = clock.now();
         for (int i = failedStep.sequenceNo() - 1; i >= 1; i--) {
             int seq = i;
             steps.stream().filter(s -> s.sequenceNo() == seq).findFirst()
@@ -238,9 +269,14 @@ public class DeleteMemberSagaReplyProcessor {
                         if (prev.compensatable()
                                 && prev.state() == DeleteMemberSagaStep.State.ACK
                                 && !passedIrreversibleBoundary(state, prev)) {
-                            prev.dispatch(clock.now());
-                            sagaRepo.updateStep(prev);
-                            gateway.stageCompensation(state, prev);
+                            UUID token = UUID.randomUUID();
+                            Instant stepDeadline = now.plusSeconds(30);
+                            if (sagaRepo.tryClaimCompensation(prev.operationId(), prev.sequenceNo(),
+                                    token, now, stepDeadline)) {
+                                prev.markCompensationDispatched(now, token, stepDeadline);
+                                sagaRepo.updateStep(prev);
+                                gateway.stageCompensation(state, prev);
+                            }
                         }
                     });
         }

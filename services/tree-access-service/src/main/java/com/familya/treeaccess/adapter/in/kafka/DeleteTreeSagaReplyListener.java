@@ -1,6 +1,7 @@
 package com.familya.treeaccess.adapter.in.kafka;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.familya.platform.inbox.InboxRecord;
 import com.familya.platform.inbox.InboxStore;
 import com.familya.platform.telemetry.PlatformMetrics;
@@ -26,15 +27,18 @@ public class DeleteTreeSagaReplyListener {
     private final InboxStore inbox;
     private final PlatformMetrics metrics;
     private final DeleteTreeSagaDeadLetterStore deadLetterStore;
+    private final ObjectMapper json;
 
     public DeleteTreeSagaReplyListener(DeleteTreeSagaReplyProcessor processor,
                                        InboxStore inbox,
                                        PlatformMetrics metrics,
-                                       DeleteTreeSagaDeadLetterStore deadLetterStore) {
+                                       DeleteTreeSagaDeadLetterStore deadLetterStore,
+                                       ObjectMapper json) {
         this.processor = processor;
         this.inbox = inbox;
         this.metrics = metrics;
         this.deadLetterStore = deadLetterStore;
+        this.json = json;
     }
 
     @KafkaListener(
@@ -74,22 +78,38 @@ public class DeleteTreeSagaReplyListener {
             return;
         }
 
-        processor.process(cmd);
+        try {
+            processor.process(cmd);
+        } catch (RuntimeException processError) {
+            LOG.error("Saga processor rejected reply op={} step={} reason={}",
+                    cmd.operationId(), cmd.stepCode(), processError.toString());
+            deadLetterStore.saveRetryExhausted(
+                    cmd.operationId(), cmd.participantService(), cmd.stepCode(),
+                    -1, processError);
+            inbox.markProcessed(new InboxRecord(
+                    eventId, CONSUMER, record.topic(), record.partition(), record.offset(), Instant.now()));
+            return;
+        }
         inbox.markProcessed(new InboxRecord(
                 eventId, CONSUMER, record.topic(), record.partition(), record.offset(), Instant.now()));
         metrics.consumerProcessed(CONSUMER, record.topic());
     }
 
-    private static DeleteTreeSagaReplyCommand parseReply(ConsumerRecord<String, Object> record) {
+    private DeleteTreeSagaReplyCommand parseReply(ConsumerRecord<String, Object> record) {
         Object v = record.value();
         if (!(v instanceof String s) || s.isBlank()) return null;
         JsonNode n;
         try {
-            n = new com.fasterxml.jackson.databind.ObjectMapper().readTree(s);
+            n = json.readTree(s);
         } catch (Exception e) {
             throw new IllegalArgumentException("Malformed JSON", e);
         }
-        UUID operationId = UUID.fromString(requiredText(n, "operationId"));
+        UUID operationId;
+        try {
+            operationId = UUID.fromString(requiredText(n, "operationId"));
+        } catch (IllegalArgumentException illegal) {
+            throw illegal;
+        }
         String participant = requiredText(n, "participantService");
         String stepCode = requiredText(n, "stepCode");
         String status = requiredText(n, "status");
@@ -97,16 +117,15 @@ public class DeleteTreeSagaReplyListener {
         boolean failed = "FAILED".equals(status);
         boolean compensationApplied = compensationReply || "COMPENSATED".equals(status);
         stepCode = forwardStepCode(stepCode);
-        Long appliedVersion = n.hasNonNull("appliedAggregateVersion")
-                ? n.path("appliedAggregateVersion").asLong() : null;
-        Long appliedEpoch = n.hasNonNull("appliedEpoch")
-                ? n.path("appliedEpoch").asLong() : null;
+        long appliedVersion = n.hasNonNull("appliedAggregateVersion")
+                ? n.path("appliedAggregateVersion").asLong() : 0L;
+        long appliedEpoch = n.hasNonNull("appliedEpoch")
+                ? n.path("appliedEpoch").asLong() : 0L;
         String failureCode = n.hasNonNull("failureCode") ? n.path("failureCode").asText() : null;
         String failureMessage = n.hasNonNull("failureMessage") ? n.path("failureMessage").asText() : null;
         return new DeleteTreeSagaReplyCommand(operationId, participant, stepCode,
-                appliedVersion == null ? 0L : appliedVersion,
-                appliedEpoch == null ? 0L : appliedEpoch,
-                compensationApplied, failed, failureCode, failureMessage);
+                appliedVersion, appliedEpoch, compensationApplied, failed,
+                failureCode, failureMessage);
     }
 
     private static String forwardStepCode(String stepCode) {

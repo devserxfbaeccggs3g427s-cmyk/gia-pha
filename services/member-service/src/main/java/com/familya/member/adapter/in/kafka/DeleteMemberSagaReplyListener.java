@@ -1,6 +1,7 @@
 package com.familya.member.adapter.in.kafka;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.familya.member.application.port.in.DeleteMemberSagaReplyCommand;
 import com.familya.member.application.usecase.DeleteMemberSagaReplyProcessor;
 import com.familya.platform.inbox.InboxRecord;
@@ -26,15 +27,18 @@ public class DeleteMemberSagaReplyListener {
     private final InboxStore inbox;
     private final PlatformMetrics metrics;
     private final DeleteMemberSagaDeadLetterStore deadLetterStore;
+    private final ObjectMapper json;
 
     public DeleteMemberSagaReplyListener(DeleteMemberSagaReplyProcessor processor,
                                           InboxStore inbox,
                                           PlatformMetrics metrics,
-                                          DeleteMemberSagaDeadLetterStore deadLetterStore) {
+                                          DeleteMemberSagaDeadLetterStore deadLetterStore,
+                                          ObjectMapper json) {
         this.processor = processor;
         this.inbox = inbox;
         this.metrics = metrics;
         this.deadLetterStore = deadLetterStore;
+        this.json = json;
     }
 
     @KafkaListener(
@@ -72,22 +76,38 @@ public class DeleteMemberSagaReplyListener {
             return;
         }
 
-        processor.process(cmd);
+        try {
+            processor.process(cmd);
+        } catch (RuntimeException processError) {
+            LOG.error("Saga processor rejected reply op={} step={} reason={}",
+                    cmd.operationId(), cmd.stepCode(), processError.toString());
+            deadLetterStore.saveRetryExhausted(
+                    cmd.operationId(), cmd.participantService(), cmd.stepCode(),
+                    -1, processError);
+            inbox.markProcessed(new InboxRecord(
+                    eventId, CONSUMER, record.topic(), record.partition(), record.offset(), Instant.now()));
+            return;
+        }
         inbox.markProcessed(new InboxRecord(
                 eventId, CONSUMER, record.topic(), record.partition(), record.offset(), Instant.now()));
         metrics.consumerProcessed(CONSUMER, record.topic());
     }
 
-    private static DeleteMemberSagaReplyCommand parseReply(ConsumerRecord<String, Object> record) {
+    private DeleteMemberSagaReplyCommand parseReply(ConsumerRecord<String, Object> record) {
         Object v = record.value();
         if (!(v instanceof String s) || s.isBlank()) return null;
         JsonNode n;
         try {
-            n = new com.fasterxml.jackson.databind.ObjectMapper().readTree(s);
+            n = json.readTree(s);
         } catch (Exception e) {
             throw new IllegalArgumentException("Malformed JSON", e);
         }
-        UUID operationId = UUID.fromString(requiredText(n, "operationId"));
+        UUID operationId;
+        try {
+            operationId = UUID.fromString(requiredText(n, "operationId"));
+        } catch (IllegalArgumentException illegal) {
+            throw illegal;
+        }
         String participant = requiredText(n, "participantService");
         String stepCode = requiredText(n, "stepCode");
         String status = requiredText(n, "status");

@@ -20,6 +20,16 @@ familya:
   kafka: { partitions: 12, replication-factor: 3 }
   treeauth:
     freshness-threshold-seconds: 60
+    saga:
+      scheduler-enabled: true
+      deadline:
+        scan-interval-ms: 60000
+        batch-size: 100
+        step-timeout-ms: 30000
+      retry:
+        base-backoff-ms: 1000
+        max-backoff-ms: 60000
+        jitter-percent: 20
 
 management:
   endpoint:

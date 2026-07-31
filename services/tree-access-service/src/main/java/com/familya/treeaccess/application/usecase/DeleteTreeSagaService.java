@@ -131,7 +131,15 @@ public class DeleteTreeSagaService {
     }
 
     private void dispatchFirstParticipant(DeleteTreeSagaState state, DeleteTreeSagaStep step, Instant now) {
-        step.dispatch(now);
+        UUID token = UUID.randomUUID();
+        Instant stepDeadline = now.plusSeconds(30);
+        boolean claimed = sagaRepo.tryClaimDispatch(step.operationId(), step.sequenceNo(), token, now, stepDeadline);
+        if (!claimed) {
+            LOG.warn("dispatchFirstParticipant claim conflict op={} seq={}; skipping publish",
+                    step.operationId(), step.sequenceNo());
+            return;
+        }
+        step.claimDispatch(token, now, stepDeadline);
         sagaRepo.updateStep(step);
         gateway.stageFirstStep(state, step);
     }
@@ -157,7 +165,9 @@ public class DeleteTreeSagaService {
         return new DeleteTreeSagaStep(operationId, seq, code, participant,
                 required, compensatable,
                 DeleteTreeSagaStep.State.PENDING, 0, DEFAULT_MAX_ATTEMPTS,
-                null, null, null, null, null, null);
+                null,
+                null, null, null, null,
+                null, null, null, null, null);
     }
 
     public interface Clock { Instant now(); }
