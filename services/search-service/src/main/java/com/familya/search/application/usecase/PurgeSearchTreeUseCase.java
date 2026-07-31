@@ -16,10 +16,16 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 
 /**
- * Participant step for delete-tree Saga. Removes all tree-scoped documents
- * from member/event/media search projections, autocomplete, statistics, and
- * report caches, then advances the local watermark to the target
- * aggregate version/epoch so subsequent reads see the converged state.
+ * Bước tham gia (participant) của Saga xoá cây.
+ *
+ * <p>Xoá toàn bộ tài liệu trong các bảng chiếu của search service
+ * (member/event/media/autocomplete/statistics/report) cho cây đã chỉ định,
+ * sau đó nâng watermark cục bộ lên mức phiên bản/epoch mục tiêu để các lần
+ * đọc sau nhìn thấy trạng thái đã hội tụ.</p>
+ *
+ * <p>Mọi thao tác xoá và nâng watermark được chạy trong một transaction
+ * duy nhất - đảm bảo hoặc tất cả thành công hoặc không bước nào được áp
+ * dụng.</p>
  */
 @Service
 public class PurgeSearchTreeUseCase {
@@ -34,6 +40,10 @@ public class PurgeSearchTreeUseCase {
     private final ReportRepository reports;
     private final SearchWatermarkRepository watermarks;
 
+    /**
+     * Khởi tạo use case với các cổng persistence tương ứng với các bảng chiếu
+     * mà Saga cần xoá.
+     */
     public PurgeSearchTreeUseCase(MemberSearchRepository members,
                                   EventSearchRepository events,
                                   MediaSearchRepository media,
@@ -50,14 +60,26 @@ public class PurgeSearchTreeUseCase {
         this.watermarks = watermarks;
     }
 
+    /**
+     * Thực thi xoá sạch dữ liệu của một cây và nâng watermark.
+     *
+     * @param cmd lệnh chứa {@code operationId}, {@code treeId}, phiên bản
+     *            và epoch mục tiêu.
+     * @return kết quả gồm tổng số bản ghi đã xoá và phiên bản/epoch đã áp dụng.
+     */
     @Transactional
     public Result execute(PurgeSearchTreeCommand cmd) {
+        // Xoá tuần tự từng bảng để thu số liệu cho log; nếu một bảng không
+        // có triển khai deleteByTree thật thì default trả về 0L.
         long memberCount = members.deleteByTree(cmd.treeId());
         long eventCount = events.deleteByTree(cmd.treeId());
         long mediaCount = media.deleteByTree(cmd.treeId());
         long autocompleteCount = autocomplete.deleteByTree(cmd.treeId());
         long statsCount = statistics.deleteByTree(cmd.treeId());
         long reportCount = reports.deleteByTree(cmd.treeId());
+        // Nâng watermark cho mọi miền lên phiên bản mục tiêu - việc này
+        // đảm bảo các lần đọc sau thấy "trạng thái mới" ngay cả khi chưa
+        // nhận thêm sự kiện nào.
         watermarks.advance(cmd.treeId(), cmd.targetAggregateVersion(),
                 cmd.targetEpoch(), Instant.now());
 
@@ -68,5 +90,12 @@ public class PurgeSearchTreeUseCase {
         return new Result((int) total, cmd.targetAggregateVersion(), cmd.targetEpoch());
     }
 
+    /**
+     * Kết quả trả về của use case.
+     *
+     * @param affectedCount          tổng số bản ghi đã xoá.
+     * @param appliedAggregateVersion phiên bản aggregate đã áp dụng.
+     * @param appliedEpoch            epoch đã áp dụng.
+     */
     public record Result(int affectedCount, long appliedAggregateVersion, long appliedEpoch) { }
 }

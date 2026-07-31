@@ -24,11 +24,26 @@ public class AdvanceDeleteMemberRevisionUseCase {
 
     private static final Logger LOG = LoggerFactory.getLogger(AdvanceDeleteMemberRevisionUseCase.class);
 
+    /** Kho lưu trữ cây. */
     private final TreeRepository repo;
+
+    /** Bộ publish sự kiện cây. */
     private final TreeEventPublisher publisher;
+
+    /** Metric giám sát. */
     private final PlatformMetrics metrics;
+
+    /** Đồng hồ tiêm được. */
     private final Clock clock;
 
+    /**
+     * Khởi tạo use-case.
+     *
+     * @param repo      kho lưu trữ cây
+     * @param publisher bộ publish sự kiện
+     * @param metrics   metric giám sát
+     * @param clock     đồng hồ
+     */
     public AdvanceDeleteMemberRevisionUseCase(TreeRepository repo, TreeEventPublisher publisher,
                                               PlatformMetrics metrics, Clock clock) {
         this.repo = repo;
@@ -37,6 +52,19 @@ public class AdvanceDeleteMemberRevisionUseCase {
         this.clock = clock;
     }
 
+    /**
+     * Áp dụng yêu cầu tăng revision của Saga delete-member:
+     *
+     * <ol>
+     *   <li>Tải cây, ném {@link TreeNotFoundException} nếu không tồn tại.</li>
+     *   <li>Gọi {@link Tree#advanceRevisionForSaga} với phiên bản kỳ vọng và revision/epoch mới.</li>
+     *   <li>Cập nhật cây và phát sự kiện {@link TreeAdvancedRevision}.</li>
+     *   <li>Tăng metric và log.</li>
+     * </ol>
+     *
+     * @param cmd lệnh tăng revision
+     * @return {@link Result} gồm revision/epoch đã áp dụng
+     */
     @Transactional
     public Result execute(AdvanceDeleteMemberRevisionCommand cmd) {
         Tree tree = repo.findTree(cmd.treeId())
@@ -55,7 +83,14 @@ public class AdvanceDeleteMemberRevisionUseCase {
         return new Result(tree.revision(), tree.epoch());
     }
 
+    /**
+     * Kết quả của use-case.
+     *
+     * @param appliedAggregateVersion revision đã áp dụng
+     * @param appliedEpoch            epoch đã áp dụng
+     */
     public record Result(long appliedAggregateVersion, long appliedEpoch) { }
 
+    /** Interface đồng hồ cho use-case (giúp mock trong test). */
     public interface Clock { Instant now(); }
 }

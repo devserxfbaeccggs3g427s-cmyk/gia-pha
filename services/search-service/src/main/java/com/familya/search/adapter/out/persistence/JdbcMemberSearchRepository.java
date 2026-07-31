@@ -11,15 +11,30 @@ import java.sql.Timestamp;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Triển khai JDBC của {@link MemberSearchRepository}, đọc từ bảng
+ * {@code search_member_doc}.
+ */
 @Component
 public class JdbcMemberSearchRepository implements MemberSearchRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo repository với JDBC template dùng chung.
+     *
+     * @param jdbc JDBC template dùng để truy vấn/xoá.
+     */
     public JdbcMemberSearchRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Xoá toàn bộ tài liệu thành viên thuộc một cây.
+     *
+     * @param treeId định danh cây gia phả.
+     * @return số bản ghi đã xoá.
+     */
     @Override
     public long deleteByTree(UUID treeId) {
         int rows = jdbc.update(
@@ -28,6 +43,15 @@ public class JdbcMemberSearchRepository implements MemberSearchRepository {
         return rows;
     }
 
+    /**
+     * Tìm kiếm tài liệu thành viên theo chuỗi đã chuẩn hoá và bộ lọc.
+     *
+     * @param filter          bộ lọc (năm sinh, khoảng năm sinh, tombstoned) hoặc {@code null}.
+     * @param normalizedQuery chuỗi truy vấn đã chuẩn hoá; rỗng/blank thì bỏ qua LIKE.
+     * @param treeId          định danh cây gia phả.
+     * @param limit           số kết quả tối đa.
+     * @return danh sách tài liệu khớp.
+     */
     @Override
     public List<MemberSearchDocument> search(SearchMembersCommand.MemberFilter filter,
                                               String normalizedQuery, UUID treeId, int limit) {
@@ -64,6 +88,12 @@ public class JdbcMemberSearchRepository implements MemberSearchRepository {
         return rows.stream().map(this::fromRow).toList();
     }
 
+    /**
+     * Ánh xạ một dòng kết quả thành {@link MemberSearchDocument}.
+     *
+     * @param r dòng kết quả từ JDBC.
+     * @return tài liệu thành viên tương ứng.
+     */
     private MemberSearchDocument fromRow(java.util.Map<String, Object> r) {
         return new MemberSearchDocument(
                 UUID.fromString((String) r.get("tree_id")),

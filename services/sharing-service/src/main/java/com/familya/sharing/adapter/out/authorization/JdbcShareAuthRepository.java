@@ -12,25 +12,55 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Adapter JDBC hiện thực {@link ShareAuthRepository} &mdash; truy cập bảng
+ * {@code authorization_projection} trong cơ sở dữ liệu chia sẻ.
+ * <p>
+ * Bảng này chứa projection phân quyền theo (treeId, userId), được đồng bộ từ
+ * các sự kiện membership thông qua {@code SharingProjectionConsumer}.
+ * <p>
+ * <b>Lưu ý:</b> class này nằm trong package {@code adapter.out.persistence}
+ * (không phải {@code adapter.out.authorization}) do yêu cầu cấu trúc thư mục
+ * đã có sẵn của dự án.
+ */
 @Component
 public class JdbcShareAuthRepository implements ShareAuthRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo adapter.
+     *
+     * @param jdbc template JDBC chia sẻ.
+     */
     public JdbcShareAuthRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Tra cứu bản ghi phân quyền của người dùng trên một cây.
+     * <p>
+     * Thực thi trong transaction chỉ-đọc.
+     *
+     * @param treeId định danh cây gia phả.
+     * @param userId định danh người dùng.
+     * @return {@link Optional} chứa {@link AuthRow} nếu tồn tại.
+     */
     @Override
     @Transactional(readOnly = true)
     public Optional<AuthRow> find(UUID treeId, UUID userId) {
+        // Bước 1: Truy vấn các cột cần thiết.
         var rows = jdbc.queryForList(
                 "SELECT tree_id, user_id, role, revision, epoch, revoked, last_updated_at "
                         + "FROM authorization_projection WHERE tree_id = :t AND user_id = :u",
                 new MapSqlParameterSource()
                         .addValue("t", treeId.toString())
                         .addValue("u", userId.toString()));
+
+        // Bước 2: Trả về Optional.empty() nếu không có.
         if (rows.isEmpty()) return Optional.empty();
+
+        // Bước 3: Ánh xạ dòng đầu tiên sang AuthRow &mdash; ép kiểu an toàn.
         var r = rows.get(0);
         return Optional.of(new AuthRow(
                 UUID.fromString((String) r.get("tree_id")),
@@ -42,6 +72,23 @@ public class JdbcShareAuthRepository implements ShareAuthRepository {
                 ((Timestamp) r.get("last_updated_at")).toInstant()));
     }
 
+    /**
+     * Thêm mới hoặc cập nhật bản ghi phân quyền.
+     * <p>
+     * Sử dụng {@code INSERT ... ON DUPLICATE KEY UPDATE} để vừa idempotent,
+     * vừa cập nhật mọi cột khi đã tồn tại. Phương thức này yêu cầu phải
+     * chạy trong một transaction hiện có ({@link Propagation#MANDATORY}) &mdash;
+     * caller (use case) chịu trách nhiệm mở transaction.
+     *
+     * @param treeId         định danh cây.
+     * @param userId         định danh người dùng.
+     * @param role           vai trò.
+     * @param revision       revision của cây.
+     * @param epoch          epoch tương ứng.
+     * @param grantedAt      thời điểm cấp quyền.
+     * @param revoked        {@code true} nếu đã thu hồi.
+     * @param sourceEventId  định danh sự kiện nguồn.
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void upsert(UUID treeId, UUID userId, String role, long revision, long epoch,

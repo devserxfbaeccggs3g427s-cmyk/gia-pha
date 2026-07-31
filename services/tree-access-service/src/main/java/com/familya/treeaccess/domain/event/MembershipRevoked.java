@@ -10,6 +10,13 @@ public final class MembershipRevoked extends MembershipEvent {
     private final String reason;
     private final Instant occurredAt;
 
+    /**
+     * @param treeId     mã cây
+     * @param userId     UUID người bị thu hồi
+     * @param revokedBy  UUID người thực hiện
+     * @param reason     lý do thu hồi
+     * @param occurredAt thời điểm phát sinh
+     */
     public MembershipRevoked(UUID treeId, UUID userId, UUID revokedBy, String reason, Instant occurredAt) {
         this.treeId = treeId;
         this.userId = userId;
@@ -24,6 +31,12 @@ public final class MembershipRevoked extends MembershipEvent {
     @Override public int eventVersion() { return 1; }
     @Override public Instant occurredAt() { return occurredAt; }
 
+    /**
+     * @return UUID người đã thu hồi
+     */
     public UUID revokedBy() { return revokedBy; }
+    /**
+     * @return lý do thu hồi
+     */
     public String reason() { return reason; }
 }

@@ -9,6 +9,12 @@ public final class TreeFrozen extends TreeEvent {
     private final long epoch;
     private final Instant occurredAt;
 
+    /**
+     * @param treeId     mã cây
+     * @param revision   revision tại thời điểm đóng băng
+     * @param epoch      epoch tại thời điểm đóng băng
+     * @param occurredAt thời điểm phát sinh
+     */
     public TreeFrozen(UUID treeId, long revision, long epoch, Instant occurredAt) {
         this.treeId = treeId;
         this.revision = revision;

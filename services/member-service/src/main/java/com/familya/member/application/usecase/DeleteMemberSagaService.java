@@ -24,12 +24,25 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Dịch vụ khởi tạo Saga xóa thành viên. Thực hiện:
+ * <ol>
+ *   <li>Kiểm tra quyền và trạng thái thành viên.</li>
+ *   <li>Tombstone thành viên cục bộ (bước 1, owner-local).</li>
+ *   <li>Khởi tạo state Saga và năm bước Saga (1 owner-local + 4 participant).</li>
+ *   <li>Stage OperationStarted, dispatch bước participant đầu tiên, stage OperationStateChanged.</li>
+ * </ol>
+ *
+ * <p>Đây là bean {@code @Service} thuộc tầng application/usecase trong kiến trúc Hexagonal.
+ */
 @Service
 public class DeleteMemberSagaService {
 
     private static final Logger LOG = LoggerFactory.getLogger(DeleteMemberSagaService.class);
 
+    /** Deadline mặc định cho toàn bộ Saga (15 phút). */
     static final Duration DEFAULT_DEADLINE = Duration.ofMinutes(15);
+    /** Số lần thử tối đa cho mỗi bước. */
     static final int     DEFAULT_MAX_ATTEMPTS = 5;
 
     private final DeleteMemberSagaRepository sagaRepo;
@@ -40,6 +53,17 @@ public class DeleteMemberSagaService {
     private final PlatformMetrics metrics;
     private final Clock clock;
 
+    /**
+     * Khởi tạo dịch vụ Saga với các phụ thuộc cần thiết.
+     *
+     * @param sagaRepo         kho Saga
+     * @param gateway          gateway phát lệnh Saga
+     * @param memberRepo       kho thành viên
+     * @param memberPublisher  cổng phát sự kiện thành viên
+     * @param authz            projection ủy quyền
+     * @param metrics          bộ metric
+     * @param clock            đồng hồ tiêm được
+     */
     public DeleteMemberSagaService(DeleteMemberSagaRepository sagaRepo,
                                    DeleteMemberSagaGateway gateway,
                                    MemberRepository memberRepo,
@@ -56,20 +80,34 @@ public class DeleteMemberSagaService {
         this.clock = clock;
     }
 
+    /**
+     * Khởi tạo Saga xóa thành viên, trả về {@code operationId} để client theo dõi.
+     *
+     * @param cmd lệnh khởi tạo
+     * @return mã operationId bền vững của Saga
+     * @throws MemberNotFoundException       nếu thành viên không tồn tại
+     * @throws IllegalArgumentException      nếu thành viên không thuộc cây đã cho
+     * @throws OptimisticConcurrencyException nếu thành viên đã được tombstone
+     * @throws ForbiddenException            nếu người dùng không có quyền
+     */
     @Transactional
     public UUID initiate(InitiateDeleteMemberCommand cmd) {
         metrics.mutationAccepted("member-service", "deleteMember");
+        // Tra cứu thành viên, báo lỗi nếu không tồn tại
         Member m = memberRepo.findById(cmd.memberId())
                 .orElseThrow(() -> new MemberNotFoundException(
                         "Member " + cmd.memberId() + " not found"));
+        // Đảm bảo thành viên thuộc đúng cây được yêu cầu
         if (!m.treeId().equals(cmd.treeId())) {
             throw new IllegalArgumentException(
                     "Member " + cmd.memberId() + " does not belong to tree " + cmd.treeId());
         }
+        // Báo lỗi nếu thành viên đã tombstone (tránh xóa trùng)
         if (m.isTombstoned()) {
             throw new OptimisticConcurrencyException(
                     "Member " + cmd.memberId() + " is already tombstoned");
         }
+        // Kiểm tra quyền: người dùng phải có khả năng chỉnh sửa cây
         AuthorizationProjection.Decision<com.familya.member.domain.model.MemberAuthRow> decision =
                 authz.authorize(m.treeId(), cmd.actingUser(), cmd.expectedTreeRevision(),
                         com.familya.member.domain.model.MemberAuthRow.class);
@@ -85,9 +123,8 @@ public class DeleteMemberSagaService {
         long targetRevision = cmd.expectedTreeRevision() + 1;
         long targetEpoch = cmd.expectedTreeEpoch() + 1;
 
-        // Step 1 is owner-local: tombstone the member and emit the domain event
-        // atomically in this same transaction so participants never observe an
-        // un-tombstoned member.
+        // Bước 1 là owner-local: tombstone thành viên và phát domain event trong cùng
+        // transaction để participant không bao giờ quan sát thấy thành viên còn "sống".
         m.tombstone(cmd.expectedMemberVersion(), now);
         memberRepo.update(m);
         memberPublisher.publish(new MemberTombstoned(
@@ -100,8 +137,7 @@ public class DeleteMemberSagaService {
                 targetRevision, targetEpoch,
                 now.plus(DEFAULT_DEADLINE), now, null, now, null, null, null);
 
-        // Step 1 is the owner-local tombstone (compensatable=false, no Kafka
-        // command needed). Steps 2..5 are external participants.
+        // Bước 1 là owner-local (compensatable=false, không cần Kafka). Bước 2..5 là participant.
         List<DeleteMemberSagaStep> steps = List.of(
                 step(operationId, 1, "TOMBSTONE_MEMBER",          "member-service",        true, false, m.version(), targetEpoch),
                 step(operationId, 2, "DISABLE_RELATIONSHIPS",     "relationship-service",  true, true,  null, null),
@@ -112,14 +148,14 @@ public class DeleteMemberSagaService {
         sagaRepo.saveState(state);
         sagaRepo.saveSteps(steps);
 
-        // Step 1 is the owner-local tombstone (compensatable=false, no Kafka
-        // command needed). Mark it ACK locally so the attempt counter starts
-        // at 1 for the first dispatched participant.
+        // Bước 1 đã hoàn tất (owner-local). Đánh dấu ACK để bộ đếm attempt bắt đầu từ 1
+        // cho participant đầu tiên.
         DeleteMemberSagaStep first = steps.get(0);
         first.dispatch(now);
         first.ack(now, m.version(), targetEpoch);
         sagaRepo.updateStep(first);
 
+        // Phát OperationStarted, dispatch participant đầu tiên, phát OperationStateChanged
         gateway.stageOperationStarted(state);
         dispatchFirstParticipant(state, steps.get(1), now);
         gateway.stageOperationStateChanged(state);
@@ -129,6 +165,10 @@ public class DeleteMemberSagaService {
         return operationId;
     }
 
+    /**
+     * Dispatch participant đầu tiên của Saga: giành quyền dispatch và stage lệnh lên outbox.
+     * Nếu không giành được (xung đột), bỏ qua để tránh double-publish.
+     */
     private void dispatchFirstParticipant(DeleteMemberSagaState state, DeleteMemberSagaStep step, Instant now) {
         UUID token = UUID.randomUUID();
         Instant stepDeadline = now.plusSeconds(30);
@@ -143,6 +183,10 @@ public class DeleteMemberSagaService {
         gateway.stageFirstStep(state, step);
     }
 
+    /**
+     * Hàm tiện ích tạo bước Saga. Nếu {@code appliedVersion} và {@code appliedEpoch} được cung cấp
+     * (dành cho bước đã ACK sẵn như bước 1 owner-local), bước sẽ được đánh dấu ACK ngay tại EPOCH.
+     */
     private static DeleteMemberSagaStep step(UUID operationId, int seq, String code,
                                               String participant, boolean required,
                                               boolean compensatable,
@@ -159,5 +203,6 @@ public class DeleteMemberSagaService {
         return s;
     }
 
+    /** Đồng hồ tiêm được cho use case. */
     public interface Clock { Instant now(); }
 }

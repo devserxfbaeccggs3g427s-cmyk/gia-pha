@@ -11,13 +11,17 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Default short-lived signed capability issuer. The {@code signedPutUrl}
- * and {@code signedGetUrl} strings are issued once and are never
- * persisted, returned to a publisher, or emitted in events. Tests
- * should swap this with a deterministic in-memory issuer.
- *
- * <p>The HMAC body is opaque to the caller — the shape mimics the
- * official Vercel Blob JS SDK pattern ({@code put(path, body, options)}).
+ * Adapter đầu ra (outbound) — triển khai mặc định {@link BlobCapabilityIssuer}
+ * theo pattern Vercel Blob.
+ * <p>
+ * Cấp URL ký số dùng một lần (signedPutUrl, signedGetUrl) với TTL ngắn (mặc
+ * định 600_000ms = 10 phút). URL đã ký là bearer secret: tuyệt đối không
+ * log, không persist, không phát hành qua event. Test nên thay bằng issuer
+ * in-memory deterministic.
+ * <p>
+ * Chữ ký là hex SHA-256 của {@code storeId + ":" + path + ":" + exp}. Đây là
+ * placeholder an toàn cho HMAC thực — khi tích hợp Vercel Blob thật, thay
+ * bằng HMAC theo tài liệu chính thức.
  */
 @Component
 public class VercelBlobCapabilityIssuer implements BlobCapabilityIssuer {
@@ -29,6 +33,14 @@ public class VercelBlobCapabilityIssuer implements BlobCapabilityIssuer {
     private final long capabilityTtlMs;
     private final java.util.Set<UUID> revoked = ConcurrentHashMap.newKeySet();
 
+    /**
+     * Khởi tạo issuer.
+     *
+     * @param clock           Clock hệ thống (có thể thay bằng fixed clock trong test).
+     * @param storeId         mã store Vercel Blob (tùy chọn, dùng trong chữ ký).
+     * @param capabilityTtlMs TTL mặc định của capability, đọc từ
+     *                        {@code familya.blob.vercel.capability-ttl-ms} (mặc định 600000 = 10 phút).
+     */
     public VercelBlobCapabilityIssuer(@org.springframework.beans.factory.annotation.Qualifier("systemClock") Clock clock,
                                        @Value("${familya.blob.vercel.store-id:}") String storeId,
                                        @Value("${familya.blob.vercel.capability-ttl-ms:600000}") long capabilityTtlMs) {
@@ -37,6 +49,18 @@ public class VercelBlobCapabilityIssuer implements BlobCapabilityIssuer {
         this.capabilityTtlMs = capabilityTtlMs;
     }
 
+    /**
+     * Cấp phát capability mới.
+     * <p>
+     * Sinh chữ ký SHA-256, dựng URL PUT và GET (GET chỉ phục vụ verify, không
+     * download). KHÔNG log URL — chỉ log metadata (mediaId, treeId, path, ttl).
+     *
+     * @param treeId     UUID cây (chỉ dùng để log).
+     * @param mediaId    UUID media.
+     * @param exactPath  đường dẫn chính xác trong blob store.
+     * @param mimeType   MIME type (chưa sử dụng, dành cho header trong tích hợp thật).
+     * @return {@link Capability} chứa exactPath, signedPutUrl, signedGetUrl, exp.
+     */
     @Override
     public Capability issue(UUID treeId, UUID mediaId, String exactPath, String mimeType) {
         long exp = clock.millis() + capabilityTtlMs;
@@ -49,12 +73,27 @@ public class VercelBlobCapabilityIssuer implements BlobCapabilityIssuer {
         return new Capability(exactPath, putUrl, getUrl, exp);
     }
 
+    /**
+     * Vô hiệu hóa capability đã cấp cho media.
+     * <p>
+     * Theo dõi danh sách revoked in-memory (ConcurrentHashMap.newKeySet) — khi
+     * mediaId đã có trong tập này, mọi URL cũ coi như không hợp lệ ở gateway.
+     *
+     * @param mediaId UUID media cần vô hiệu hóa.
+     */
     @Override
     public void invalidate(UUID mediaId) {
         revoked.add(mediaId);
         LOG.info("Invalidated blob capability mediaId={}", mediaId);
     }
 
+    /**
+     * Sinh chữ ký hex SHA-256 của {@code store + ":" + path + ":" + exp}.
+     * <p>
+     * SHA-256 luôn được JVM hỗ trợ nên {@link NoSuchAlgorithmException} chỉ là
+     * defensive — quấn thành {@link IllegalStateException} để không yêu cầu
+     * caller xử lý checked exception.
+     */
     private String sign(String store, String path, long exp) {
         // Hex of SHA-256(store + ":" + path + ":" + exp); deterministic & short.
         try {

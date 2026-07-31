@@ -10,21 +10,51 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * JDBC-backed adapter for the local authorization projection and the
- * member-existence projection. The {@code member_existence_projection}
- * table is fed by the {@code Member} service's event stream.
+ * Adapter JDBC triển khai đồng thời hai cổng:
+ * {@link AuthorizationProjectionRepository} và {@link MemberExistenceProjection}.
+ * <p>
+ * Hai bảng dữ liệu được sử dụng:
+ * </p>
+ * <ul>
+ *   <li>{@code authorization_projection}: được feed bởi Kafka stream
+ *       {@code tree.memberships.v1} của Tree service (xem
+ *       {@code ProjectionConsumer.onMembership}).</li>
+ *   <li>{@code member_existence_projection}: được feed bởi Kafka stream
+ *       {@code member.events.v1} của Member service (xem
+ *       {@code ProjectionConsumer.onMember}).</li>
+ * </ul>
+ *
+ * <p>
+ * Tách riêng cổng và adapter nhưng gộp chung một implementation vì cả hai
+ * projection đều chỉ dùng {@code NamedParameterJdbcTemplate} và không có
+ * logic nghiệp vụ phức tạp.
+ * </p>
  */
 @Component
 public class JdbcProjectionAdapter implements AuthorizationProjectionRepository, MemberExistenceProjection {
 
+    /** Template JDBC dùng chung cho cả hai cổng. */
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo adapter.
+     *
+     * @param jdbc template JDBC do Spring cấu hình
+     */
     public JdbcProjectionAdapter(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
-    // --- AuthorizationProjectionRepository ---
+    // ===================== AuthorizationProjectionRepository =====================
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Truy vấn một dòng phân quyền theo cặp {@code (treeId, userId)}. Nếu không
+     * có dòng nào trả về {@code Optional.empty()}; ngược lại ánh xạ sang
+     * {@link RelationshipAuthRow}.
+     * </p>
+     */
     @Override
     public Optional<AuthorizationProjectionRepository.RelationshipAuthRow> findAuth(UUID treeId, UUID userId) {
         var rows = jdbc.queryForList(
@@ -32,6 +62,7 @@ public class JdbcProjectionAdapter implements AuthorizationProjectionRepository,
                         + "FROM authorization_projection WHERE tree_id = :t AND user_id = :u",
                 new MapSqlParameterSource().addValue("t", treeId.toString()).addValue("u", userId.toString()));
         if (rows.isEmpty()) return Optional.empty();
+        // Lấy dòng đầu tiên (chỉ có tối đa một dòng do ràng buộc khóa).
         var r = rows.get(0);
         return Optional.of(new AuthorizationProjectionRepository.RelationshipAuthRow(
                 UUID.fromString((String) r.get("tree_id")),
@@ -40,11 +71,19 @@ public class JdbcProjectionAdapter implements AuthorizationProjectionRepository,
                 ((Number) r.get("revision")).longValue(),
                 ((Number) r.get("epoch")).longValue(),
                 ((java.sql.Timestamp) r.get("granted_at")).toInstant(),
+                // Boolean.TRUE.equals tránh NullPointerException khi cột null.
                 Boolean.TRUE.equals(r.get("revoked")),
                 (String) r.get("source_event_id"),
                 ((java.sql.Timestamp) r.get("last_updated_at")).toInstant()));
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Sử dụng {@code INSERT ... ON DUPLICATE KEY UPDATE} để idempotent: cùng
+     * một {@code source_event_id} được phát nhiều lần sẽ không gây lỗi.
+     * </p>
+     */
     @Override
     public void upsertAuth(AuthorizationProjectionRepository.RelationshipAuthRow row) {
         jdbc.update(
@@ -66,8 +105,21 @@ public class JdbcProjectionAdapter implements AuthorizationProjectionRepository,
                         .addValue("upd", java.sql.Timestamp.from(row.lastUpdatedAt())));
     }
 
-    // --- MemberExistenceProjection ---
+    // ===================== MemberExistenceProjection =====================
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Logic:
+     * </p>
+     * <ul>
+     *   <li>Nếu không có dòng nào trong bảng → {@code false} (thành viên chưa
+     *       được Member service phát sự kiện).</li>
+     *   <li>Nếu có dòng và {@code exists=true} và {@code tombstoned=false}
+     *       → {@code true} (thành viên khả dụng).</li>
+     *   <li>Các trường hợp khác → {@code false}.</li>
+     * </ul>
+     */
     @Override
     public boolean isAvailable(UUID treeId, UUID memberId) {
         var rows = jdbc.queryForList(
@@ -77,9 +129,16 @@ public class JdbcProjectionAdapter implements AuthorizationProjectionRepository,
         if (rows.isEmpty()) return false;
         Boolean exists = (Boolean) rows.get(0).get("exists");
         Boolean tomb = (Boolean) rows.get(0).get("tombstoned");
+        // Boolean.TRUE.equals tránh NullPointerException và đảm bảo null được coi là false.
         return Boolean.TRUE.equals(exists) && !Boolean.TRUE.equals(tomb);
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Phân biệt ba trạng thái như mô tả trong {@link MemberExistenceProjection#tombstone}.
+     * </p>
+     */
     @Override
     public Optional<Boolean> tombstone(UUID treeId, UUID memberId) {
         var rows = jdbc.queryForList(

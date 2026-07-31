@@ -40,6 +40,16 @@ public class CreateMemberUseCase {
     private final PlatformMetrics metrics;
     private final Clock clock;
 
+    /**
+     * Khởi tạo use case với các phụ thuộc cần thiết.
+     *
+     * @param repo      kho thành viên
+     * @param publisher cổng phát sự kiện (outbox)
+     * @param authz     projection ủy quyền
+     * @param outbox    writer outbox (giữ để tiện sử dụng tương lai; hiện không dùng trực tiếp)
+     * @param metrics   bộ metric
+     * @param clock     đồng hồ tiêm được
+     */
     public CreateMemberUseCase(MemberRepository repo, MemberEventPublisher publisher,
                                 AuthorizationProjection authz, OutboxWriter outbox,
                                 PlatformMetrics metrics, Clock clock) {
@@ -51,11 +61,20 @@ public class CreateMemberUseCase {
         this.clock = clock;
     }
 
+    /**
+     * Thực thi tạo thành viên: kiểm tra quyền, chống trùng lặp theo canonical key, chèn và
+     * phát sự kiện MemberCreated.
+     *
+     * @param cmd lệnh tạo thành viên
+     * @return mã thành viên vừa tạo
+     * @throws ForbiddenException         nếu người dùng không có quyền chỉnh sửa cây
+     * @throws DuplicateMemberException   nếu đã tồn tại thành viên cùng canonical key
+     */
     @Transactional
     public UUID execute(CreateMemberCommand cmd) {
         metrics.mutationAccepted("member-service", "createMember");
         Instant now = clock.now();
-        // Authorize: must be able to edit.
+        // Kiểm tra quyền: người dùng phải có khả năng chỉnh sửa cây này.
         AuthorizationProjection.Decision<MemberAuthRow> decision =
                 authz.authorize(cmd.treeId(), cmd.actingUser(), cmd.expectedTreeRevision(), MemberAuthRow.class);
         if (!decision.isAllowed()) {
@@ -63,13 +82,16 @@ public class CreateMemberUseCase {
                     "User " + cmd.actingUser() + " cannot edit tree " + cmd.treeId()
                             + " (decision=" + decision.state() + ")");
         }
+        // Xây dựng canonical key từ tên + ngày sinh (thiếu thì dùng chuỗi rỗng)
         CanonicalKey key = CanonicalKey.of(cmd.treeId(), cmd.givenName() == null ? "" : cmd.givenName(),
                 cmd.surname() == null ? "" : cmd.surname(), cmd.birthDate());
+        // Chống trùng lặp: nếu đã có thành viên cùng key thì báo lỗi
         Optional<UUID> existing = repo.findByCanonicalKey(key);
         if (existing.isPresent()) {
             throw new DuplicateMemberException(
                     "Member with canonical key already exists: " + existing.get());
         }
+        // Tạo aggregate Member mới với version=0 và tombstonedAt=null
         UUID id = UUID.randomUUID();
         Member m = new Member(
                 id, cmd.treeId(), cmd.userId(),
@@ -80,12 +102,15 @@ public class CreateMemberUseCase {
                 cmd.generation(), cmd.legacyAvatarUrl(), cmd.notes(),
                 now, now, null, 0L);
         repo.insert(m);
+        // Ghi canonical key để tra cứu trùng lặp trong tương lai
         repo.insertCanonicalKey(key, id);
+        // Phát sự kiện MemberCreated qua outbox (transactional)
         publisher.publish(new MemberCreated(cmd.treeId(), id, cmd.userId(), cmd.displayName(),
                 m.gender(), m.status(), 1L, 1L, now));
         LOG.info("Created member id={} tree={} actingUser={}", id, cmd.treeId(), cmd.actingUser());
         return id;
     }
 
+    /** Đồng hồ tiêm được cho use case — cho phép kiểm thử xác định. */
     public interface Clock { Instant now(); }
 }

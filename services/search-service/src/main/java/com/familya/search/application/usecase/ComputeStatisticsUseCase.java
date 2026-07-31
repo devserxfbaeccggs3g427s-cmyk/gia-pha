@@ -12,6 +12,18 @@ import com.familya.platform.telemetry.PlatformMetrics;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Use case tính (hoặc tính lại) thống kê của một cây gia phả.
+ *
+ * <p>Luồng xử lý:</p>
+ * <ol>
+ *   <li>Kiểm tra quyền truy cập.</li>
+ *   <li>Đọc barrier và xác định watermark nhỏ nhất (mức mà mọi miền đều đã hội tụ).</li>
+ *   <li>Nếu client yêu cầu watermark cao hơn - ném {@link StaleBarrierException}.</li>
+ *   <li>Uỷ quyền cho {@code StatisticsRepository} đếm và ghi nhớ bản thống kê.</li>
+ *   <li>Ghi nhận metric và trả kết quả kèm barrier.</li>
+ * </ol>
+ */
 @Service
 public class ComputeStatisticsUseCase {
 
@@ -20,6 +32,14 @@ public class ComputeStatisticsUseCase {
     private final SearchWatermarkRepository watermark;
     private final PlatformMetrics metrics;
 
+    /**
+     * Khởi tạo use case với các phụ thuộc bắt buộc.
+     *
+     * @param authz     cổng kiểm tra quyền.
+     * @param repo      cổng tính/đọc thống kê.
+     * @param watermark cổng đọc barrier phiên bản.
+     * @param metrics   cổng ghi nhận telemetry.
+     */
     public ComputeStatisticsUseCase(SearchAuthorization authz, StatisticsRepository repo,
                                      SearchWatermarkRepository watermark, PlatformMetrics metrics) {
         this.authz = authz;
@@ -28,6 +48,14 @@ public class ComputeStatisticsUseCase {
         this.metrics = metrics;
     }
 
+    /**
+     * Thực thi tính thống kê.
+     *
+     * @param q truy vấn chứa cây, người dùng, phiên bản và watermark tối thiểu (tuỳ chọn).
+     * @return kết quả gồm {@link StatisticsSnapshot} và barrier.
+     * @throws ForbiddenException    nếu client không có quyền.
+     * @throws StaleBarrierException nếu barrier chưa đạt watermark yêu cầu.
+     */
     @Transactional
     public Result execute(StatisticsQuery q) {
         SearchAuthorization.Decision d = authz.authorize(q.treeId(), q.actingUser(), q.expectedTreeRevision());
@@ -45,6 +73,12 @@ public class ComputeStatisticsUseCase {
         return new Result(snap, barrier);
     }
 
+    /**
+     * Tính watermark nhỏ nhất trong barrier.
+     *
+     * @param barrier rào chắn phiên bản.
+     * @return giá trị nhỏ nhất; {@code 0L} nếu barrier rỗng.
+     */
     private long min(RevisionBarrier barrier) {
         long min = Long.MAX_VALUE;
         for (Long v : barrier.values().values()) {
@@ -53,5 +87,11 @@ public class ComputeStatisticsUseCase {
         return min == Long.MAX_VALUE ? 0L : min;
     }
 
+    /**
+     * Kết quả trả về của use case.
+     *
+     * @param snapshot bản thống kê vừa tính.
+     * @param barrier  barrier phiên bản để trả về header cho client.
+     */
     public record Result(StatisticsSnapshot snapshot, RevisionBarrier barrier) { }
 }

@@ -30,11 +30,26 @@ public class RevokeMembershipUseCase {
 
     private static final Logger LOG = LoggerFactory.getLogger(RevokeMembershipUseCase.class);
 
+    /** Kho lưu trữ. */
     private final TreeRepository repo;
+
+    /** Bộ publish sự kiện thành viên. */
     private final TreeEventPublisher publisher;
+
+    /** Metric. */
     private final PlatformMetrics metrics;
+
+    /** Đồng hồ tiêm được. */
     private final Clock clock;
 
+    /**
+     * Khởi tạo use-case thu hồi quyền.
+     *
+     * @param repo      kho lưu trữ
+     * @param publisher bộ publish
+     * @param metrics   metric
+     * @param clock     đồng hồ
+     */
     public RevokeMembershipUseCase(TreeRepository repo, TreeEventPublisher publisher,
                                    PlatformMetrics metrics, Clock clock) {
         this.repo = repo;
@@ -43,6 +58,18 @@ public class RevokeMembershipUseCase {
         this.clock = clock;
     }
 
+    /**
+     * Thu hồi quyền thành viên:
+     *
+     * <ol>
+     *   <li>Từ chối nếu cây không tồn tại hoặc target là owner.</li>
+     *   <li>Yêu cầu actor có ADMIN.</li>
+     *   <li>Tìm membership; nếu đã bị thu hồi thì thoát sớm (idempotent).</li>
+     *   <li>Đánh dấu revoked, cập nhật projection và phát sự kiện {@link MembershipRevoked}.</li>
+     * </ol>
+     *
+     * @param cmd lệnh thu hồi
+     */
     @Transactional
     public void execute(RevokeMembershipCommand cmd) {
         metrics.mutationAcceptedCounter("tree-access-service", "revokeMembership").increment();
@@ -58,6 +85,7 @@ public class RevokeMembershipUseCase {
         TreeMembership m = repo.findMembership(cmd.treeId(), cmd.userId())
                 .orElseThrow(() -> new MembershipNotFoundException("No membership for user " + cmd.userId()));
         if (!m.isActive()) {
+            // Đã thu hồi trước đó — không làm gì thêm để giữ idempotent.
             return;
         }
         m.revoke(cmd.revokedBy(), cmd.reason());
@@ -71,5 +99,6 @@ public class RevokeMembershipUseCase {
         LOG.info("Revoked user={} tree={} by={} reason={}", cmd.userId(), cmd.treeId(), cmd.revokedBy(), cmd.reason());
     }
 
+    /** Interface đồng hồ. */
     public interface Clock { Instant now(); }
 }

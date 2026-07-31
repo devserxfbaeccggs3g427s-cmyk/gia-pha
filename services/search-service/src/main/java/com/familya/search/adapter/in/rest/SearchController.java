@@ -27,6 +27,22 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * REST controller cho các API tìm kiếm và truy vấn ở version v2.
+ *
+ * <p>Các endpoint:</p>
+ * <ul>
+ *   <li>{@code GET /api/v2/search/members} - tìm kiếm thành viên.</li>
+ *   <li>{@code GET /api/v2/search/events} - tìm kiếm sự kiện.</li>
+ *   <li>{@code GET /api/v2/search/media} - tìm kiếm media.</li>
+ *   <li>{@code GET /api/v2/search/autocomplete} - gợi ý nhanh theo tiền tố.</li>
+ *   <li>{@code GET /api/v2/search/statistics} - thống kê cây.</li>
+ *   <li>{@code GET /api/v2/search/reports/{kind}} - báo cáo theo loại.</li>
+ * </ul>
+ *
+ * <p>Mọi phản hồi đều được gắn header {@code X-Revision-Watermarks} chứa
+ * barrier phiên bản để client biết mức hội tụ của các miền dữ liệu.</p>
+ */
 @RestController
 @RequestMapping(path = "/api/v2/search", produces = MediaType.APPLICATION_JSON_VALUE)
 public class SearchController {
@@ -38,6 +54,9 @@ public class SearchController {
     private final ComputeStatisticsUseCase statistics;
     private final ComputeReportUseCase report;
 
+    /**
+     * Khởi tạo controller với sáu use case tương ứng sáu nhóm API.
+     */
     public SearchController(SearchMembersUseCase searchMembers, SearchEventsUseCase searchEvents,
                              SearchMediaUseCase searchMedia, AutocompleteUseCase autocomplete,
                              ComputeStatisticsUseCase statistics, ComputeReportUseCase report) {
@@ -49,6 +68,9 @@ public class SearchController {
         this.report = report;
     }
 
+    /**
+     * Endpoint tìm kiếm thành viên.
+     */
     @GetMapping("/members")
     public ResponseEntity<SearchMembersUseCase.Result> members(@RequestHeader("X-Acting-User") UUID actingUser,
                                                                 @RequestParam UUID treeId,
@@ -65,6 +87,10 @@ public class SearchController {
         return withBarriers(result, result.barrier());
     }
 
+    /**
+     * Endpoint tìm kiếm sự kiện. Tham số {@code from} và {@code to} được
+     * nhập dạng chuỗi ISO (yyyy-MM-dd) rồi phân tích sang {@link LocalDate}.
+     */
     @GetMapping("/events")
     public ResponseEntity<SearchEventsUseCase.Result> events(@RequestHeader("X-Acting-User") UUID actingUser,
                                                               @RequestParam UUID treeId,
@@ -83,6 +109,9 @@ public class SearchController {
         return withBarriers(result, result.barrier());
     }
 
+    /**
+     * Endpoint tìm kiếm media.
+     */
     @GetMapping("/media")
     public ResponseEntity<SearchMediaUseCase.Result> media(@RequestHeader("X-Acting-User") UUID actingUser,
                                                             @RequestParam UUID treeId,
@@ -96,6 +125,10 @@ public class SearchController {
         return withBarriers(result, result.barrier());
     }
 
+    /**
+     * Endpoint gợi ý nhanh. Trả về danh sách gợi ý thẳng, không kèm barrier
+     * vì đây là truy vấn nhẹ và thường xuyên.
+     */
     @GetMapping("/autocomplete")
     public ResponseEntity<List<AutocompleteEntry>> autocomplete(@RequestHeader("X-Acting-User") UUID actingUser,
                                                                  @RequestParam UUID treeId,
@@ -106,6 +139,9 @@ public class SearchController {
         return ResponseEntity.ok(autocomplete.execute(new AutocompleteQuery(treeId, actingUser, er, prefix, limit)));
     }
 
+    /**
+     * Endpoint thống kê cây. Tham số {@code watermark} là watermark tối thiểu.
+     */
     @GetMapping("/statistics")
     public ResponseEntity<ComputeStatisticsUseCase.Result> statistics(@RequestHeader("X-Acting-User") UUID actingUser,
                                                                        @RequestParam UUID treeId,
@@ -116,6 +152,10 @@ public class SearchController {
         return withBarriers(result, result.barrier());
     }
 
+    /**
+     * Endpoint báo cáo theo loại. {@code kind} được truyền qua path, ví dụ
+     * {@code /api/v2/search/reports/DEMOGRAPHICS}.
+     */
     @GetMapping("/reports/{kind}")
     public ResponseEntity<ComputeReportUseCase.Result> report(@RequestHeader("X-Acting-User") UUID actingUser,
                                                                 @RequestParam UUID treeId,
@@ -127,6 +167,13 @@ public class SearchController {
         return withBarriers(result, result.barrier());
     }
 
+    /**
+     * Gói body và barrier vào ResponseEntity, gắn header {@code X-Revision-Watermarks}.
+     *
+     * @param body    nội dung phản hồi.
+     * @param barrier barrier phiên bản của cây.
+     * @return {@link ResponseEntity} có body và header barrier.
+     */
     private <T> ResponseEntity<T> withBarriers(T body, RevisionBarrier barrier) {
         return ResponseEntity.ok()
                 .header("X-Revision-Watermarks", String.valueOf(barrier.values()))

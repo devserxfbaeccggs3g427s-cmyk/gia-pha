@@ -17,6 +17,16 @@ public final class MemberMerged extends MemberEvent {
     private final long epoch;
     private final Instant occurredAt;
 
+    /**
+     * Khởi tạo sự kiện gộp thành viên.
+     *
+     * @param treeId         mã cây
+     * @param memberId       mã thành viên survivor
+     * @param sourceMemberId mã thành viên nguồn đã bị gộp
+     * @param revision       phiên bản aggregate
+     * @param epoch          epoch
+     * @param occurredAt     thời điểm xảy ra
+     */
     public MemberMerged(UUID treeId, UUID memberId, UUID sourceMemberId,
                         long revision, long epoch, Instant occurredAt) {
         this.treeId = treeId;
@@ -33,7 +43,10 @@ public final class MemberMerged extends MemberEvent {
     @Override public int eventVersion() { return 1; }
     @Override public Instant occurredAt() { return occurredAt; }
 
+    /** Mã thành viên nguồn đã bị gộp. */
     public UUID sourceMemberId() { return sourceMemberId; }
+    /** Lấy phiên bản aggregate. */
     public long revision() { return revision; }
+    /** Lấy epoch. */
     public long epoch() { return epoch; }
 }

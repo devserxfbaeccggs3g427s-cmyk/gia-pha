@@ -25,6 +25,22 @@ public class JdbcOperationAuditWriter {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Ghi một row operation_audit phục vụ API poll trạng thái.
+     * <p>
+     * Phải chạy trong transaction của caller (MANDATORY) để đảm bảo audit row
+     * được tạo cùng nghiệp vụ.
+     *
+     * @param operationId   UUID operation.
+     * @param correlationId UUID correlation (null ⇒ mặc định dùng operationId).
+     * @param treeId        UUID cây (null nếu không gắn với cây cụ thể).
+     * @param actingUser    UUID người thực hiện.
+     * @param operationType loại thao tác (vd "media.createUploadIntent").
+     * @param aggregateType loại aggregate ("media"/"album").
+     * @param aggregateId   UUID aggregate.
+     * @param status        trạng thái (PENDING/SUCCESS/FAILED).
+     * @param now           thời điểm.
+     */
     @Transactional(propagation = Propagation.MANDATORY)
     public void record(UUID operationId, UUID correlationId, UUID treeId, UUID actingUser,
                        String operationType, String aggregateType, String aggregateId,
@@ -35,6 +51,7 @@ public class JdbcOperationAuditWriter {
                         + "VALUES (:id, :co, :svc, :type, :status, :at, :ai, :tree, :acting, :sa, :ua)",
                 new MapSqlParameterSource()
                         .addValue("id", operationId.toString())
+                        // Correlation mặc định = operationId nếu caller không cung cấp.
                         .addValue("co", correlationId == null ? operationId.toString() : correlationId.toString())
                         .addValue("svc", "media-service")
                         .addValue("type", operationType)

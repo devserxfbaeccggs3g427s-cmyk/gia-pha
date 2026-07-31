@@ -35,16 +35,34 @@ public class DeleteTreeSagaService {
 
     private static final Logger LOG = LoggerFactory.getLogger(DeleteTreeSagaService.class);
 
+    /** Deadline mặc định cho mỗi thao tác Saga delete-tree (60 phút). */
     static final Duration DEFAULT_DEADLINE = Duration.ofMinutes(60);
+    /** Số lần thử tối đa mặc định cho mỗi bước Saga. */
     static final int     DEFAULT_MAX_ATTEMPTS = 5;
 
+    /** Kho lưu trữ Saga. */
     private final DeleteTreeSagaRepository sagaRepo;
+    /** Gateway stage các sự kiện ra outbox. */
     private final DeleteTreeSagaGateway gateway;
+    /** Kho lưu trữ cây. */
     private final TreeRepository treeRepo;
+    /** Bộ publish sự kiện cây. */
     private final TreeEventPublisher publisher;
+    /** Metric giám sát. */
     private final PlatformMetrics metrics;
+    /** Đồng hồ tiêm được. */
     private final Clock clock;
 
+    /**
+     * Khởi tạo service điều phối Saga.
+     *
+     * @param sagaRepo  kho lưu trữ Saga
+     * @param gateway   gateway outbox
+     * @param treeRepo  kho lưu trữ cây
+     * @param publisher bộ publish sự kiện
+     * @param metrics   metric giám sát
+     * @param clock     đồng hồ
+     */
     public DeleteTreeSagaService(DeleteTreeSagaRepository sagaRepo,
                                  DeleteTreeSagaGateway gateway,
                                  TreeRepository treeRepo,
@@ -59,6 +77,22 @@ public class DeleteTreeSagaService {
         this.clock = clock;
     }
 
+    /**
+     * Khởi tạo Saga xóa cây:
+     *
+     * <ol>
+     *   <li>Chặn sớm nếu cây không tồn tại hoặc đã TOMBSTONED; yêu cầu caller là owner/ADMIN.</li>
+     *   <li>Tính {@code targetRevision} và {@code targetEpoch} = hiện tại + 1.</li>
+     *   <li>Tạo trạng thái Saga PENDING với deadline mặc định (60 phút).</li>
+     *   <li>Khởi tạo 9 bước deterministic: freeze (local), tombstone (local), 6 bước participant, finalize (local).</li>
+     *   <li>Thực thi ngay 2 bước local (đóng băng) vì chúng không cần tham gia viên khác.</li>
+     *   <li>Dispatch bước participant đầu tiên và chuyển trạng thái Saga qua FREEZING → TOMBSTONING → PURGING.</li>
+     *   <li>Stage {@code OperationStarted} để các hệ thống giám sát nắm được.</li>
+     * </ol>
+     *
+     * @param cmd lệnh khởi tạo Saga
+     * @return mã thao tác Saga bền vững
+     */
     @Transactional
     public UUID initiate(InitiateDeleteTreeCommand cmd) {
         metrics.mutationAccepted("tree-access-service", "deleteTree");
@@ -74,6 +108,7 @@ public class DeleteTreeSagaService {
         UUID operationId = UUID.randomUUID();
         UUID correlationId = UUID.randomUUID();
 
+        // Barrier: phải đạt được revision/epoch này trước khi finalize.
         long targetRevision = tree.revision() + 1;
         long targetEpoch = tree.epoch() + 1;
 
@@ -83,8 +118,8 @@ public class DeleteTreeSagaService {
                 targetRevision, targetEpoch,
                 now.plus(DEFAULT_DEADLINE), now, null, now, null, null, null);
 
-        // Sequence: own freeze -> own tombstone -> participant fan-out ->
-        // participant barriers -> own finalize. Step 1/2/9 are local transitions.
+        // Thứ tự bước: đóng băng/tombstone cục bộ (1,2) → fan-out tới tham gia viên (3-8) → finalize cục bộ (9).
+        // Bước 1/2/9 thuộc owner nên chạy nội bộ, không cần gửi Kafka.
         List<DeleteTreeSagaStep> steps = List.of(
                 step(operationId, 1,  "FREEZE_TREE",              "tree-access-service", true,  true),
                 step(operationId, 2,  "TOMBSTONE_TREE",           "tree-access-service", true,  true),
@@ -99,10 +134,8 @@ public class DeleteTreeSagaService {
         sagaRepo.saveState(state);
         sagaRepo.saveSteps(steps);
 
-        // Step 1 (FREEZE_TREE) is owner-local: ACTIVE -> FROZEN so writes
-        // are blocked immediately. The tombstone is deferred to Step 9
-        // (FINALIZE_TREE_DELETION) so that rollback can still unhide the
-        // tree before the irreversible boundary.
+        // Bước 1 (FREEZE_TREE) là owner-local: ACTIVE → FROZEN để chặn ghi ngay lập tức.
+        // Tombstone được hoãn tới Bước 9 (FINALIZE_TREE_DELETION) để rollback có thể "phục hồi" trước rào chắn không thể đảo ngược.
         tree.freeze(cmd.expectedTreeVersion());
         treeRepo.updateTree(tree);
         DeleteTreeSagaStep freezeStep = steps.get(0);
@@ -120,7 +153,7 @@ public class DeleteTreeSagaService {
                 operationId, "delete-tree-saga:freeze", now));
 
         gateway.stageOperationStarted(state);
-        dispatchFirstParticipant(state, steps.get(2), now); // first participant step
+        dispatchFirstParticipant(state, steps.get(2), now); // bước participant đầu tiên
         state.transitionTo(DeleteTreeSagaState.State.FREEZING, now);
         state.transitionTo(DeleteTreeSagaState.State.TOMBSTONING, now);
         state.transitionTo(DeleteTreeSagaState.State.PURGING, now);
@@ -130,11 +163,20 @@ public class DeleteTreeSagaService {
         return operationId;
     }
 
+    /**
+     * Dispatch tham gia viên đầu tiên: claim token trước khi stage message để
+     * tránh hai worker cùng gửi một bước.
+     *
+     * @param state trạng thái Saga
+     * @param step  bước participant đầu tiên
+     * @param now   thời điểm hiện tại
+     */
     private void dispatchFirstParticipant(DeleteTreeSagaState state, DeleteTreeSagaStep step, Instant now) {
         UUID token = UUID.randomUUID();
         Instant stepDeadline = now.plusSeconds(30);
         boolean claimed = sagaRepo.tryClaimDispatch(step.operationId(), step.sequenceNo(), token, now, stepDeadline);
         if (!claimed) {
+            // Worker khác đã claim — bỏ qua để tránh dispatch trùng.
             LOG.warn("dispatchFirstParticipant claim conflict op={} seq={}; skipping publish",
                     step.operationId(), step.sequenceNo());
             return;
@@ -144,6 +186,13 @@ public class DeleteTreeSagaService {
         gateway.stageFirstStep(state, step);
     }
 
+    /**
+     * Bắt buộc caller là owner hoặc ADMIN đã cấp quyền.
+     *
+     * @param tree   cây đang xử lý
+     * @param userId UUID người thực hiện
+     * @throws ForbiddenException nếu user không phải owner và không có ADMIN
+     */
     private void requireOwnerOrAdmin(Tree tree, UUID userId) {
         if (userId == null) {
             throw new ForbiddenException("Missing acting user");
@@ -159,6 +208,17 @@ public class DeleteTreeSagaService {
         }
     }
 
+    /**
+     * Factory rút gọn cho {@link DeleteTreeSagaStep} ở trạng thái PENDING.
+     *
+     * @param operationId   mã thao tác Saga
+     * @param seq           số thứ tự bước
+     * @param code          mã bước
+     * @param participant   tên service tham gia
+     * @param required      bước có bắt buộc không
+     * @param compensatable bước có bù được không
+     * @return bước Saga mới
+     */
     private static DeleteTreeSagaStep step(UUID operationId, int seq, String code,
                                            String participant, boolean required,
                                            boolean compensatable) {
@@ -170,5 +230,6 @@ public class DeleteTreeSagaService {
                 null, null, null, null, null);
     }
 
+    /** Interface đồng hồ cho service. */
     public interface Clock { Instant now(); }
 }

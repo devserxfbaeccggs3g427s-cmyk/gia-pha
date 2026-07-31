@@ -27,14 +27,32 @@ public class DeleteTreeSagaReplyProcessor {
 
     private static final Logger LOG = LoggerFactory.getLogger(DeleteTreeSagaReplyProcessor.class);
 
+    /** Kho lưu trữ Saga. */
     private final DeleteTreeSagaRepository sagaRepo;
+    /** Gateway stage sự kiện. */
     private final DeleteTreeSagaGateway gateway;
+    /** Kho dead-letter. */
     private final DeleteTreeSagaDeadLetterStore deadLetterStore;
+    /** Kho lưu trữ cây (dùng khi finalize). */
     private final TreeRepository treeRepo;
+    /** Bộ publish sự kiện cây. */
     private final TreeEventPublisher publisher;
+    /** Metric giám sát. */
     private final PlatformMetrics metrics;
+    /** Đồng hồ tiêm được. */
     private final Clock clock;
 
+    /**
+     * Khởi tạo processor.
+     *
+     * @param sagaRepo        kho lưu trữ Saga
+     * @param gateway         gateway outbox
+     * @param deadLetterStore kho dead-letter
+     * @param treeRepo        kho lưu trữ cây
+     * @param publisher       bộ publish sự kiện
+     * @param metrics         metric giám sát
+     * @param clock           đồng hồ
+     */
     public DeleteTreeSagaReplyProcessor(DeleteTreeSagaRepository sagaRepo,
                                         DeleteTreeSagaGateway gateway,
                                         DeleteTreeSagaDeadLetterStore deadLetterStore,
@@ -51,6 +69,20 @@ public class DeleteTreeSagaReplyProcessor {
         this.clock = clock;
     }
 
+    /**
+     * Xử lý một reply Saga. Phương thức này phân nhánh theo nhiều trường hợp:
+     *
+     * <ul>
+     *   <li>Reply compensation áp dụng → xử lý kết quả compensation.</li>
+     *   <li>Forward reply khi Saga đang COMPENSATING → bỏ qua (reply cũ).</li>
+     *   <li>Forward reply khi bước không ở DISPATCHED → bỏ qua (stale).</li>
+     *   <li>Forward reply thất bại → xử lý lỗi tham gia viên (retry hoặc bù).</li>
+     *   <li>Forward reply không đạt barrier → MANUAL_REVIEW.</li>
+     *   <li>Forward reply đạt barrier → ACK và dispatch bước tiếp theo, hoặc finalize.</li>
+     * </ul>
+     *
+     * @param cmd lệnh reply Saga
+     */
     @Transactional
     public void process(DeleteTreeSagaReplyCommand cmd) {
         Optional<DeleteTreeSagaState> opt = sagaRepo.findState(cmd.operationId());
@@ -125,6 +157,15 @@ public class DeleteTreeSagaReplyProcessor {
         gateway.stageOperationStateChanged(state);
     }
 
+    /**
+     * Thực hiện bước FINALIZE_TREE_DELETION: chuyển trạng thái sang FINALIZING,
+     * đánh dấu bước cuối là DISPATCHED rồi ACK ngay (vì đây là thao tác nội bộ),
+     * sau đó đặt trạng thái cây thành TOMBSTONED và chuyển trạng thái Saga sang
+     * SUCCEEDED.
+     *
+     * @param state trạng thái Saga
+     * @param now   thời điểm hiện tại
+     */
     private void runFinalize(DeleteTreeSagaState state, Instant now) {
         DeleteTreeSagaStep finalizeStep = sagaRepo.listSteps(state.operationId()).stream()
                 .filter(s -> s.stepCode().equals("FINALIZE_TREE_DELETION"))
@@ -140,6 +181,15 @@ public class DeleteTreeSagaReplyProcessor {
         state.transitionTo(DeleteTreeSagaState.State.SUCCEEDED, now);
     }
 
+    /**
+     * Xử lý khi compensation trả về thành công: đánh dấu bước COMPENSATED và
+     * kiểm tra xem tất cả compensation đã hoàn tất để chuyển Saga sang FAILED.
+     *
+     * @param state   trạng thái Saga
+     * @param steps   danh sách bước
+     * @param current bước đã nhận compensation reply
+     * @param now     thời điểm hiện tại
+     */
     private void handleCompensationReply(DeleteTreeSagaState state,
                                          List<DeleteTreeSagaStep> steps,
                                          DeleteTreeSagaStep current,
@@ -162,6 +212,16 @@ public class DeleteTreeSagaReplyProcessor {
         }
     }
 
+    /**
+     * Xử lý khi compensation thất bại: nếu còn lượt thì gửi lại, ngược lại
+     * đánh dấu DEAD_LETTERED và đẩy Saga sang MANUAL_REVIEW.
+     *
+     * @param state   trạng thái Saga
+     * @param current bước bị lỗi compensation
+     * @param code    mã lỗi
+     * @param message thông điệp lỗi
+     * @param now     thời điểm hiện tại
+     */
     private void handleCompensationFailure(DeleteTreeSagaState state,
                                            DeleteTreeSagaStep current,
                                            String code, String message,
@@ -190,6 +250,19 @@ public class DeleteTreeSagaReplyProcessor {
         gateway.stageOperationStateChanged(state);
     }
 
+    /**
+     * Xử lý khi tham gia viên forward bị lỗi: thử retry nếu còn lượt; nếu hết
+     * lượt và chưa qua rào chắn không thể đảo ngược thì chuyển Saga sang
+     * COMPENSATING và gọi {@link #compensatePreviousSteps}; ngược lại
+     * MANUAL_REVIEW.
+     *
+     * @param state   trạng thái Saga
+     * @param steps   danh sách các bước
+     * @param current bước bị lỗi
+     * @param code    mã lỗi
+     * @param message thông điệp
+     * @param now     thời điểm hiện tại
+     */
     private void handleParticipantFailure(DeleteTreeSagaState state,
                                           List<DeleteTreeSagaStep> steps,
                                           DeleteTreeSagaStep current,
@@ -233,6 +306,14 @@ public class DeleteTreeSagaReplyProcessor {
         gateway.stageOperationStateChanged(state);
     }
 
+    /**
+     * Xử lý khi tham gia viên đạt barrier không thoả đáng: đánh dấu bước FAILED
+     * và đẩy Saga sang MANUAL_REVIEW (vì barrier là hard requirement).
+     *
+     * @param state   trạng thái Saga
+     * @param current bước đạt barrier nhưng không thoả đáng
+     * @param now     thời điểm hiện tại
+     */
     private void handleBarrierFailure(DeleteTreeSagaState state,
                                       DeleteTreeSagaStep current, Instant now) {
         String code = "BARRIER_NOT_MET";
@@ -245,6 +326,14 @@ public class DeleteTreeSagaReplyProcessor {
         gateway.stageOperationStateChanged(state);
     }
 
+    /**
+     * Gửi lại một bước Saga. Nếu bước đã có dispatchToken hợp lệ (đã claim trước
+     * đó) thì chỉ stage message; ngược lại tạo token mới và claim trước khi gửi.
+     *
+     * @param state trạng thái Saga
+     * @param step  bước cần gửi
+     * @param now   thời điểm hiện tại
+     */
     private void dispatchStep(DeleteTreeSagaState state, DeleteTreeSagaStep step, Instant now) {
         if (step.attemptCount() > 0 && step.dispatchToken() != null && step.state() == DeleteTreeSagaStep.State.DISPATCHED) {
             sagaRepo.updateStep(step);
@@ -264,15 +353,35 @@ public class DeleteTreeSagaReplyProcessor {
         gateway.stageFirstStep(state, step);
     }
 
+    /**
+     * @param state trạng thái Saga
+     * @param failed bước bị lỗi (tham số để giữ API đồng nhất)
+     * @return {@code true} nếu Saga đã qua rào chắn không thể đảo ngược
+     */
     private static boolean passedIrreversibleBoundary(DeleteTreeSagaState state, DeleteTreeSagaStep failed) {
         return state.irreversibleAt() != null;
     }
 
+    /**
+     * Kiểm tra reply có đạt "barrier" của Saga hay không: appliedAggregateVersion
+     * và appliedEpoch phải bằng hoặc cao hơn target.
+     *
+     * @param state trạng thái Saga
+     * @param cmd   reply nhận được
+     * @return {@code true} nếu barrier đạt
+     */
     private boolean satisfiesBarrier(DeleteTreeSagaState state, DeleteTreeSagaReplyCommand cmd) {
         return cmd.appliedAggregateVersion() >= state.targetAggregateVersion()
                 && cmd.appliedEpoch() >= state.targetEpoch();
     }
 
+    /**
+     * Tìm bước tiếp theo còn đang PENDING và có {@code sequenceNo > currentSeq}.
+     *
+     * @param steps     danh sách bước
+     * @param currentSeq số thứ tự hiện tại
+     * @return bước tiếp theo hoặc {@code null}
+     */
     private static DeleteTreeSagaStep nextPendingStep(List<DeleteTreeSagaStep> steps, int currentSeq) {
         return steps.stream()
                 .filter(s -> s.sequenceNo() > currentSeq)
@@ -281,6 +390,15 @@ public class DeleteTreeSagaReplyProcessor {
                 .orElse(null);
     }
 
+    /**
+     * Bù các bước trước {@code failedStep}. Mỗi bước phải là ACK, compensatable,
+     * không phải owner, và chưa qua rào chắn. Khi claim thành công thì stage lệnh
+     * compensation tương ứng.
+     *
+     * @param state      trạng thái Saga
+     * @param steps      danh sách bước
+     * @param failedStep bước bị lỗi; các bước trước nó sẽ được bù
+     */
     private void compensatePreviousSteps(DeleteTreeSagaState state,
                                          List<DeleteTreeSagaStep> steps,
                                          DeleteTreeSagaStep failedStep) {
@@ -306,6 +424,13 @@ public class DeleteTreeSagaReplyProcessor {
         }
     }
 
+    /**
+     * Hoàn tất xóa cây: chuyển sang trạng thái TOMBSTONED và phát sự kiện
+     * {@link TreeAdvancedRevision} để các service khác cập nhật.
+     *
+     * @param state trạng thái Saga
+     * @param now   thời điểm hiện tại
+     */
     private void finalizeTree(DeleteTreeSagaState state, Instant now) {
         Tree tree = treeRepo.findTree(state.treeId())
                 .orElseThrow(() -> new TreeNotFoundException("Tree " + state.treeId() + " not found"));
@@ -317,5 +442,6 @@ public class DeleteTreeSagaReplyProcessor {
                 state.operationId(), "delete-tree-saga:finalize", now));
     }
 
+    /** Interface đồng hồ cho processor. */
     public interface Clock { Instant now(); }
 }

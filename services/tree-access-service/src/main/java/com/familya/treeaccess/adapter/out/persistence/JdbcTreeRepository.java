@@ -17,15 +17,32 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Kho lưu trữ JDBC cho các bảng {@code tree}, {@code tree_membership} và
+ * {@code authorization_projection}. Các phương thức ghi đều có propagation
+ * {@link Propagation#MANDATORY} để bắt buộc caller phải mở transaction.
+ */
 @Component
 public class JdbcTreeRepository implements TreeRepository {
 
+    /** Template JDBC được Spring cấu hình sẵn. */
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo kho lưu trữ.
+     *
+     * @param jdbc template JDBC
+     */
     public JdbcTreeRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Chèn một cây mới cùng dòng membership của chủ sở hữu.
+     *
+     * @param tree            thực thể cây cần chèn
+     * @param ownerMembership dòng membership ADMIN của chủ sở hữu
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void insertTree(Tree tree, TreeMembership ownerMembership) {
@@ -36,6 +53,12 @@ public class JdbcTreeRepository implements TreeRepository {
         insertMembership(ownerMembership);
     }
 
+    /**
+     * Tìm một cây theo mã {@code treeId}.
+     *
+     * @param treeId mã cây
+     * @return {@link Optional} chứa {@link Tree} nếu tồn tại
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public Optional<Tree> findTree(UUID treeId) {
@@ -47,6 +70,12 @@ public class JdbcTreeRepository implements TreeRepository {
         return Optional.of(treeFromRow(rows.get(0)));
     }
 
+    /**
+     * Lấy tất cả cây do một người dùng sở hữu, sắp xếp theo thời điểm tạo giảm dần.
+     *
+     * @param ownerUserId UUID chủ sở hữu
+     * @return danh sách cây
+     */
     @Override
     @Transactional(readOnly = true)
     public List<Tree> findTreesByOwner(UUID ownerUserId) {
@@ -57,6 +86,11 @@ public class JdbcTreeRepository implements TreeRepository {
         return rows.stream().map(this::treeFromRow).toList();
     }
 
+    /**
+     * Cập nhật thực thể cây (bao gồm revision, epoch, trạng thái, timestamps).
+     *
+     * @param tree thực thể cây đã được mutate ở tầng trên
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void updateTree(Tree tree) {
@@ -66,6 +100,12 @@ public class JdbcTreeRepository implements TreeRepository {
                 treeParams(tree));
     }
 
+    /**
+     * Chèn một dòng membership mới. Nếu membership đã thu hồi, caller sẽ gọi
+     * {@link #updateMembership} thay thế.
+     *
+     * @param m thực thể membership cần chèn
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void insertMembership(TreeMembership m) {
@@ -84,6 +124,13 @@ public class JdbcTreeRepository implements TreeRepository {
                         .addValue("reason", m.revocationReason()));
     }
 
+    /**
+     * Lấy membership mới nhất của một người dùng trên một cây.
+     *
+     * @param treeId mã cây
+     * @param userId mã người dùng
+     * @return {@link Optional} chứa {@link TreeMembership} nếu có
+     */
     @Override
     @Transactional(readOnly = true)
     public Optional<TreeMembership> findMembership(UUID treeId, UUID userId) {
@@ -96,6 +143,12 @@ public class JdbcTreeRepository implements TreeRepository {
         return Optional.of(membershipFromRow(rows.get(0)));
     }
 
+    /**
+     * Lấy tất cả membership của một cây, sắp xếp theo {@code granted_at}.
+     *
+     * @param treeId mã cây
+     * @return danh sách membership (kể cả đã thu hồi)
+     */
     @Override
     @Transactional(readOnly = true)
     public List<TreeMembership> listMemberships(UUID treeId) {
@@ -106,6 +159,11 @@ public class JdbcTreeRepository implements TreeRepository {
         return rows.stream().map(this::membershipFromRow).toList();
     }
 
+    /**
+     * Cập nhật dòng membership (thường dùng khi tái kích hoạt hoặc thu hồi).
+     *
+     * @param m thực thể membership sau khi mutate
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void updateMembership(TreeMembership m) {
@@ -120,6 +178,11 @@ public class JdbcTreeRepository implements TreeRepository {
                         .addValue("id", m.id().toString()));
     }
 
+    /**
+     * Upsert một hàng projection phân quyền. Khoá chính là {@code (tree_id, user_id)}.
+     *
+     * @param p projection cần lưu
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void upsertProjection(AuthorizationProjection p) {
@@ -142,6 +205,13 @@ public class JdbcTreeRepository implements TreeRepository {
                         .addValue("upd", Timestamp.from(p.lastUpdatedAt())));
     }
 
+    /**
+     * Tìm projection phân quyền của một người dùng trên cây.
+     *
+     * @param treeId mã cây
+     * @param userId mã người dùng
+     * @return {@link Optional} chứa {@link AuthorizationProjection} nếu tìm thấy
+     */
     @Override
     @Transactional(readOnly = true)
     public Optional<AuthorizationProjection> findProjection(UUID treeId, UUID userId) {
@@ -164,6 +234,12 @@ public class JdbcTreeRepository implements TreeRepository {
                 ((Timestamp) r.get("last_updated_at")).toInstant()));
     }
 
+    /**
+     * Lấy revision hiện tại của cây. Trả về {@code 0} nếu cây không tồn tại.
+     *
+     * @param treeId mã cây
+     * @return revision hiện tại hoặc {@code 0}
+     */
     @Override
     @Transactional(readOnly = true)
     public long currentRevision(UUID treeId) {
@@ -173,6 +249,12 @@ public class JdbcTreeRepository implements TreeRepository {
         return rows.isEmpty() ? 0L : ((Number) rows.get(0).get("revision")).longValue();
     }
 
+    /**
+     * Tạo {@link MapSqlParameterSource} từ một {@link Tree} để truyền cho truy vấn.
+     *
+     * @param tree thực thể cây
+     * @return tham số có khoá trùng với placeholder trong câu SQL
+     */
     private MapSqlParameterSource treeParams(Tree tree) {
         return new MapSqlParameterSource()
                 .addValue("id", tree.id().toString())
@@ -187,6 +269,12 @@ public class JdbcTreeRepository implements TreeRepository {
                 .addValue("v", tree.version());
     }
 
+    /**
+     * Chuyển một dòng kết quả thành {@link Tree}.
+     *
+     * @param r một dòng từ {@code queryForList}
+     * @return thực thể cây tương ứng
+     */
     private Tree treeFromRow(java.util.Map<String, Object> r) {
         return new Tree(
                 UUID.fromString((String) r.get("id")),
@@ -201,6 +289,12 @@ public class JdbcTreeRepository implements TreeRepository {
                 ((Number) r.get("version")).longValue());
     }
 
+    /**
+     * Chuyển một dòng kết quả thành {@link TreeMembership}.
+     *
+     * @param r một dòng từ {@code queryForList}
+     * @return thực thể membership tương ứng
+     */
     private TreeMembership membershipFromRow(java.util.Map<String, Object> r) {
         return new TreeMembership(
                 UUID.fromString((String) r.get("id")),

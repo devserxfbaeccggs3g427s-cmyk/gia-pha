@@ -14,15 +14,32 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Triển khai JDBC của {@link SearchWatermarkRepository}, đọc/ghi bảng
+ * {@code watermark}. Phiên bản này hỗ trợ đầy đủ các phương thức mặc định
+ * của cổng (nâng hàng loạt và khôi phục).
+ */
 @Component
 public class JdbcSearchWatermarkRepository implements SearchWatermarkRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo repository với JDBC template dùng chung.
+     *
+     * @param jdbc JDBC template dùng để truy vấn/lưu.
+     */
     public JdbcSearchWatermarkRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Tìm watermark cho một miền cụ thể của cây.
+     *
+     * @param treeId định danh cây gia phả.
+     * @param domain miền dữ liệu.
+     * @return {@code Optional} chứa {@link Watermark} nếu tồn tại.
+     */
     @Override
     public Optional<Watermark> find(UUID treeId, Watermark.Domain domain) {
         var rows = jdbc.queryForList(
@@ -39,6 +56,12 @@ public class JdbcSearchWatermarkRepository implements SearchWatermarkRepository 
                 ((Timestamp) r.get("last_updated")).toInstant()));
     }
 
+    /**
+     * Lấy barrier phiên bản của cây.
+     *
+     * @param treeId định danh cây gia phả.
+     * @return {@link RevisionBarrier} chứa tất cả watermark của cây.
+     */
     @Override
     public RevisionBarrier barrierFor(UUID treeId) {
         var rows = jdbc.queryForList(
@@ -52,6 +75,13 @@ public class JdbcSearchWatermarkRepository implements SearchWatermarkRepository 
         return new RevisionBarrier(treeId, values);
     }
 
+    /**
+     * Nâng (hoặc giữ nguyên) watermark của một miền - chỉ tiến lên.
+     *
+     * @param treeId định danh cây gia phả.
+     * @param domain miền dữ liệu.
+     * @param value  giá trị watermark mới.
+     */
     @Override
     public void advance(UUID treeId, Watermark.Domain domain, long value) {
         jdbc.update(

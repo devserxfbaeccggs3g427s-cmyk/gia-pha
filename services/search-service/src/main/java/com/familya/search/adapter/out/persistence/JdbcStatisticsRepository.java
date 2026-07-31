@@ -11,15 +11,30 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Triển khai JDBC của {@link StatisticsRepository}, đọc/ghi bảng
+ * {@code statistics_snapshot} và đếm trực tiếp trên các bảng chiếu.
+ */
 @Component
 public class JdbcStatisticsRepository implements StatisticsRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo repository với JDBC template dùng chung.
+     *
+     * @param jdbc JDBC template dùng để truy vấn/lưu/xoá.
+     */
     public JdbcStatisticsRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Xoá toàn bộ bản thống kê của một cây.
+     *
+     * @param treeId định danh cây gia phả.
+     * @return số bản ghi đã xoá.
+     */
     @Override
     public long deleteByTree(UUID treeId) {
         return jdbc.update(
@@ -27,11 +42,21 @@ public class JdbcStatisticsRepository implements StatisticsRepository {
                 new MapSqlParameterSource("t", treeId.toString()));
     }
 
+    /**
+     * Tính (hoặc tính lại) thống kê bằng cách đếm trực tiếp các bảng chiếu
+     * rồi ghi nhớ vào {@code statistics_snapshot}.
+     *
+     * @param treeId    định danh cây gia phả.
+     * @param watermark watermark mà bản thống kê phản ánh.
+     * @return bản thống kê vừa tính.
+     */
     @Override
     public StatisticsSnapshot compute(UUID treeId, long watermark) {
+        // Đếm số bản ghi chưa tombstoned - chỉ thống kê các thực thể "còn sống".
         long members = count(treeId, "search_member_doc");
         long events = count(treeId, "search_event_doc");
         long media = count(treeId, "search_media_doc");
+        // Số thế hệ phân biệt được tính riêng từ bảng generation.
         Integer generationsBoxed = jdbc.queryForObject(
                 "SELECT COUNT(DISTINCT generation) FROM member_generation_projection WHERE tree_id = :t",
                 new MapSqlParameterSource("t", treeId.toString()), Integer.class);
@@ -55,6 +80,12 @@ public class JdbcStatisticsRepository implements StatisticsRepository {
         return snap;
     }
 
+    /**
+     * Lấy bản thống kê mới nhất đã lưu của cây.
+     *
+     * @param treeId định danh cây gia phả.
+     * @return {@code Optional} chứa bản thống kê hoặc rỗng nếu chưa tính.
+     */
     @Override
     public Optional<StatisticsSnapshot> latest(UUID treeId) {
         var rows = jdbc.queryForList(
@@ -73,6 +104,13 @@ public class JdbcStatisticsRepository implements StatisticsRepository {
                 ((Number) r.get("watermark")).longValue()));
     }
 
+    /**
+     * Đếm số bản ghi {@code tombstoned = FALSE} trong một bảng chiếu của cây.
+     *
+     * @param treeId định danh cây.
+     * @param table  tên bảng cần đếm.
+     * @return số bản ghi chưa bị xoá mềm; {@code 0} nếu rỗng.
+     */
     private long count(UUID treeId, String table) {
         Long c = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM " + table + " WHERE tree_id = :t AND tombstoned = FALSE",

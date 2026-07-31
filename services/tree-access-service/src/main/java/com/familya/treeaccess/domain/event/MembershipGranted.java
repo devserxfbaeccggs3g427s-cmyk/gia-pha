@@ -12,6 +12,13 @@ public final class MembershipGranted extends MembershipEvent {
     private final UUID grantedBy;
     private final Instant occurredAt;
 
+    /**
+     * @param treeId     mã cây
+     * @param userId     UUID người được cấp quyền
+     * @param role       vai trò được cấp
+     * @param grantedBy  UUID người thực hiện cấp quyền
+     * @param occurredAt thời điểm phát sinh sự kiện
+     */
     public MembershipGranted(UUID treeId, UUID userId, TreeMembership.Role role,
                              UUID grantedBy, Instant occurredAt) {
         this.treeId = treeId;
@@ -27,6 +34,12 @@ public final class MembershipGranted extends MembershipEvent {
     @Override public int eventVersion() { return 1; }
     @Override public Instant occurredAt() { return occurredAt; }
 
+    /**
+     * @return vai trò vừa được cấp
+     */
     public TreeMembership.Role role() { return role; }
+    /**
+     * @return UUID người đã cấp quyền
+     */
     public UUID grantedBy() { return grantedBy; }
 }

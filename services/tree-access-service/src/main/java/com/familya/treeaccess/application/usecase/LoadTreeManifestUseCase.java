@@ -23,14 +23,35 @@ public class LoadTreeManifestUseCase {
 
     private static final Logger LOG = LoggerFactory.getLogger(LoadTreeManifestUseCase.class);
 
+    /** Kho lưu trữ cây. */
     private final TreeRepository repo;
+
+    /** Metric giám sát. */
     private final PlatformMetrics metrics;
 
+    /**
+     * Khởi tạo use-case nạp manifest.
+     *
+     * @param repo    kho lưu trữ
+     * @param metrics metric
+     */
     public LoadTreeManifestUseCase(TreeRepository repo, PlatformMetrics metrics) {
         this.repo = repo;
         this.metrics = metrics;
     }
 
+    /**
+     * Nạp một manifest cây vào cơ sở dữ liệu. Thao tác idempotent:
+     *
+     * <ol>
+     *   <li>Nếu {@code treeId} đã tồn tại → trả {@code DUPLICATE}.</li>
+     *   <li>Nếu có hai worker cùng insert → bắt {@link DuplicateKeyException} và trả {@code DUPLICATE}.</li>
+     *   <li>Các membership trùng cũng bị bỏ qua qua {@code DuplicateKeyException}.</li>
+     * </ol>
+     *
+     * @param cmd lệnh nạp manifest
+     * @return {@link LoadResult} trạng thái nạp
+     */
     @Transactional
     public LoadResult execute(LoadTreeManifestCommand cmd) {
         metrics.mutationAccepted("tree-access-service", "loadTreeManifest");
@@ -51,6 +72,7 @@ public class LoadTreeManifestUseCase {
         try {
             repo.insertTree(tree, owner);
         } catch (DuplicateKeyException dup) {
+            // Hai worker cùng chèn — vẫn coi là DUPLICATE để caller có thể tiếp tục.
             LOG.warn("Concurrent insert for treeId={}", cmd.treeId());
             return new LoadResult(cmd.treeId(), LoadResult.Status.DUPLICATE);
         }
@@ -67,7 +89,14 @@ public class LoadTreeManifestUseCase {
         return new LoadResult(cmd.treeId(), LoadResult.Status.LOADED);
     }
 
+    /**
+     * Kết quả nạp manifest.
+     *
+     * @param treeId mã cây
+     * @param status {@link Status#LOADED} hoặc {@link Status#DUPLICATE}
+     */
     public record LoadResult(java.util.UUID treeId, Status status) {
+        /** Trạng thái nạp: LOADED khi tạo mới, DUPLICATE khi manifest đã tồn tại. */
         public enum Status { LOADED, DUPLICATE }
     }
 }

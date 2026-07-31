@@ -14,15 +14,30 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Triển khai JDBC của {@link WatermarkRepository}, đọc/ghi bảng {@code watermark}.
+ */
 @Component
 public class JdbcWatermarkRepository implements WatermarkRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo repository với JDBC template dùng chung.
+     *
+     * @param jdbc JDBC template dùng để truy vấn/lưu.
+     */
     public JdbcWatermarkRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Tìm watermark cho một miền cụ thể của cây.
+     *
+     * @param treeId định danh cây gia phả.
+     * @param domain miền dữ liệu.
+     * @return {@code Optional} chứa {@link Watermark} nếu tồn tại.
+     */
     @Override
     public Optional<Watermark> find(UUID treeId, Watermark.Domain domain) {
         var rows = jdbc.queryForList(
@@ -39,6 +54,12 @@ public class JdbcWatermarkRepository implements WatermarkRepository {
                 ((Timestamp) r.get("last_updated")).toInstant()));
     }
 
+    /**
+     * Lấy barrier phiên bản của cây - bản đồ từ miền sang watermark.
+     *
+     * @param treeId định danh cây gia phả.
+     * @return {@link RevisionBarrier} chứa tất cả watermark của cây.
+     */
     @Override
     public RevisionBarrier barrierFor(UUID treeId) {
         var rows = jdbc.queryForList(
@@ -52,6 +73,14 @@ public class JdbcWatermarkRepository implements WatermarkRepository {
         return new RevisionBarrier(treeId, values);
     }
 
+    /**
+     * Nâng (hoặc giữ nguyên) watermark của một miền - chỉ tiến lên, không bao
+     * giờ lùi nhờ {@code GREATEST(value, VALUES(value))}.
+     *
+     * @param treeId định danh cây gia phả.
+     * @param domain miền dữ liệu.
+     * @param value  giá trị watermark mới.
+     */
     @Override
     public void advance(UUID treeId, Watermark.Domain domain, long value) {
         jdbc.update(

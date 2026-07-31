@@ -1,3 +1,11 @@
+/**
+ * Adapter JDBC cho port {@link com.familya.auditops.application.port.out.AuditAppender}.
+ *
+ * <p>Lớp này chịu trách nhiệm ghi và truy vấn bảng {@code audit_event}
+ * trong cơ sở dữ liệu cục bộ. Mọi thao tác ghi đều chạy trong
+ * transaction hiện tại (propagation = MANDATORY) để đảm bảo audit row
+ * chỉ được tạo khi nghiệp vụ liên quan thành công.</p>
+ */
 package com.familya.auditops.adapter.out.persistence;
 
 import com.familya.auditops.application.port.out.AuditAppender;
@@ -14,15 +22,37 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Triển khai {@link AuditAppender} bằng JDBC.
+ *
+ * <p>Các thao tác đọc ({@code findByOperation}, {@code findById}) chạy
+ * trong transaction chỉ-đọc để tối ưu hiệu năng và tránh khả năng
+ * ghi nhầm.</p>
+ */
 @Component
 public class JdbcAuditAppender implements AuditAppender {
 
+    /** JDBC template dùng chung. */
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo appender.
+     *
+     * @param jdbc JDBC template
+     */
     public JdbcAuditAppender(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Thêm một sự kiện audit vào bảng {@code audit_event}.
+     *
+     * <p>Yêu cầu phải đang có transaction ({@link Propagation#MANDATORY}).
+     * Tham số {@code detail} được serialize sang JSON.</p>
+     *
+     * @param e sự kiện audit cần ghi
+     * @return sự kiện đã ghi (giữ nguyên tham chiếu)
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public AuditEvent append(AuditEvent e) {
@@ -45,6 +75,14 @@ public class JdbcAuditAppender implements AuditAppender {
         return e;
     }
 
+    /**
+     * Tìm các sự kiện audit của một operation, sắp xếp theo thời gian
+     * giảm dần và giới hạn bởi {@code limit}.
+     *
+     * @param operationId id operation
+     * @param limit       số lượng tối đa
+     * @return danh sách sự kiện audit
+     */
     @Override
     @Transactional(readOnly = true)
     public List<AuditEvent> findByOperation(UUID operationId, int limit) {
@@ -58,6 +96,12 @@ public class JdbcAuditAppender implements AuditAppender {
         return rows.stream().map(this::fromRow).toList();
     }
 
+    /**
+     * Tìm một sự kiện audit theo id.
+     *
+     * @param auditId id audit
+     * @return {@link Optional} chứa sự kiện nếu tồn tại
+     */
     @Override
     @Transactional(readOnly = true)
     public Optional<AuditEvent> findById(UUID auditId) {
@@ -69,6 +113,12 @@ public class JdbcAuditAppender implements AuditAppender {
         return Optional.of(fromRow(rows.get(0)));
     }
 
+    /**
+     * Chuyển {@link java.util.Map} từ JDBC row sang {@link AuditEvent}.
+     *
+     * @param r map kết quả JDBC
+     * @return sự kiện audit đã chuyển đổi
+     */
     private AuditEvent fromRow(Map<String, Object> r) {
         return new AuditEvent(
                 UUID.fromString((String) r.get("audit_id")),
@@ -84,6 +134,13 @@ public class JdbcAuditAppender implements AuditAppender {
                 (String) r.get("trace_id"));
     }
 
+    /**
+     * Serialize {@link java.util.Map} sang chuỗi JSON.
+     *
+     * @param m map cần serialize
+     * @return chuỗi JSON hoặc null nếu map rỗng
+     * @throws IllegalStateException nếu serialize thất bại
+     */
     private static String json(Map<String, Object> m) {
         if (m == null || m.isEmpty()) return null;
         try {
@@ -93,6 +150,12 @@ public class JdbcAuditAppender implements AuditAppender {
         }
     }
 
+    /**
+     * Parse chuỗi JSON sang {@link java.util.Map}.
+     *
+     * @param s chuỗi JSON
+     * @return map rỗng nếu chuỗi null/rỗng hoặc lỗi parse
+     */
     private static Map<String, Object> parseJson(String s) {
         if (s == null || s.isBlank()) return Map.of();
         try {

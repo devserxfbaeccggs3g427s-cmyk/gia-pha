@@ -1,3 +1,16 @@
+/**
+ * Adapter JDBC cho port {@link com.familya.auditops.application.port.out.SagaStateRepository}.
+ *
+ * <p>Quản lý hai bảng:</p>
+ * <ul>
+ *   <li>{@code saga_state}: một row cho mỗi operation, lưu envelope
+ *       trạng thái Saga và phiên bản (version) cho optimistic concurrency.</li>
+ *   <li>{@code saga_step}: nhiều row cho mỗi operation, đại diện cho
+ *       từng step Saga gửi tới participant.</li>
+ * </ul>
+ *
+ * <p>Mọi thao tác ghi đều chạy trong transaction hiện hành.</p>
+ */
 package com.familya.auditops.adapter.out.persistence;
 
 import com.familya.auditops.application.port.out.SagaStateRepository;
@@ -17,15 +30,39 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Triển khai {@link SagaStateRepository} bằng JDBC.
+ *
+ * <p>Chiến lược ghi:</p>
+ * <ul>
+ *   <li>Với {@link #saveState} và {@link #saveStep}: thử UPDATE trước,
+ *       nếu không có row nào được cập nhật thì INSERT. Hai câu lệnh
+ *       chạy trong cùng transaction để tránh race condition.</li>
+ *   <li>Với {@link #transitionStep}: đọc step hiện tại, gọi
+ *       {@link SagaStep} transition tương ứng rồi lưu lại.</li>
+ * </ul>
+ */
 @Component
 public class JdbcSagaStateRepository implements SagaStateRepository {
 
+    /** JDBC template. */
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo repository.
+     *
+     * @param jdbc JDBC template
+     */
     public JdbcSagaStateRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Tìm envelope trạng thái Saga của một operation.
+     *
+     * @param operationId id operation
+     * @return {@link Optional} chứa {@link SagaState} nếu tồn tại
+     */
     @Override
     @Transactional(readOnly = true)
     public Optional<SagaState> findState(UUID operationId) {
@@ -46,6 +83,17 @@ public class JdbcSagaStateRepository implements SagaStateRepository {
                 ((Number) r.get("version")).longValue()));
     }
 
+    /**
+     * Lưu envelope trạng thái Saga với optimistic concurrency.
+     *
+     * <p>Thử UPDATE trước với {@code version = :ev}; nếu không thành
+     * công thì INSERT. Nếu cả INSERT cũng không thành công (không xảy
+     * ra trong điều kiện bình thường) sẽ ném
+     * {@link com.familya.platform.error.OptimisticConcurrencyException}.</p>
+     *
+     * @param s trạng thái Saga cần lưu
+     * @return trạng thái Saga đã lưu
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public SagaState saveState(SagaState s) {
@@ -82,6 +130,13 @@ public class JdbcSagaStateRepository implements SagaStateRepository {
         return s;
     }
 
+    /**
+     * Liệt kê các step Saga của một operation, sắp xếp theo
+     * {@code sequence_no}.
+     *
+     * @param operationId id operation
+     * @return danh sách {@link SagaStep}
+     */
     @Override
     @Transactional(readOnly = true)
     public List<SagaStep> listSteps(UUID operationId) {
@@ -93,6 +148,12 @@ public class JdbcSagaStateRepository implements SagaStateRepository {
         return rows.stream().map(this::stepFromRow).toList();
     }
 
+    /**
+     * Lưu step Saga với cơ chế upsert (UPDATE trước, INSERT nếu cần).
+     *
+     * @param step step cần lưu
+     * @return step đã lưu
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public SagaStep saveStep(SagaStep step) {
@@ -113,6 +174,20 @@ public class JdbcSagaStateRepository implements SagaStateRepository {
         return step;
     }
 
+    /**
+     * Chuyển trạng thái step bằng cách đọc step hiện tại, gọi phương
+     * thức chuyển trạng thái tương ứng trên aggregate rồi lưu lại.
+     *
+     * @param operationId       id operation
+     * @param participantService tên participant
+     * @param stepName          tên step
+     * @param next              trạng thái mới
+     * @param errorCode         mã lỗi (nếu có)
+     * @param errorMessage      thông điệp lỗi (nếu có)
+     * @param when              thời điểm áp dụng
+     * @return step đã chuyển trạng thái
+     * @throws com.familya.platform.error.NotFoundException nếu step không tồn tại
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public SagaStep transitionStep(UUID operationId,
@@ -122,6 +197,7 @@ public class JdbcSagaStateRepository implements SagaStateRepository {
                                    String errorCode,
                                    String errorMessage,
                                    Instant when) {
+        // Lấy step hiện tại thông qua listSteps (đã có sẵn transaction chỉ-đọc).
         Optional<SagaStep> current = listSteps(operationId).stream()
                 .filter(s -> s.participantService().equals(participantService) && s.stepName().equals(stepName))
                 .findFirst();
@@ -130,17 +206,31 @@ public class JdbcSagaStateRepository implements SagaStateRepository {
                     "Saga step " + participantService + "/" + stepName + " not found");
         }
         SagaStep step = current.get();
+        // Gọi phương thức chuyển trạng thái tương ứng trên aggregate
+        // để tận dụng logic gắn kèm (tăng attemptCount, set thời gian, ...).
         switch (next) {
             case DISPATCHED -> step.markDispatched(when);
             case ACKED -> step.markAcked(when);
             case FAILED -> step.markFailed(errorCode, errorMessage, when);
             case COMPENSATED -> step.markCompensated(when);
             case DEAD_LETTERED -> step.markDeadLettered(errorCode, errorMessage, when);
-            default -> { /* PENDING: nothing to do */ }
+            default -> { /* PENDING: không có hiệu ứng phụ */ }
         }
         return saveStep(step);
     }
 
+    /**
+     * Đưa step vào dead-letter table. Dùng {@code ON DUPLICATE KEY UPDATE}
+     * để cập nhật thông tin cho cùng một (operation, participant, step).
+     *
+     * @param operationId       id operation
+     * @param participantService tên participant
+     * @param stepName          tên step
+     * @param errorCode         mã lỗi
+     * @param errorMessage      thông điệp lỗi
+     * @param payload           payload liên quan
+     * @param when              thời điểm quarantine
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void deadLetterStep(UUID operationId,
@@ -168,6 +258,13 @@ public class JdbcSagaStateRepository implements SagaStateRepository {
                         .addValue("qa", Timestamp.from(when)));
     }
 
+    /**
+     * Đếm số step của một operation ở một trạng thái cụ thể.
+     *
+     * @param operationId id operation
+     * @param status      trạng thái cần đếm
+     * @return số step khớp
+     */
     @Override
     @Transactional(readOnly = true)
     public long countByOperationAndStatus(UUID operationId, StepStatus status) {
@@ -179,6 +276,14 @@ public class JdbcSagaStateRepository implements SagaStateRepository {
         return rows.isEmpty() ? 0L : ((Number) rows.get(0).get("c")).longValue();
     }
 
+    /**
+     * Tạo {@link MapSqlParameterSource} cho các truy vấn UPDATE/INSERT
+     * liên quan đến {@link SagaStep}.
+     *
+     * @param s         step nguồn
+     * @param isUpdate  true nếu dùng cho UPDATE (không dùng nhưng giữ để mở rộng)
+     * @return tham số SQL
+     */
     private MapSqlParameterSource stepParams(SagaStep s, boolean isUpdate) {
         MapSqlParameterSource p = new MapSqlParameterSource()
                 .addValue("op", s.operationId().toString())
@@ -197,6 +302,12 @@ public class JdbcSagaStateRepository implements SagaStateRepository {
         return p;
     }
 
+    /**
+     * Chuyển {@link java.util.Map} từ JDBC row sang {@link SagaStep}.
+     *
+     * @param r map kết quả JDBC
+     * @return step đã chuyển đổi
+     */
     private SagaStep stepFromRow(Map<String, Object> r) {
         return new SagaStep(
                 UUID.fromString((String) r.get("operation_id")),
@@ -215,6 +326,12 @@ public class JdbcSagaStateRepository implements SagaStateRepository {
                 parseJson((String) r.get("detail_json")));
     }
 
+    /**
+     * Serialize {@link java.util.Map} sang JSON.
+     *
+     * @param m map nguồn
+     * @return chuỗi JSON hoặc null nếu rỗng
+     */
     private static String json(Map<String, Object> m) {
         if (m == null || m.isEmpty()) return null;
         try {
@@ -224,6 +341,12 @@ public class JdbcSagaStateRepository implements SagaStateRepository {
         }
     }
 
+    /**
+     * Parse chuỗi JSON sang {@link java.util.Map}.
+     *
+     * @param s chuỗi JSON
+     * @return map rỗng nếu lỗi hoặc null/rỗng
+     */
     private static Map<String, Object> parseJson(String s) {
         if (s == null || s.isBlank()) return Map.of();
         try {
