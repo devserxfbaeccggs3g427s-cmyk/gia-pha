@@ -14,15 +14,44 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Adapter JDBC cụ thể cho cổng {@link RelationshipRepository}.
+ * <p>
+ * Tất cả các phương thức ghi đều sử dụng {@code Propagation.MANDATORY} - nghĩa
+ * là phải được gọi trong một transaction đang mở ở caller. Điều này đảm bảo:
+ * </p>
+ * <ul>
+ *   <li>Các lệnh ghi (insert/update/delete) chỉ thực sự commit khi use case
+ *       commit cả transaction.</li>
+ *   <li>Sự kiện outbox được đảm bảo phát hành đồng bộ với thay đổi dữ liệu.</li>
+ * </ul>
+ *
+ * <p>
+ * Các phương thức đọc được đánh dấu {@code readOnly = true} để tối ưu và cho
+ * phép driver/database tận dụng các tối ưu riêng (ví dụ: replica).
+ * </p>
+ */
 @Component
 public class JdbcRelationshipRepository implements RelationshipRepository {
 
+    /** Template JDBC dùng chung cho toàn bộ adapter. */
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo adapter.
+     *
+     * @param jdbc template JDBC đã được Spring cấu hình
+     */
     public JdbcRelationshipRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Sử dụng {@code Propagation.MANDATORY}: bắt buộc phải có transaction mở sẵn.
+     * </p>
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void insert(Relationship rel) {
@@ -33,6 +62,13 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
                 params(rel));
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Đọc từ bảng {@code relationship} theo {@code id}. Trả về {@link Optional#empty()}
+     * nếu không tìm thấy.
+     * </p>
+     */
     @Override
     @Transactional(readOnly = true)
     public Optional<Relationship> findById(UUID id) {
@@ -44,6 +80,13 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(fromRow(rows.get(0)));
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Nếu {@code includeTombstoned = false}, chỉ lấy các quan hệ đang sống
+     * (dùng mệnh đề {@code tombstoned_at IS NULL}); nếu {@code true}, lấy tất cả.
+     * </p>
+     */
     @Override
     @Transactional(readOnly = true)
     public List<Relationship> listByTree(UUID treeId, boolean includeTombstoned) {
@@ -54,6 +97,13 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
         return rows.stream().map(this::fromRow).toList();
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Dùng cho saga xóa thành viên: lấy các cạnh đang hoạt động mà liên quan
+     * tới thành viên ở bất kỳ chiều nào.
+     * </p>
+     */
     @Override
     @Transactional(readOnly = true)
     public List<Relationship> listActiveByMember(UUID treeId, UUID memberId) {
@@ -68,6 +118,14 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
         return rows.stream().map(this::fromRow).toList();
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Sử dụng {@code INSERT ... ON DUPLICATE KEY UPDATE} để idempotent: nếu
+     * snapshot cho cùng {@code operationId} đã tồn tại thì ghi đè. Điều này
+     * đảm bảo saga có thể chạy lại nhiều lần mà không phá vỡ tính nhất quán.
+     * </p>
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void saveCompensationSnapshot(UUID operationId, String snapshotJson) {
@@ -81,6 +139,12 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
                         .addValue("ts", Timestamp.from(java.time.Instant.now())));
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Trả về {@code null} nếu không có snapshot cho {@code operationId}.
+     * </p>
+     */
     @Override
     @Transactional(readOnly = true)
     public String loadCompensationSnapshot(UUID operationId) {
@@ -90,6 +154,19 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
         return rows.isEmpty() ? null : (String) rows.get(0).get("snapshot_json");
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Cơ chế hoạt động:
+     * </p>
+     * <ol>
+     *   <li>Thử INSERT dòng "init" cho cây nếu chưa có (idempotent - bỏ qua lỗi).</li>
+     *   <li>Dùng {@code SELECT MAX(command_seq) ... FOR UPDATE} để lấy giá trị
+     *       lớn nhất hiện tại và khóa các dòng tương ứng - đảm bảo hai transaction
+     *       cùng cây không thể cùng lúc lấy cùng một {@code commandSeq}.</li>
+     *   <li>Trả về {@code max + 1}.</li>
+     * </ol>
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public long nextCommandSeq(UUID treeId) {
@@ -98,6 +175,8 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
         // serializes concurrent graph commands for the same tree
         // while letting different trees proceed in parallel.
         try {
+            // Bước 1: chèn dòng khởi tạo nếu cây chưa có dòng nào trong command log.
+            // Lệnh này idempotent: nếu đã có dòng khởi tạo, lỗi sẽ bị bỏ qua.
             jdbc.update(
                     "INSERT INTO graph_command_log (tree_id, command_seq, command_type, actor_user_id, payload_hash, committed_at) "
                             + "VALUES (:t, 1, 'init', :u, 'init', :ts)",
@@ -105,13 +184,21 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
                             .addValue("t", treeId.toString())
                             .addValue("u", "00000000-0000-0000-0000-000000000000")
                             .addValue("ts", Timestamp.from(java.time.Instant.now())));
-        } catch (Exception ignored) { /* already initialized */ }
+        } catch (Exception ignored) { /* already initialized - bỏ qua lỗi trùng khóa */ }
+        // Bước 2: lấy max command_seq và khóa các dòng tương ứng (FOR UPDATE).
+        // Nhờ khóa này, các transaction cùng cây sẽ phải xếp hàng nối tiếp.
         Long last = jdbc.queryForObject(
                 "SELECT MAX(command_seq) FROM graph_command_log WHERE tree_id = :t FOR UPDATE",
                 new MapSqlParameterSource("t", treeId.toString()), Long.class);
         return (last == null ? 0L : last) + 1L;
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Ghi một dòng mới vào {@code graph_command_log} phản ánh lệnh vừa commit.
+     * </p>
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void appendCommandLog(UUID treeId, long commandSeq, String commandType,
@@ -128,6 +215,13 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
                         .addValue("ts", Timestamp.from(committedAt)));
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Hiện tại chỉ cập nhật {@code tombstoned_at} và {@code version}. Việc áp
+     * dụng thêm khóa version có thể bổ sung trong tương lai nếu cần.
+     * </p>
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void update(Relationship rel) {
@@ -139,6 +233,14 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
                         .addValue("id", rel.id().toString()));
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Sử dụng {@code AND version = :ev} để thực thi optimistic concurrency ở
+     * tầng SQL: nếu version không khớp thì {@code UPDATE} không ảnh hưởng dòng
+     * nào và caller sẽ phát hiện qua {@code rowCount}.
+     * </p>
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void untombstone(UUID id, java.time.Instant at, long expectedVersion) {
@@ -150,6 +252,14 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
                         .addValue("v", expectedVersion + 1));
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * Đếm số dòng khớp với bộ bốn {@code (tree, kind, from, to)}. Lưu ý:
+     * triển khai này không phân biệt quan hệ đang sống / đã tombstone; để khớp
+     * với hợp đồng, nên chỉ tính các dòng đang hoạt động ở use case.
+     * </p>
+     */
     @Override
     @Transactional(readOnly = true)
     public boolean existsEdge(UUID treeId, Relationship.Kind kind, UUID from, UUID to) {
@@ -168,6 +278,13 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
         return n != null && n > 0;
     }
 
+    /**
+     * Tạo {@link MapSqlParameterSource} chứa tất cả các trường của {@link Relationship}
+     * để sử dụng cho INSERT. Phương thức private giúp tái sử dụng giữa các lệnh ghi.
+     *
+     * @param r aggregate cần ánh xạ
+     * @return tham số SQL đã chuẩn bị
+     */
     private MapSqlParameterSource params(Relationship r) {
         return new MapSqlParameterSource()
                 .addValue("id", r.id().toString())
@@ -181,6 +298,14 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
                 .addValue("v", r.version());
     }
 
+    /**
+     * Ánh xạ một dòng kết quả SQL (dạng {@code Map<String, Object>}) sang aggregate
+     * {@link Relationship}. Xử lý null-safe cho {@code metadata_json} và
+     * {@code tombstoned_at}.
+     *
+     * @param r dòng kết quả SQL
+     * @return aggregate đã tái dựng
+     */
     private Relationship fromRow(java.util.Map<String, Object> r) {
         return new Relationship(
                 UUID.fromString((String) r.get("id")),
@@ -191,6 +316,7 @@ public class JdbcRelationshipRepository implements RelationshipRepository {
                 (String) r.get("metadata_json"),
                 ((Number) r.get("revision")).longValue(),
                 ((Timestamp) r.get("created_at")).toInstant(),
+                // tombstoned_at có thể null - giữ nguyên null khi chuyển sang Instant.
                 r.get("tombstoned_at") == null ? null : ((Timestamp) r.get("tombstoned_at")).toInstant(),
                 ((Number) r.get("version")).longValue());
     }

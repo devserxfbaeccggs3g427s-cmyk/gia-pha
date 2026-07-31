@@ -11,11 +11,12 @@ import java.io.ByteArrayInputStream;
 import java.util.UUID;
 
 /**
- * Default thumbnail generator. Placeholder implementation emits a
- * deterministic 1x1 WebP stub with the configured dimensions; the
- * real ImageIO-based 480x480 lossy WebP encoder lands in a separate
- * module. The use case is best-effort: a thumbnail failure is
- * logged and the promotion path still succeeds.
+ * Adapter đầu ra (outbound) — generator thumbnail mặc định.
+ * <p>
+ * Placeholder phát ra một stub WebP 1×1 byte (deterministic). Implementation
+ * thật dựa trên ImageIO 480×480 lossy WebP sẽ ở một module riêng. Đường
+ * thumbnail là best-effort: lỗi chỉ được log, đường promote vẫn tiếp tục
+ * thành công.
  */
 @Component
 public class DefaultThumbnailGenerator implements ThumbnailGenerator {
@@ -25,10 +26,27 @@ public class DefaultThumbnailGenerator implements ThumbnailGenerator {
     @SuppressWarnings("unused")
     private final boolean enabled;
 
+    /**
+     * Khởi tạo generator.
+     *
+     * @param enabled cờ bật/tắt, mặc định false (chỉ sinh stub). Đọc từ
+     *                {@code familya.media.thumbnail.enabled}.
+     */
     public DefaultThumbnailGenerator(@Value("${familya.media.thumbnail.enabled:false}") boolean enabled) {
         this.enabled = enabled;
     }
 
+    /**
+     * Sinh thumbnail cho một media.
+     * <p>
+     * Hiện tại chỉ trả về stub 1 byte (placeholder). Best-effort — use case sẽ
+     * log lỗi nếu cần nhưng không chặn promotion.
+     *
+     * @param mediaId  UUID media.
+     * @param mimeType MIME type nguồn.
+     * @param byteSize kích thước nguồn.
+     * @return {@link ThumbnailResult} với kích thước/MIME từ {@link ThumbnailPolicy}.
+     */
     @Override
     public ThumbnailResult generate(UUID mediaId, String mimeType, long byteSize) {
         if (!enabled) {

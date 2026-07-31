@@ -50,22 +50,44 @@ public final class DeleteMemberSagaState {
         this.failureMessage = failureMessage;
     }
 
+    /** Mã operationId của Saga. */
     public UUID operationId() { return operationId; }
+    /** Mã cây. */
     public UUID treeId() { return treeId; }
+    /** Mã thành viên. */
     public UUID memberId() { return memberId; }
+    /** Người dùng khởi tạo Saga. */
     public UUID initiatingUserId() { return initiatingUserId; }
+    /** Mã tương quan (correlation). */
     public UUID correlationId() { return correlationId; }
+    /** Trạng thái hiện tại. */
     public State state() { return state; }
+    /** Phiên bản aggregate mục tiêu (cho barrier). */
     public long targetAggregateVersion() { return targetAggregateVersion; }
+    /** Epoch mục tiêu (cho barrier). */
     public long targetEpoch() { return targetEpoch; }
+    /** Deadline tuyệt đối của Saga. */
     public Instant deadlineAt() { return deadlineAt; }
+    /** Thời điểm bắt đầu. */
     public Instant startedAt() { return startedAt; }
+    /** Thời điểm cuối cùng (khi vào trạng thái cuối). */
     public Instant finalizedAt() { return finalizedAt; }
+    /** Thời điểm cập nhật gần nhất. */
     public Instant lastUpdatedAt() { return lastUpdatedAt; }
+    /** Thời điểm đã qua irreversible boundary (có thể null). */
     public Instant irreversibleAt() { return irreversibleAt; }
+    /** Mã lỗi nếu có. */
     public String failureCode() { return failureCode; }
+    /** Mô tả lỗi nếu có. */
     public String failureMessage() { return failureMessage; }
 
+    /**
+     * Chuyển trạng thái Saga theo biểu đồ chuyển trạng thái hợp lệ.
+     *
+     * @param next trạng thái tiếp theo
+     * @param now  thời điểm chuyển
+     * @throws IllegalStateException nếu chuyển trạng thái không hợp lệ
+     */
     public void transitionTo(State next, Instant now) {
         State allowed = this.state.allowedNext(next);
         if (allowed == null) {
@@ -79,6 +101,12 @@ public final class DeleteMemberSagaState {
         }
     }
 
+    /**
+     * Đánh dấu Saga đã qua irreversible boundary (không thể rollback).
+     * Idempotent: nếu đã đánh dấu thì không thay đổi.
+     *
+     * @param now thời điểm đánh dấu
+     */
     public void markIrreversible(Instant now) {
         if (this.irreversibleAt == null) {
             this.irreversibleAt = now;
@@ -86,6 +114,13 @@ public final class DeleteMemberSagaState {
         }
     }
 
+    /**
+     * Ghi nhận lỗi mà không chuyển trạng thái. Bỏ qua nếu Saga đã ở trạng thái cuối.
+     *
+     * @param code    mã lỗi
+     * @param message mô tả lỗi
+     * @param now     thời điểm ghi nhận
+     */
     public void recordFailure(String code, String message, Instant now) {
         if (this.state.isTerminal()) {
             return;
@@ -95,19 +130,35 @@ public final class DeleteMemberSagaState {
         this.lastUpdatedAt = now;
     }
 
+    /**
+     * Tập trạng thái của Saga xóa thành viên. Bao gồm các trạng thái không cuối
+     * (PENDING, DISPATCHED, COMPENSATING) và các trạng thái cuối (SUCCEEDED, FAILED,
+     * MANUAL_REVIEW, CANCELLED).
+     */
     public enum State {
+        /** Saga vừa được khởi tạo, chưa dispatch bước nào. */
         PENDING,
+        /** Đã dispatch ít nhất một bước forward. */
         DISPATCHED,
+        /** Đang trong giai đoạn bù trừ. */
         COMPENSATING,
+        /** Saga hoàn tất thành công. */
         SUCCEEDED,
+        /** Saga thất bại (compensation thất bại hoặc không thể compensate). */
         FAILED,
+        /** Saga cần con người can thiệp. */
         MANUAL_REVIEW,
+        /** Saga bị hủy. */
         CANCELLED;
 
+        /** Trả về {@code true} nếu trạng thái hiện tại là cuối (không thể chuyển tiếp). */
         public boolean isTerminal() {
             return this == SUCCEEDED || this == FAILED || this == MANUAL_REVIEW || this == CANCELLED;
         }
 
+        /**
+         * Kiểm tra trạng thái tiếp theo có hợp lệ hay không. Trả về {@code next} nếu hợp lệ, {@code null} nếu không.
+         */
         public State allowedNext(State next) {
             return switch (this) {
                 case PENDING       -> next == DISPATCHED || next == COMPENSATING || next == CANCELLED || next == MANUAL_REVIEW || next == FAILED ? next : null;

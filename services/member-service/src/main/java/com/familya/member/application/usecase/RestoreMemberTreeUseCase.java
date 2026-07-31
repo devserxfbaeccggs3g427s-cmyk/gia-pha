@@ -25,10 +25,22 @@ public class RestoreMemberTreeUseCase {
 
     private final MemberRepository repo;
 
+    /**
+     * Khởi tạo use case với kho thành viên.
+     *
+     * @param repo kho thành viên
+     */
     public RestoreMemberTreeUseCase(MemberRepository repo) {
         this.repo = repo;
     }
 
+    /**
+     * Khôi phục mọi thành viên đã tombstone trong cây bằng cách tạo bản sao aggregate với
+     * {@code tombstonedAt} được xóa và version được tăng.
+     *
+     * @param cmd lệnh restore từ Saga delete-tree (compensation)
+     * @return kết quả gồm số thành viên đã khôi phục, phiên bản tối đa và epoch
+     */
     @Transactional
     public Result execute(RestoreMemberTreeCommand cmd) {
         List<Member> tombstoned = repo.listByTree(cmd.treeId(), true);
@@ -37,8 +49,8 @@ public class RestoreMemberTreeUseCase {
         int restored = 0;
         for (Member m : tombstoned) {
             if (!m.isTombstoned()) continue;
-            // Member is a record aggregate with private setters; build a new
-            // copy with tombstonedAt cleared and version bumped.
+            // Member là aggregate với setter riêng; tạo bản sao với tombstonedAt=null
+            // và version tăng 1 để vẫn thỏa mãn optimistic concurrency.
             Member restoredMember = new Member(
                     m.id(), m.treeId(), m.userId(), m.displayName(),
                     m.givenName(), m.surname(),
@@ -56,5 +68,12 @@ public class RestoreMemberTreeUseCase {
         return new Result(restored, maxVersion, 0L);
     }
 
+    /**
+     * Kết quả của use case restore.
+     *
+     * @param affectedCount          số thành viên đã khôi phục
+     * @param appliedAggregateVersion phiên bản aggregate tối đa
+     * @param appliedEpoch           epoch (mặc định 0)
+     */
     public record Result(int affectedCount, long appliedAggregateVersion, long appliedEpoch) { }
 }

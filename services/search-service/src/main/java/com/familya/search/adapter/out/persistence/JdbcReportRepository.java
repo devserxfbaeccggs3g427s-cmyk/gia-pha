@@ -10,15 +10,29 @@ import java.sql.Timestamp;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Triển khai JDBC của {@link ReportRepository}, đọc/ghi bảng {@code report_snapshot}.
+ */
 @Component
 public class JdbcReportRepository implements ReportRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo repository với JDBC template dùng chung.
+     *
+     * @param jdbc JDBC template dùng để truy vấn/lưu/xoá.
+     */
     public JdbcReportRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Xoá toàn bộ bản chụp báo cáo của một cây.
+     *
+     * @param treeId định danh cây gia phả.
+     * @return số bản ghi đã xoá.
+     */
     @Override
     public long deleteByTree(UUID treeId) {
         return jdbc.update(
@@ -26,6 +40,11 @@ public class JdbcReportRepository implements ReportRepository {
                 new MapSqlParameterSource("t", treeId.toString()));
     }
 
+    /**
+     * Lưu (hoặc ghi đè nếu đã tồn tại) một bản chụp báo cáo.
+     *
+     * @param snapshot bản chụp cần lưu.
+     */
     @Override
     public void save(ReportSnapshot snapshot) {
         jdbc.update(
@@ -41,6 +60,12 @@ public class JdbcReportRepository implements ReportRepository {
                         .addValue("c", Timestamp.from(snapshot.computedAt())));
     }
 
+    /**
+     * Tìm một bản chụp báo cáo theo {@code id}.
+     *
+     * @param reportId định danh bản chụp.
+     * @return {@code Optional} chứa bản chụp nếu tồn tại, ngược lại rỗng.
+     */
     @Override
     public Optional<ReportSnapshot> findById(UUID reportId) {
         var rows = jdbc.queryForList(
@@ -57,6 +82,15 @@ public class JdbcReportRepository implements ReportRepository {
                 ((Timestamp) r.get("computed_at")).toInstant()));
     }
 
+    /**
+     * Kiểm tra đã có bản chụp dùng được (watermark {@code >=}) cho
+     * {@code (treeId, kind)} chưa.
+     *
+     * @param treeId    định danh cây gia phả.
+     * @param kind      loại báo cáo.
+     * @param watermark mức watermark tối thiểu.
+     * @return {@code true} nếu đã có.
+     */
     @Override
     public boolean exists(UUID treeId, ReportSnapshot.Kind kind, long watermark) {
         var rows = jdbc.queryForList(

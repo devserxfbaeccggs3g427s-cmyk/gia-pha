@@ -21,6 +21,17 @@ public final class TreeMembership {
     private UUID revokedBy;
     private String revocationReason;
 
+    /**
+     * @param id                 mã membership
+     * @param treeId             mã cây
+     * @param userId             UUID người dùng
+     * @param role               vai trò
+     * @param grantedBy          UUID người cấp
+     * @param grantedAt          thời điểm cấp
+     * @param revokedAt          thời điểm thu hồi hoặc {@code null}
+     * @param revokedBy          UUID người thu hồi hoặc {@code null}
+     * @param revocationReason   lý do thu hồi hoặc {@code null}
+     */
     public TreeMembership(UUID id, UUID treeId, UUID userId, Role role,
                           UUID grantedBy, Instant grantedAt,
                           Instant revokedAt, UUID revokedBy, String revocationReason) {
@@ -35,16 +46,46 @@ public final class TreeMembership {
         this.revocationReason = revocationReason;
     }
 
+    /**
+     * @return mã membership
+     */
     public UUID id() { return id; }
+    /**
+     * @return mã cây
+     */
     public UUID treeId() { return treeId; }
+    /**
+     * @return UUID người dùng
+     */
     public UUID userId() { return userId; }
+    /**
+     * @return vai trò (có thể đã được đổi qua lịch sử grant/revoke)
+     */
     public Role role() { return role; }
+    /**
+     * @return UUID người đã cấp quyền
+     */
     public UUID grantedBy() { return grantedBy; }
+    /**
+     * @return thời điểm cấp quyền
+     */
     public Instant grantedAt() { return grantedAt; }
+    /**
+     * @return thời điểm thu hồi hoặc {@code null} nếu đang hoạt động
+     */
     public Instant revokedAt() { return revokedAt; }
+    /**
+     * @return UUID người đã thu hồi hoặc {@code null}
+     */
     public UUID revokedBy() { return revokedBy; }
+    /**
+     * @return lý do thu hồi hoặc {@code null}
+     */
     public String revocationReason() { return revocationReason; }
 
+    /**
+     * @return {@code true} nếu membership đang hoạt động (chưa bị thu hồi)
+     */
     public boolean isActive() { return revokedAt == null; }
 
     /**
@@ -56,6 +97,12 @@ public final class TreeMembership {
         return isActive() ? role : null;
     }
 
+    /**
+     * Thu hồi membership. Idempotent nếu đã thu hồi trước đó.
+     *
+     * @param revokedBy UUID người thu hồi
+     * @param reason    lý do thu hồi
+     */
     public void revoke(UUID revokedBy, String reason) {
         if (revokedAt != null) {
             return;
@@ -65,17 +112,28 @@ public final class TreeMembership {
         this.revocationReason = reason;
     }
 
+    /**
+     * Vai trò thành viên trong ma trận phân quyền kế thừa:
+     * <ul>
+     *   <li>ADMIN — toàn quyền (cấp quyền, xóa, đóng băng).</li>
+     *   <li>EDITOR — tạo/cập nhật/xóa thành viên, quan hệ, sự kiện.</li>
+     *   <li>VIEWER — chỉ đọc.</li>
+     * </ul>
+     */
     public enum Role {
         ADMIN, EDITOR, VIEWER;
 
+        /**
+         * @return {@code true} nếu vai trò có quyền edit
+         */
         public boolean canEdit() { return this == ADMIN || this == EDITOR; }
+        /**
+         * @return {@code true} nếu vai trò có quyền xem
+         */
         public boolean canView() { return this == ADMIN || this == EDITOR || this == VIEWER; }
 
         /**
-         * Approves the legacy role matrix:
-         * - ADMIN: full control (grants, deletes, freeze).
-         * - EDITOR: create/update/delete members, relationships, events.
-         * - VIEWER: read-only.
+         * @return {@code true} nếu vai trò được phép cấp quyền (chỉ ADMIN)
          */
         public boolean grantsMembership() { return this == ADMIN; }
     }

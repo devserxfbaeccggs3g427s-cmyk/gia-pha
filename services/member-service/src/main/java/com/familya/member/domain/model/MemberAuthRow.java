@@ -19,18 +19,25 @@ public record MemberAuthRow(UUID treeId, UUID userId, String role,
                              java.time.Instant lastUpdatedAt)
         implements AuthorizationProjection.ProjectionRow {
 
+    /**
+     * Header projection chuẩn cho SDK {@link AuthorizationProjection}.
+     * @return {@link ProjectionHeader} với thông tin freshness/revision/epoch
+     */
     public ProjectionHeader header() {
         return new ProjectionHeader(treeId, revision, epoch, lastUpdatedAt,
                 lastUpdatedAt == null ? 0L : lastUpdatedAt.toEpochMilli(),
                 sourceEventId);
     }
 
+    /** Trả về {@code true} nếu vai trò đã bị thu hồi hoặc không có vai trò nào. */
     public boolean isRevoked() { return revoked || role == null; }
 
+    /** Trả về {@code true} nếu người dùng có quyền chỉnh sửa (ADMIN hoặc EDITOR). */
     public boolean canEdit() {
         return role != null && (role.equals("ADMIN") || role.equals("EDITOR"));
     }
 
+    /** Trả về {@code true} nếu người dùng có quyền xem (ADMIN, EDITOR hoặc VIEWER). */
     public boolean canView() {
         return role != null && (role.equals("ADMIN") || role.equals("EDITOR") || role.equals("VIEWER"));
     }

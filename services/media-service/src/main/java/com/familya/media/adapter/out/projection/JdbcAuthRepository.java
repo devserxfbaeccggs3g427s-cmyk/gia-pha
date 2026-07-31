@@ -10,21 +10,39 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Reads the local authorization and reference projections populated
- * by the corresponding Kafka consumers. {@link ReferenceAvailability}
- * backs the fail-closed target validation in {@code AssociateMediaUseCase}.
+ * Adapter đầu ra (outbound) — đọc các projection nội bộ của media-service.
+ * <p>
+ * Triển khai hai port:
+ * <ul>
+ *   <li>{@link MediaAuthRepository} — đọc/ghi {@code authorization_projection}
+ *       cho {@link com.familya.media.adapter.out.authorization.ProjectionMediaAuthorization}.</li>
+ *   <li>{@link ReferenceAvailability} — fail-closed kiểm tra target (member/event/album)
+ *       trước khi {@code AssociateMediaUseCase} gắn media.</li>
+ * </ul>
  */
 @Component
 public class JdbcAuthRepository implements MediaAuthRepository, ReferenceAvailability {
 
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo repository.
+     *
+     * @param jdbc JDBC template.
+     */
     public JdbcAuthRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
     // --- MediaAuthRepository ---
 
+    /**
+     * Tra cứu row auth projection cho (tree, user).
+     *
+     * @param treeId UUID cây.
+     * @param userId UUID người dùng.
+     * @return Optional chứa {@link MediaAuthRepository.MediaAuthRow}, empty nếu chưa có.
+     */
     @Override
     public Optional<MediaAuthRepository.MediaAuthRow> findAuth(UUID treeId, UUID userId) {
         var rows = jdbc.queryForList(
@@ -45,6 +63,11 @@ public class JdbcAuthRepository implements MediaAuthRepository, ReferenceAvailab
                 ((java.sql.Timestamp) r.get("last_updated_at")).toInstant()));
     }
 
+    /**
+     * Upsert row auth projection dựa trên {@code (tree, user)} primary key.
+     *
+     * @param row bản ghi auth mới.
+     */
     @Override
     public void upsertAuth(MediaAuthRepository.MediaAuthRow row) {
         jdbc.update(
@@ -68,6 +91,15 @@ public class JdbcAuthRepository implements MediaAuthRepository, ReferenceAvailab
 
     // --- ReferenceAvailability ---
 
+    /**
+     * Kiểm tra member có tồn tại (và chưa bị tombstone) trong cây.
+     * <p>
+     * Fail-closed: nếu không có row projection thì coi như không khả dụng.
+     *
+     * @param treeId   UUID cây.
+     * @param memberId UUID member.
+     * @return true nếu exists=true và tombstoned=false.
+     */
     @Override
     public boolean isMemberAvailable(UUID treeId, UUID memberId) {
         var rows = jdbc.queryForList(
@@ -75,10 +107,18 @@ public class JdbcAuthRepository implements MediaAuthRepository, ReferenceAvailab
                         + "WHERE tree_id = :t AND member_id = :m",
                 new MapSqlParameterSource().addValue("t", treeId.toString()).addValue("m", memberId.toString()));
         if (rows.isEmpty()) return false;
+        // Cả exists=true và tombstoned=false mới coi là khả dụng.
         return Boolean.TRUE.equals(rows.get(0).get("exists"))
                 && !Boolean.TRUE.equals(rows.get(0).get("tombstoned"));
     }
 
+    /**
+     * Kiểm tra event có tồn tại (và chưa tombstone).
+     *
+     * @param treeId  UUID cây.
+     * @param eventId UUID event.
+     * @return true nếu exists=true và tombstoned=false.
+     */
     @Override
     public boolean isEventAvailable(UUID treeId, UUID eventId) {
         var rows = jdbc.queryForList(
@@ -90,6 +130,14 @@ public class JdbcAuthRepository implements MediaAuthRepository, ReferenceAvailab
                 && !Boolean.TRUE.equals(rows.get(0).get("tombstoned"));
     }
 
+    /**
+     * Kiểm tra album có khả dụng (chưa tombstone) — đọc trực tiếp bảng {@code album}
+     * thay vì projection.
+     *
+     * @param treeId  UUID cây.
+     * @param albumId UUID album.
+     * @return true nếu album tồn tại và chưa tombstone.
+     */
     @Override
     public boolean isAlbumAvailable(UUID treeId, UUID albumId) {
         var rows = jdbc.queryForList(

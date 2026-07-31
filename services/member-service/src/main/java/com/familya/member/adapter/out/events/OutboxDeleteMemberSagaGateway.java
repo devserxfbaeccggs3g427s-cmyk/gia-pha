@@ -19,27 +19,58 @@ import java.util.UUID;
  * {@code contracts/events/saga} protobuf definitions and the
  * {@code operations.events.v1} topic naming from the event catalog.
  */
+/**
+ * Triển khai {@link DeleteMemberSagaGateway} dựa trên outbox. Mỗi lệnh Saga, compensation,
+ * và sự kiện vòng đời operation được stage lên outbox cục bộ; platform publisher sẽ phát
+ * chúng lên Kafka. Lược đồ payload phản ánh các định nghĩa protobuf trong
+ * {@code contracts/events/saga} và quy ước đặt tên topic {@code operations.events.v1} theo event catalog.
+ *
+ * <p>Bean {@code @Component} thuộc tầng adapter-out trong kiến trúc Hexagonal.
+ */
 @Component
 public class OutboxDeleteMemberSagaGateway implements DeleteMemberSagaGateway {
 
     private final OperationLifecycleOutboxStager lifecycle;
     private final ObjectMapper json;
 
+    /**
+     * Khởi tạo gateway với stager vòng đời và mapper JSON.
+     *
+     * @param lifecycle stager vòng đời operation
+     * @param json      mapper JSON (hiện chỉ dùng để xác thực khả năng serialize của envelope)
+     */
     public OutboxDeleteMemberSagaGateway(OperationLifecycleOutboxStager lifecycle, ObjectMapper json) {
         this.lifecycle = lifecycle;
         this.json = json;
     }
 
+    /**
+     * Stage lệnh forward đầu tiên của Saga lên outbox.
+     *
+     * @param state trạng thái Saga hiện tại
+     * @param step  bước cần stage
+     */
     @Override
     public void stageFirstStep(DeleteMemberSagaState state, DeleteMemberSagaStep step) {
         stageCommand(state, step.stepCode(), step.sequenceNo(), false);
     }
 
+    /**
+     * Stage lệnh compensation tương ứng với một bước Saga lên outbox.
+     *
+     * @param state trạng thái Saga
+     * @param step  bước cần compensate
+     */
     @Override
     public void stageCompensation(DeleteMemberSagaState state, DeleteMemberSagaStep step) {
         stageCommand(state, compensationStepCode(step.stepCode()), step.sequenceNo(), true);
     }
 
+    /**
+     * Stage sự kiện {@code OperationStarted} lên outbox.
+     *
+     * @param state trạng thái Saga hiện tại
+     */
     @Override
     public void stageOperationStarted(DeleteMemberSagaState state) {
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -56,11 +87,18 @@ public class OutboxDeleteMemberSagaGateway implements DeleteMemberSagaGateway {
         lifecycle.stage(payload, "operations.events.v1", "OperationStarted");
     }
 
+    /** Stage sự kiện OperationStateChanged không kèm thông tin định tuyến lỗi. */
     @Override
     public void stageOperationStateChanged(DeleteMemberSagaState state) {
         stageOperationStateChanged(state, null);
     }
 
+    /**
+     * Stage sự kiện OperationStateChanged với khóa định tuyến lỗi (failureRouting).
+     *
+     * @param state          trạng thái Saga
+     * @param failureRouting mã định tuyến lỗi (ví dụ: {@code COMPENSATING}, {@code MANUAL_REVIEW})
+     */
     @Override
     public void stageOperationStateChanged(DeleteMemberSagaState state, String failureRouting) {
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -79,12 +117,26 @@ public class OutboxDeleteMemberSagaGateway implements DeleteMemberSagaGateway {
         lifecycle.stage(payload, "operations.events.v1", "OperationStateChanged");
     }
 
+    /**
+     * Stage một lệnh Saga (forward hoặc compensation) lên outbox.
+     *
+     * @param state        trạng thái Saga
+     * @param stepCode     mã bước
+     * @param sequenceNo   số thứ tự bước
+     * @param compensation {@code true} nếu là compensation, {@code false} nếu là forward
+     */
     private void stageCommand(DeleteMemberSagaState state, String stepCode, int sequenceNo, boolean compensation) {
         Map<String, Object> env = buildEnvelope(state, stepCode, sequenceNo, compensation);
         lifecycle.stage(env, "member.commands.v1",
                 compensation ? "DeleteMemberSagaCompensation" : "DeleteMemberSagaCommand");
     }
 
+    /**
+     * Ánh xạ mã bước forward sang mã compensation tương ứng. Mặc định thêm tiền tố {@code RESTORE_}.
+     *
+     * @param forwardCode mã bước forward
+     * @return mã bước compensation
+     */
     private static String compensationStepCode(String forwardCode) {
         return switch (forwardCode) {
             case "DISABLE_RELATIONSHIPS"   -> "RESTORE_MEMBER_RELATIONSHIPS";
@@ -94,6 +146,17 @@ public class OutboxDeleteMemberSagaGateway implements DeleteMemberSagaGateway {
         };
     }
 
+    /**
+     * Tạo phong bì lệnh Saga với đầy đủ metadata (eventId, correlation, causation, v.v.).
+     * Việc gọi {@code writeValueAsString} chỉ nhằm mục đích xác thực khả năng serialize;
+     * nội dung thực tế ghi vào outbox là chính map {@code env}.
+     *
+     * @param state        trạng thái Saga
+     * @param stepCode     mã bước
+     * @param sequenceNo   số thứ tự bước
+     * @param compensation cờ phân biệt forward/compensation
+     * @return bản đồ chứa envelope lệnh
+     */
     private Map<String, Object> buildEnvelope(DeleteMemberSagaState state, String stepCode, int sequenceNo, boolean compensation) {
         Map<String, Object> env = new LinkedHashMap<>();
         env.put("eventId", UUID.randomUUID().toString());

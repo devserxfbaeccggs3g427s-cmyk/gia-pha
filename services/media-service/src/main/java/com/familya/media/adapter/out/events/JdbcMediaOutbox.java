@@ -13,25 +13,54 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Adapter đầu ra (outbound) — triển khai {@link MediaOutbox} trên JDBC.
+ * <p>
+ * Ủy quyềc stage cho {@link OutboxWriter} của platform; cung cấp thêm truy vấn
+ * {@link #listPending(int)} phục vụ worker relay. Tất cả thao tác đọc là
+ * {@code readOnly} transaction.
+ */
 @Component
 public class JdbcMediaOutbox implements MediaOutbox {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final OutboxWriter writer;
 
+    /**
+     * Khởi tạo outbox.
+     *
+     * @param jdbc   JDBC template truy vấn outbox_record.
+     * @param writer writer do platform cung cấp để stage bản tin.
+     */
     public JdbcMediaOutbox(NamedParameterJdbcTemplate jdbc, OutboxWriter writer) {
         this.jdbc = jdbc;
         this.writer = writer;
     }
 
+    /**
+     * Stage một bản tin ra outbox.
+     * <p>
+     * Chuyển tiếp cho {@link OutboxWriter} của platform; phải được gọi trong
+     * một transaction nghiệp vụ để đảm bảo atomic với domain change.
+     *
+     * @param record bản tin cần stage.
+     */
     @Override
     public void stage(OutboxRecord record) {
         writer.stage(record);
     }
 
+    /**
+     * Liệt kê các bản tin chưa được publish, sắp xếp theo {@code occurred_at}
+     * tăng dần (FIFO) và giới hạn {@code limit} bản tin.
+     *
+     * @param limit số lượng tối đa.
+     * @return danh sách {@link OutboxRecord} chưa publish.
+     */
     @Override
     @Transactional(readOnly = true)
     public List<OutboxRecord> listPending(int limit) {
+        // Lấy các record chưa published theo thứ tự thời gian, giới hạn số lượng.
         var rows = jdbc.queryForList(
                 "SELECT id, aggregate_type, aggregate_id, aggregate_version, event_type, event_version, "
                         + "topic, partition_key, correlation_id, causation_id, operation_id, traceparent, "
@@ -41,6 +70,7 @@ public class JdbcMediaOutbox implements MediaOutbox {
         return rows.stream().map(this::fromRow).toList();
     }
 
+    /** Chuyển đổi row SQL sang {@link OutboxRecord}. */
     private OutboxRecord fromRow(java.util.Map<String, Object> r) {
         return new OutboxRecord(
                 UUID.fromString((String) r.get("id")),

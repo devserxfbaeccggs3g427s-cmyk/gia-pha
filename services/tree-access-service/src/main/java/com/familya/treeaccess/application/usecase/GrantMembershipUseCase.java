@@ -30,11 +30,26 @@ public class GrantMembershipUseCase {
 
     private static final Logger LOG = LoggerFactory.getLogger(GrantMembershipUseCase.class);
 
+    /** Kho lưu trữ cây. */
     private final TreeRepository repo;
+
+    /** Bộ publish sự kiện thành viên. */
     private final TreeEventPublisher publisher;
+
+    /** Metric giám sát. */
     private final PlatformMetrics metrics;
+
+    /** Đồng hồ tiêm được. */
     private final Clock clock;
 
+    /**
+     * Khởi tạo use-case cấp quyền.
+     *
+     * @param repo      kho lưu trữ
+     * @param publisher bộ publish
+     * @param metrics   metric
+     * @param clock     đồng hồ
+     */
     public GrantMembershipUseCase(TreeRepository repo, TreeEventPublisher publisher,
                                   PlatformMetrics metrics, Clock clock) {
         this.repo = repo;
@@ -43,6 +58,24 @@ public class GrantMembershipUseCase {
         this.clock = clock;
     }
 
+    /**
+     * Cấp quyền thành viên:
+     *
+     * <ol>
+     *   <li>Từ chối nếu cây không tồn tại hoặc đang FROZEN/TOMBSTONED.</li>
+     *   <li>Yêu cầu actor có ADMIN trên cây.</li>
+     *   <li>Áp dụng luật bất biến owner — không thể hạ cấp owner xuống dưới ADMIN.</li>
+     *   <li>Nếu có membership cũ đã thu hồi → tái kích hoạt; ngược lại tạo mới.</li>
+     *   <li>Cập nhật projection và phát sự kiện {@link MembershipGranted}.</li>
+     * </ol>
+     *
+     * @param cmd lệnh cấp quyền
+     * @return mã membership
+     * @throws TreeNotFoundException   khi cây không tồn tại
+     * @throws TreeFrozenException     khi cây đang FROZEN/TOMBSTONED
+     * @throws ForbiddenException      khi actor không có ADMIN
+     * @throws OwnerImmutableException khi cố hạ cấp owner
+     */
     @Transactional
     public UUID execute(GrantMembershipCommand cmd) {
         metrics.mutationAcceptedCounter("tree-access-service", "grantMembership").increment();
@@ -55,7 +88,7 @@ public class GrantMembershipUseCase {
         if (actor.revoked() || !actor.role().grantsMembership()) {
             throw new ForbiddenException("Actor " + cmd.grantedBy() + " lacks ADMIN on tree " + cmd.treeId());
         }
-        // Owner immutability: cannot grant a non-ADMIN role to the owner.
+        // Bất biến owner: không thể cấp vai trò không phải ADMIN cho owner.
         if (tree.ownerUserId().equals(cmd.userId()) && cmd.role() != TreeMembership.Role.ADMIN) {
             throw new OwnerImmutableException("Cannot downgrade the tree owner from ADMIN");
         }
@@ -65,8 +98,10 @@ public class GrantMembershipUseCase {
         if (existing.isPresent()) {
             TreeMembership prior = existing.get();
             if (prior.isActive()) {
+                // Đã có membership đang hoạt động — không cấp trùng.
                 throw new IllegalStateException("Active membership already exists for user " + cmd.userId());
             }
+            // Tái kích hoạt membership đã thu hồi trước đó bằng cách cập nhật role và xoá revoked_at.
             TreeMembership reactivated = new TreeMembership(prior.id(), cmd.treeId(), cmd.userId(),
                     cmd.role(), cmd.grantedBy(), now, null, null, null);
             repo.updateMembership(reactivated);
@@ -86,5 +121,6 @@ public class GrantMembershipUseCase {
         return membershipId;
     }
 
+    /** Interface đồng hồ. */
     public interface Clock { Instant now(); }
 }

@@ -9,15 +9,32 @@ import java.sql.Timestamp;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Triển khai JDBC của {@link SearchAuthRepository}, đọc từ bảng
+ * {@code authorization_projection} được {@code SearchProjectionConsumer} duy trì.
+ */
 @Component
 public class JdbcAuthRepository implements SearchAuthRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo repository với JDBC template dùng chung.
+     *
+     * @param jdbc JDBC template dùng để truy vấn.
+     */
     public JdbcAuthRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Tìm một hàng projection ủy quyền theo cặp {@code (treeId, userId)}.
+     *
+     * @param treeId định danh cây gia phả.
+     * @param userId định danh người dùng.
+     * @return {@code Optional} chứa {@link SearchAuthRepository.AuthRow}
+     *         nếu tìm thấy, ngược lại rỗng.
+     */
     @Override
     public Optional<SearchAuthRepository.AuthRow> find(UUID treeId, UUID userId) {
         var rows = jdbc.queryForList(

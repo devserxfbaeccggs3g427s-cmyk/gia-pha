@@ -20,19 +20,36 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Deadline scanner định kỳ quét các Saga xóa thành viên để xử lý:
+ * <ul>
+ *   <li>Operation đã quá deadline.</li>
+ *   <li>Bước Saga bị timeout (DISPATCHED quá thời hạn).</li>
+ *   <li>Bước Saga đang FAILED đã tới thời điểm retry.</li>
+ * </ul>
+ * <p>Đây là bean {@code @Component} thuộc tầng application/saga/scheduling. Được bật/tắt
+ * thông qua thuộc tính {@code familia.member.saga.scheduler-enabled}.
+ */
 @Component
 @ConditionalOnProperty(name = "familya.member.saga.scheduler-enabled", havingValue = "true", matchIfMissing = true)
 public class DeleteMemberSagaDeadlineScanner {
 
     private static final Logger LOG = LoggerFactory.getLogger(DeleteMemberSagaDeadlineScanner.class);
 
+    /** Mã lỗi khi một bước Saga bị timeout. */
     static final String FAILURE_STEP_TIMEOUT = "STEP_TIMEOUT";
+    /** Mã lỗi khi toàn bộ operation vượt quá deadline. */
     static final String FAILURE_OPERATION_DEADLINE_EXCEEDED = "OPERATION_DEADLINE_EXCEEDED";
+    /** Mã lỗi khi retry đã cạn kiệt. */
     static final String FAILURE_RETRY_EXHAUSTED = "RETRY_EXHAUSTED";
+    /** Mã lỗi khi retry compensation đã cạn kiệt. */
     static final String FAILURE_COMPENSATION_RETRY_EXHAUSTED = "COMPENSATION_RETRY_EXHAUSTED";
+    /** Mã lỗi khi giành quyền dispatch bị xung đột. */
     static final String FAILURE_DISPATCH_CLAIM_CONFLICT = "DISPATCH_CLAIM_CONFLICT";
 
+    /** Khóa định tuyến khi Saga cần con người can thiệp. */
     static final String FAILURE_ROUTING_MANUAL_REVIEW = "MANUAL_REVIEW";
+    /** Khóa định tuyến khi Saga đang trong giai đoạn bù trừ. */
     static final String FAILURE_ROUTING_COMPENSATING = "COMPENSATING";
 
     private final DeleteMemberSagaRepository sagaRepo;
@@ -42,6 +59,16 @@ public class DeleteMemberSagaDeadlineScanner {
     private final SagaRetryPolicy retryPolicy;
     private final SagaDeadlineProperties deadline;
 
+    /**
+     * Khởi tạo deadline scanner với các phụ thuộc.
+     *
+     * @param sagaRepo        kho Saga
+     * @param gateway         gateway để stage các sự kiện
+     * @param deadLetterStore kho dead-letter
+     * @param clock           đồng hồ Saga
+     * @param retryPolicy     chính sách retry
+     * @param props           cấu hình Saga
+     */
     public DeleteMemberSagaDeadlineScanner(DeleteMemberSagaRepository sagaRepo,
                                            DeleteMemberSagaGateway gateway,
                                            DeleteMemberSagaDeadLetterStore deadLetterStore,
@@ -56,28 +83,42 @@ public class DeleteMemberSagaDeadlineScanner {
         this.deadline = props.getDeadline();
     }
 
+    /**
+     * Hàm quét định kỳ, được Spring {@code @Scheduled} gọi theo chu kỳ cấu hình.
+     * Xử lý ba loại sự kiện: operation quá hạn, bước timeout, bước retry được.
+     */
     @Scheduled(fixedDelayString = "${familya.member.saga.deadline.scan-interval-ms:60000}")
     public void scan() {
         Instant now = clock.now();
         int batch = deadline.getBatchSize();
+        // Xử lý các operation đã quá deadline toàn cục
         for (DeleteMemberSagaState op : listExpiredOperations(now, batch)) {
             try { processOperation(op, now); }
             catch (RuntimeException e) { LOG.warn("DeadlineScanner processOperation failed op={} err={}", op.operationId(), e.toString()); }
         }
+        // Xử lý các bước đã timeout (DISPATCHED quá step deadline)
         for (DeleteMemberSagaStep step : sagaRepo.listTimedOutSteps(now, batch)) {
             try { processStepTimeout(step, now); }
             catch (RuntimeException e) { LOG.warn("DeadlineScanner processStepTimeout failed op={} seq={} err={}", step.operationId(), step.sequenceNo(), e.toString()); }
         }
+        // Xử lý các bước đã tới thời điểm retry
         for (DeleteMemberSagaStep step : sagaRepo.listRetryableSteps(now, batch)) {
             try { processRetry(step, now); }
             catch (RuntimeException e) { LOG.warn("DeadlineScanner processRetry failed op={} seq={} err={}", step.operationId(), step.sequenceNo(), e.toString()); }
         }
     }
 
+    /**
+     * Giới hạn số operation xử lý trong một lượt quét.
+     */
     private List<DeleteMemberSagaState> listExpiredOperations(Instant now, int batch) {
         return sagaRepo.listDispatchedPastDeadline().stream().limit(batch).toList();
     }
 
+    /**
+     * Xử lý một operation đã quá deadline: chuyển sang compensate nếu có thể, hoặc
+     * chuyển sang MANUAL_REVIEW nếu đã qua irreversible boundary.
+     */
     @Transactional
     public void processOperation(DeleteMemberSagaState op, Instant now) {
         var current = sagaRepo.findState(op.operationId()).orElse(null);
@@ -103,6 +144,10 @@ public class DeleteMemberSagaDeadlineScanner {
         gateway.stageOperationStateChanged(refreshed, FAILURE_ROUTING_MANUAL_REVIEW);
     }
 
+    /**
+     * Xử lý một bước Saga bị timeout (DISPATCHED quá deadline). Có thể retry, escalate
+     * sang MANUAL_REVIEW hoặc chuyển sang compensation.
+     */
     @Transactional
     public void processStepTimeout(DeleteMemberSagaStep stepRow, Instant now) {
         var step = sagaRepo.listSteps(stepRow.operationId()).stream()
@@ -168,6 +213,10 @@ public class DeleteMemberSagaDeadlineScanner {
                 FAILURE_RETRY_EXHAUSTED, "Retry exhausted; step not compensatable");
     }
 
+    /**
+     * Leo thang lỗi sang MANUAL_REVIEW: đánh dấu bước dead-letter và toàn bộ operation
+     * cần con người can thiệp.
+     */
     private void escalateManualReview(DeleteMemberSagaStep step, DeleteMemberSagaState state,
                                       Instant now, String failureCode, String failureMessage) {
         step.markFailed(failureCode, failureMessage, now);
@@ -180,6 +229,10 @@ public class DeleteMemberSagaDeadlineScanner {
                 new IllegalStateException(failureCode + ": " + failureMessage));
     }
 
+    /**
+     * Xử lý một bước FAILED đã tới thời điểm retry: giành lại quyền dispatch và
+     * stage lệnh forward (hoặc compensation nếu Saga đang trong giai đoạn bù trừ).
+     */
     @Transactional
     public void processRetry(DeleteMemberSagaStep stepRow, Instant now) {
         var state = sagaRepo.findState(stepRow.operationId()).orElse(null);
@@ -215,6 +268,9 @@ public class DeleteMemberSagaDeadlineScanner {
         }
     }
 
+    /**
+     * Kiểm tra xem Saga có bước compensatable nào đang ACK và chưa qua irreversible boundary hay không.
+     */
     private boolean hasCompensatableAckedStep(DeleteMemberSagaState state, List<DeleteMemberSagaStep> steps) {
         boolean irreversiblePassed = passedIrreversibleBoundary(state);
         for (DeleteMemberSagaStep s : steps) {
@@ -226,6 +282,9 @@ public class DeleteMemberSagaDeadlineScanner {
         return false;
     }
 
+    /**
+     * Tìm bước ACK có sequenceNo lớn nhất.
+     */
     private DeleteMemberSagaStep findLatestAckedStep(List<DeleteMemberSagaStep> steps) {
         return steps.stream()
                 .filter(s -> s.state() == DeleteMemberSagaStep.State.ACK)
@@ -233,28 +292,38 @@ public class DeleteMemberSagaDeadlineScanner {
                 .orElse(null);
     }
 
+    /** Operation đã qua irreversible boundary khi {@code irreversibleAt} được thiết lập. */
     private boolean passedIrreversibleBoundary(DeleteMemberSagaState state) {
         return state.irreversibleAt() != null;
     }
 
+    /** Xác định đã qua irreversible boundary ở cấp operation hoặc cấp bước (sequenceNo &ge; 5). */
     private boolean passedIrreversibleBoundary(DeleteMemberSagaState state, DeleteMemberSagaStep step) {
         return passedIrreversibleBoundary(state) || step.sequenceNo() >= 5;
     }
 
+    /**
+     * Bù trừ các bước trước bước ranh giới bằng cách stage lệnh compensation cho từng bước
+     * đang ACK và compensatable. Lặp ngược từ {@code boundaryStep} xuống 1 để đảm bảo thứ tự
+     * bù trừ đúng (LIFO).
+     */
     private void compensatePreviousSteps(DeleteMemberSagaState state,
                                          List<DeleteMemberSagaStep> steps,
                                          DeleteMemberSagaStep boundaryStep) {
         Instant now = clock.now();
+        // Lặp ngược để đảm bảo bù trừ đúng thứ tự LIFO (bước sau trước, bước trước sau)
         int upper = boundaryStep == null ? steps.size() : boundaryStep.sequenceNo();
         for (int i = upper; i >= 1; i--) {
             int seq = i;
             steps.stream().filter(s -> s.sequenceNo() == seq).findFirst()
                     .ifPresent(prev -> {
+                        // Chỉ bù trừ các bước compensatable, đang ACK và chưa qua irreversible boundary
                         if (prev.compensatable()
                                 && prev.state() == DeleteMemberSagaStep.State.ACK
                                 && !passedIrreversibleBoundary(state)) {
                             UUID token = UUID.randomUUID();
                             Instant stepDeadline = now.plusMillis(deadline.getStepTimeoutMs());
+                            // Cập nhật có điều kiện: chỉ dispatch compensation khi giành được quyền
                             if (sagaRepo.tryClaimCompensation(prev.operationId(), prev.sequenceNo(),
                                     token, now, stepDeadline)) {
                                 prev.markCompensationDispatched(now, token, stepDeadline);

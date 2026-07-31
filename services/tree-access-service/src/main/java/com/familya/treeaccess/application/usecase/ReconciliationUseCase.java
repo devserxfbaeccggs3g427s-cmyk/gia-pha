@@ -23,9 +23,18 @@ import java.util.UUID;
 @Service
 public class ReconciliationUseCase {
 
+    /** Kho lưu trữ dùng để kiểm tra. */
     private final TreeRepository repo;
+
+    /** Ngưỡng "stale" cho projection (tính bằng Duration). */
     private final Duration staleThreshold;
 
+    /**
+     * Khởi tạo use-case đối chiếu.
+     *
+     * @param repo          kho lưu trữ
+     * @param staleSeconds  ngưỡng stale (giây), lấy từ property {@code familya.treeauth.reconciliation-stale-seconds} (mặc định 300)
+     */
     public ReconciliationUseCase(TreeRepository repo,
                                  @org.springframework.beans.factory.annotation.Value(
                                          "${familya.treeauth.reconciliation-stale-seconds:300}") long staleSeconds) {
@@ -33,6 +42,18 @@ public class ReconciliationUseCase {
         this.staleThreshold = Duration.ofSeconds(staleSeconds);
     }
 
+    /**
+     * Đối chiếu một cây và sinh báo cáo các sai lệch. Quy tắc kiểm tra:
+     *
+     * <ul>
+     *   <li>Owner phải có membership ADMIN và projection ADMIN không bị thu hồi.</li>
+     *   <li>Mọi membership đang hoạt động phải có projection tương ứng với cùng revision.</li>
+     *   <li>Mọi projection không quá stale (theo {@link #staleThreshold}).</li>
+     * </ul>
+     *
+     * @param treeId mã cây cần đối chiếu
+     * @return {@link Report} danh sách sai lệch
+     */
     public Report reconcile(UUID treeId) {
         Optional<Tree> treeOpt = repo.findTree(treeId);
         if (treeOpt.isEmpty()) {
@@ -40,7 +61,7 @@ public class ReconciliationUseCase {
         }
         Tree tree = treeOpt.get();
         List<Discrepancy> discrepancies = new ArrayList<>();
-        // Owner must always have ADMIN membership, and the projection must exist.
+        // Bất biến owner: phải có membership ADMIN và projection tương ứng.
         var ownerMembership = repo.findMembership(treeId, tree.ownerUserId());
         if (ownerMembership.isEmpty() || ownerMembership.get().role() != TreeMembership.Role.ADMIN) {
             discrepancies.add(new Discrepancy("owner.membership_missing",
@@ -51,8 +72,7 @@ public class ReconciliationUseCase {
             discrepancies.add(new Discrepancy("owner.projection_missing",
                     "Tree " + treeId + " owner " + tree.ownerUserId() + " projection missing/revoked"));
         }
-        // Every active membership must have a matching projection row at the
-        // current revision; every projection row must back an active membership.
+        // Mọi membership đang active cần có projection ở cùng revision.
         var memberships = repo.listMemberships(treeId);
         for (TreeMembership m : memberships) {
             if (m.treeId().equals(tree.ownerUserId()) && m.userId().equals(tree.ownerUserId())) continue;
@@ -78,9 +98,24 @@ public class ReconciliationUseCase {
         return new Report(treeId, discrepancies);
     }
 
+    /**
+     * Một sai lệch phát hiện trong quá trình đối chiếu.
+     *
+     * @param code   mã phân loại sai lệch
+     * @param detail mô tả chi tiết
+     */
     public record Discrepancy(String code, String detail) { }
 
+    /**
+     * Báo cáo đối chiếu cho một cây.
+     *
+     * @param treeId        mã cây
+     * @param discrepancies danh sách sai lệch
+     */
     public record Report(UUID treeId, List<Discrepancy> discrepancies) {
+        /**
+         * @return {@code true} nếu cây "sạch" (không có sai lệch nào)
+         */
         public boolean isClean() { return discrepancies.isEmpty(); }
     }
 }

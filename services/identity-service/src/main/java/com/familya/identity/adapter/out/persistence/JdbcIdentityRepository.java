@@ -15,15 +15,56 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Adapter persistence triển khai {@link IdentityRepository} bằng JDBC
+ * (sử dụng {@link NamedParameterJdbcTemplate}).
+ *
+ * <p>Triển khai này là một phần của tầng "adapters out" trong kiến trúc
+ * hexagonal, là cầu nối duy nhất giữa tầng application và cơ sở dữ liệu
+ * quan hệ của {@code identity-service}. Mọi thao tác đọc/ghi đều đi qua
+ * đây nhằm đảm bảo:
+ * <ul>
+ *     <li>Dễ dàng viết unit test với H2 / Testcontainers.</li>
+ *     <li>Tách biệt SQL khỏi logic nghiệp vụ – có thể thay thế bằng
+ *         triển khai khác (JPA, R2DBC,…) mà không ảnh hưởng use case.</li>
+ *     <li>Tối ưu hóa tường minh: việc sử dụng {@code version} trong
+ *         UPDATE giúp thực hiện "optimistic locking" thủ công.</li>
+ * </ul>
+ *
+ * @author Familya Platform Team
+ * @since 1.0.0
+ */
 @Component
 public class JdbcIdentityRepository implements IdentityRepository {
 
+    /** Template JDBC hỗ trợ tham số đặt tên. */
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo adapter với {@link NamedParameterJdbcTemplate} được
+     * Spring Boot cấu hình sẵn.
+     *
+     * @param jdbc template JDBC dùng chung.
+     */
     public JdbcIdentityRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * {@link RowMapper} ánh xạ một dòng trong bảng {@code users} sang
+     * aggregate {@link User}.
+     *
+     * <p>Ánh xạ thực hiện:
+     * <ul>
+     *     <li>Chuyển {@code id} từ chuỗi sang {@link UUID}.</li>
+     *     <li>Chuyển các cột {@code locked}, {@code locked_until},
+     *         {@code failed_attempts} thành {@link User.LockoutState}
+     *         kết hợp với số lần đăng nhập thất bại.</li>
+     *     <li>Chuyển các cột timestamp thành {@link Instant}.</li>
+     *     <li>Chuyển {@code verification_state} thành enum
+     *         {@link User.VerificationState}.</li>
+     * </ul>
+     */
     private static final RowMapper<User> USER_ROW = (rs, n) -> new User(
             UUID.fromString(rs.getString("id")),
             rs.getString("normalized_email"),
@@ -35,6 +76,18 @@ public class JdbcIdentityRepository implements IdentityRepository {
             rs.getTimestamp("created_at").toInstant(),
             rs.getLong("version"));
 
+    /**
+     * Tìm người dùng theo {@code id}.
+     *
+     * <p>Thực hiện truy vấn {@code SELECT * FROM users WHERE id = :id}
+     * và trả về {@link Optional} rỗng nếu không tìm thấy. Sử dụng
+     * {@link Optional#of} chỉ khi có đúng một bản ghi (mặc dù id là
+     * khóa chính nên kết quả luôn là 0 hoặc 1).
+     *
+     * @param id UUID người dùng cần tìm.
+     * @return {@link Optional} chứa {@link User} nếu tồn tại, ngược lại
+     *         trả về {@link Optional#empty()}.
+     */
     @Override
     public Optional<User> findById(UUID id) {
         var rows = jdbc.query("SELECT * FROM users WHERE id = :id",
@@ -42,6 +95,13 @@ public class JdbcIdentityRepository implements IdentityRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
     }
 
+    /**
+     * Tìm người dùng theo email đã được chuẩn hóa (lowercase, trim).
+     *
+     * @param normalizedEmail email chuẩn hóa.
+     * @return {@link Optional} chứa {@link User} nếu tồn tại, ngược lại
+     *         trả về {@link Optional#empty()}.
+     */
     @Override
     public Optional<User> findByNormalizedEmail(String normalizedEmail) {
         var rows = jdbc.query("SELECT * FROM users WHERE normalized_email = :e",
@@ -49,6 +109,16 @@ public class JdbcIdentityRepository implements IdentityRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
     }
 
+    /**
+     * Thêm mới một {@link User} vào cơ sở dữ liệu.
+     *
+     * <p>Tham số {@code oAuthLinks} hiện chưa được sử dụng trong câu
+     * INSERT này – đây là điểm mở rộng cho việc chèn liên kết OAuth
+     * trong cùng transaction (sẽ được bổ sung ở phiên bản tiếp theo).
+     *
+     * @param user        aggregate người dùng cần chèn.
+     * @param oAuthLinks  danh sách liên kết OAuth (hiện chưa dùng).
+     */
     @Override
     public void insert(User user, List<OAuthLink> oAuthLinks) {
         jdbc.update(
@@ -67,6 +137,18 @@ public class JdbcIdentityRepository implements IdentityRepository {
                         .addValue("ve", user.version()));
     }
 
+    /**
+     * Cập nhật thông tin người dùng với optimistic locking.
+     *
+     * <p>Câu lệnh UPDATE yêu cầu {@code version = :cver} (phiên bản kỳ
+     * vọng), trong khi giá trị mới được lưu là {@code version + 1}.
+     * Nếu một transaction khác đã cập nhật bản ghi trước đó, số dòng
+     * bị ảnh hưởng sẽ bằng 0 và ngoại lệ
+     * {@link org.springframework.dao.OptimisticLockingFailureException}
+     * sẽ được ném – đây là cơ chế phát hiện xung đột đồng thời.
+     *
+     * @param user aggregate người dùng cần cập nhật.
+     */
     @Override
     public void update(User user) {
         jdbc.update(
@@ -81,9 +163,15 @@ public class JdbcIdentityRepository implements IdentityRepository {
                         .addValue("fa", user.failedAttempts())
                         .addValue("ve", user.version())
                         .addValue("id", user.id().toString())
+                        // cver là phiên bản hiện tại trong DB, kỳ vọng = version - 1.
                         .addValue("cver", user.version() - 1));
     }
 
+    /**
+     * Lưu một phiên đăng nhập mới.
+     *
+     * @param s phiên cần chèn.
+     */
     @Override
     public void insertSession(Session s) {
         jdbc.update(
@@ -100,6 +188,18 @@ public class JdbcIdentityRepository implements IdentityRepository {
                         .addValue("r", s.revoked()));
     }
 
+    /**
+     * Tìm phiên đăng nhập theo {@code id}.
+     *
+     * <p>Nếu phiên đã bị thu hồi, phương thức sẽ trả về một bản sao
+     * với cờ {@code revoked = true} (gọi {@link Session#revoke()}).
+     * Việc này đảm bảo bất kỳ tầng nào sử dụng kết quả đều nhận
+     * được trạng thái thu hồi rõ ràng.
+     *
+     * @param id UUID phiên.
+     * @return {@link Optional} chứa {@link Session} nếu tồn tại, ngược
+     *         lại trả về {@link Optional#empty()}.
+     */
     @Override
     public Optional<Session> findSession(UUID id) {
         var rows = jdbc.query(
@@ -115,15 +215,26 @@ public class JdbcIdentityRepository implements IdentityRepository {
                         rs.getString("ip_hash")));
         if (rows.isEmpty()) return Optional.empty();
         Session s = rows.get(0);
+        // Nếu DB ghi nhận đã thu hồi, đảm bảo đối tượng cũng phản ánh điều đó.
         return s.revoked() ? Optional.of(s.revoke()) : Optional.of(s);
     }
 
+    /**
+     * Cập nhật trạng thái thu hồi của phiên.
+     *
+     * @param s phiên với cờ {@code revoked} mới.
+     */
     @Override
     public void updateSession(Session s) {
         jdbc.update("UPDATE session SET revoked = :r WHERE id = :id",
                 new MapSqlParameterSource("id", s.id().toString()).addValue("r", s.revoked()));
     }
 
+    /**
+     * Lưu một liên kết OAuth (Google, Facebook,…) của người dùng.
+     *
+     * @param link liên kết OAuth cần chèn.
+     */
     @Override
     public void insertOAuthLink(OAuthLink link) {
         jdbc.update(
@@ -137,6 +248,14 @@ public class JdbcIdentityRepository implements IdentityRepository {
                         .addValue("e", link.normalizedEmail()));
     }
 
+    /**
+     * Đánh dấu token xác minh email đã được sử dụng.
+     *
+     * <p>Cập nhật cột {@code consumed_at} để chống tái sử dụng token.
+     *
+     * @param token      mã token cần đánh dấu.
+     * @param consumedAt thời điểm tiêu thụ (thường là {@code Instant.now()}).
+     */
     @Override
     public void consumeEmailVerificationToken(String token, Instant consumedAt) {
         jdbc.update(
@@ -146,6 +265,13 @@ public class JdbcIdentityRepository implements IdentityRepository {
                         .addValue("ca", Timestamp.from(consumedAt)));
     }
 
+    /**
+     * Tìm token xác minh email theo chuỗi token.
+     *
+     * @param token chuỗi token cần tra cứu.
+     * @return {@link Optional} chứa {@link com.familya.identity.domain.model.EmailVerificationToken}
+     *         nếu tồn tại, ngược lại trả về {@link Optional#empty()}.
+     */
     @Override
     public java.util.Optional<com.familya.identity.domain.model.EmailVerificationToken> findEmailVerificationToken(String token) {
         var rows = jdbc.query(

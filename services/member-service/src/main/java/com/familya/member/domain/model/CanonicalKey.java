@@ -17,6 +17,15 @@ public record CanonicalKey(UUID treeId, String givenName, String surname, java.t
         Objects.requireNonNull(surname);
     }
 
+    /**
+     * Hàm tạo tiện ích cho {@link CanonicalKey}.
+     *
+     * @param treeId    mã cây
+     * @param givenName tên (không null)
+     * @param surname   họ (không null)
+     * @param birthDate ngày sinh (có thể null khi không rõ)
+     * @return khóa canonical mới
+     */
     public static CanonicalKey of(UUID treeId, String givenName, String surname, java.time.LocalDate birthDate) {
         return new CanonicalKey(treeId, givenName, surname, birthDate);
     }

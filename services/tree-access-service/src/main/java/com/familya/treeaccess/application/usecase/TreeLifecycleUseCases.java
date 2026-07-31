@@ -32,11 +32,26 @@ public class TreeLifecycleUseCases {
 
     private static final Logger LOG = LoggerFactory.getLogger(TreeLifecycleUseCases.class);
 
+    /** Kho lưu trữ cây. */
     private final TreeRepository repo;
+
+    /** Bộ publish sự kiện cây. */
     private final TreeEventPublisher publisher;
+
+    /** Metric giám sát. */
     private final PlatformMetrics metrics;
+
+    /** Đồng hồ tiêm được. */
     private final Clock clock;
 
+    /**
+     * Khởi tạo use-case vòng đời.
+     *
+     * @param repo      kho lưu trữ
+     * @param publisher bộ publish
+     * @param metrics   metric
+     * @param clock     đồng hồ
+     */
     public TreeLifecycleUseCases(TreeRepository repo, TreeEventPublisher publisher,
                                  PlatformMetrics metrics, Clock clock) {
         this.repo = repo;
@@ -45,6 +60,11 @@ public class TreeLifecycleUseCases {
         this.clock = clock;
     }
 
+    /**
+     * Đóng băng cây (ADMIN). Phát sự kiện {@link TreeFrozen}.
+     *
+     * @param cmd lệnh đóng băng
+     */
     @Transactional
     public void freeze(FreezeTreeCommand cmd) {
         requireAdmin(cmd.treeId(), cmd.actingUser());
@@ -57,6 +77,12 @@ public class TreeLifecycleUseCases {
         LOG.info("Froze tree={} revision={} actor={}", tree.id(), tree.revision(), cmd.actingUser());
     }
 
+    /**
+     * Bỏ đóng băng (ADMIN). Không phát sự kiện riêng — TreeAdvancedRevision sẽ
+     * được phát bởi orchestrator nếu có.
+     *
+     * @param cmd lệnh bỏ đóng băng
+     */
     @Transactional
     public void unfreeze(UnfreezeTreeCommand cmd) {
         requireAdmin(cmd.treeId(), cmd.actingUser());
@@ -66,6 +92,11 @@ public class TreeLifecycleUseCases {
         LOG.info("Unfroze tree={} actor={}", tree.id(), cmd.actingUser());
     }
 
+    /**
+     * Đánh dấu tombstone (ADMIN). Bước này không thể đảo ngược.
+     *
+     * @param cmd lệnh tombstone
+     */
     @Transactional
     public void tombstone(TombstoneTreeCommand cmd) {
         requireAdmin(cmd.treeId(), cmd.actingUser());
@@ -75,10 +106,15 @@ public class TreeLifecycleUseCases {
         LOG.info("Tombstoned tree={} actor={}", tree.id(), cmd.actingUser());
     }
 
+    /**
+     * Tăng revision/epoch (ADMIN). Yêu cầu cây đang ACTIVE; orchestrator gọi
+     * sau khi participant đã ACK đạt barrier.
+     *
+     * @param cmd lệnh tăng revision
+     */
     @Transactional
     public void advanceRevision(AdvanceRevisionCommand cmd) {
-        // The orchestrator (Saga participant) issues this; only ADMINs
-        // may trigger, and the tree must be ACTIVE.
+        // Orchestrator (Saga participant) gọi; chỉ ADMIN mới được phép và cây phải ACTIVE.
         requireAdmin(cmd.treeId(), cmd.actingUser());
         Tree tree = repo.findTree(cmd.treeId()).orElseThrow(() -> new TreeNotFoundException("Tree " + cmd.treeId() + " not found"));
         tree.requireMutable("advanceRevision");
@@ -91,6 +127,13 @@ public class TreeLifecycleUseCases {
                 tree.id(), tree.revision(), tree.epoch(), cmd.reason());
     }
 
+    /**
+     * Bắt buộc user có quyền ADMIN trên cây.
+     *
+     * @param treeId mã cây
+     * @param userId UUID người dùng
+     * @throws ForbiddenException nếu user không có ADMIN
+     */
     private void requireAdmin(UUID treeId, UUID userId) {
         AuthorizationProjection p = repo.findProjection(treeId, userId)
                 .orElseThrow(() -> new ForbiddenException("User " + userId + " has no membership on tree " + treeId));
@@ -99,5 +142,6 @@ public class TreeLifecycleUseCases {
         }
     }
 
+    /** Interface đồng hồ. */
     public interface Clock { Instant now(); }
 }

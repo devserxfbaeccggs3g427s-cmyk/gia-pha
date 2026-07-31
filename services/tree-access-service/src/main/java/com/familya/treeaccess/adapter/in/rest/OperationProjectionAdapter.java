@@ -18,12 +18,27 @@ import java.util.UUID;
 @Component
 public class OperationProjectionAdapter implements OperationQuery {
 
+    /** Template JDBC để truy vấn bảng {@code operation_audit}. */
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo adapter với template JDBC dùng chung.
+     *
+     * @param jdbc template JDBC đã được Spring cấu hình
+     */
     public OperationProjectionAdapter(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Tìm một {@link AsyncOperation} theo mã thao tác. Trả về {@link Optional#empty()}
+     * khi bảng {@code operation_audit} không có bản ghi; trường hợp trạng thái
+     * không hợp lệ thì mặc định là {@link AsyncOperation.Status#PENDING} để
+     * tránh làm vỡ API.
+     *
+     * @param operationId mã thao tác cần truy vấn
+     * @return {@link Optional} chứa {@link AsyncOperation} nếu tìm thấy
+     */
     @Override
     public Optional<AsyncOperation> findById(UUID operationId) {
         var rows = jdbc.queryForList(

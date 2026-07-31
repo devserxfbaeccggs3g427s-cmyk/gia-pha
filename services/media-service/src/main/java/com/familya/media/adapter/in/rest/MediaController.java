@@ -27,6 +27,17 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Adapter REST đầu vào (inbound) — Controller chính cho media service.
+ * <p>
+ * Cung cấp các endpoint quản lý vòng đời media (upload intent → verify → scan
+ * → associate / tombstone) và album trong một cây gia phả. Mọi endpoint đều
+ * thuộc {@code @Transactional} và trả {@code 202 Accepted} cùng envelope
+ * {@link com.familya.platform.api.AsyncOperation} để client poll trạng thái.
+ * <p>
+ * Xác thực: yêu cầu header {@code X-Acting-User} (UUID). Ủy quyền được xử lý
+ * ở tầng use case thông qua {@code ProjectionMediaAuthorization}.
+ */
 @RestController
 @RequestMapping(path = "/api/v2/trees/{treeId}/media", produces = MediaType.APPLICATION_JSON_VALUE)
 public class MediaController {
@@ -39,6 +50,17 @@ public class MediaController {
     private final CreateAlbumUseCase createAlbum;
     private final JdbcOperationAuditWriter operationWriter;
 
+    /**
+     * Khởi tạo controller.
+     *
+     * @param createUploadIntent use case tạo upload intent.
+     * @param verifyUploaded     use case xác minh upload.
+     * @param scanAndPromote     use case scan và promote.
+     * @param tombstoneMedia     use case tombstone media.
+     * @param associateMedia     use case gắn media vào target.
+     * @param createAlbum        use case tạo album.
+     * @param operationWriter    writer ghi operation_audit cho API poll trạng thái.
+     */
     public MediaController(CreateUploadIntentUseCase createUploadIntent,
                            VerifyUploadedUseCase verifyUploaded,
                            ScanAndPromoteUseCase scanAndPromote,
@@ -55,6 +77,26 @@ public class MediaController {
         this.operationWriter = operationWriter;
     }
 
+    /**
+     * {@code POST /api/v2/trees/{treeId}/media/uploads}.
+     * <p>
+     * Tạo upload intent — trả về URL PUT đã ký để client upload thẳng lên blob store.
+     * <ul>
+     *   <li>Phương thức: POST</li>
+     *   <li>Path: {@code /api/v2/trees/{treeId}/media/uploads}</li>
+     *   <li>Headers yêu cầu: {@code X-Acting-User}, {@code X-Tree-Revision} (tùy chọn)</li>
+     *   <li>Body: {@link CreateUploadIntentRequest}</li>
+     *   <li>Phản hồi: {@code 202 Accepted} + {@link UploadIntentResponse} (mediaId, exactPath, signedPutUrl, expiresAtEpochMs)</li>
+     *   <li>Side effect: ghi row PENDING vào operation_audit.</li>
+     *   <li>Mã lỗi: 400 (validation), 403 (authz), 413 (size), 422 (validation use case).</li>
+     * </ul>
+     *
+     * @param actingUser          UUID người thực hiện.
+     * @param treeId              UUID cây.
+     * @param expectedTreeRevision revision kỳ vọng của cây.
+     * @param req                 payload yêu cầu.
+     * @return ResponseEntity với UploadIntentResponse và header Location.
+     */
     @PostMapping("/uploads")
     @Transactional
     public ResponseEntity<UploadIntentResponse> createUploadIntent(
@@ -74,6 +116,25 @@ public class MediaController {
                 .body(new UploadIntentResponse(r.mediaId(), r.exactPath(), r.signedPutUrl(), r.expiresAtEpochMs()));
     }
 
+    /**
+     * {@code POST /api/v2/trees/{treeId}/media/{mediaId}/verify}.
+     * <p>
+     * Xác minh nội dung đã upload (so khớp SHA-256, kích thước).
+     * <ul>
+     *   <li>Headers: {@code X-Acting-User}, {@code If-Match} (expectedVersion, tùy chọn),
+     *       {@code X-Tree-Revision} (tùy chọn).</li>
+     *   <li>Body: {@link VerifyUploadRequest}.</li>
+     *   <li>Phản hồi: {@code 202 Accepted} + AsyncOperation.</li>
+     * </ul>
+     *
+     * @param actingUser          UUID người thực hiện.
+     * @param treeId              UUID cây.
+     * @param mediaId             UUID media.
+     * @param expectedVersion     phiên bản kỳ vọng (optimistic lock).
+     * @param expectedTreeRevision revision kỳ vọng của cây.
+     * @param req                 payload xác minh.
+     * @return ResponseEntity với AsyncOperation.
+     */
     @PostMapping("/{mediaId}/verify")
     @Transactional
     public ResponseEntity<AsyncOperation> verify(@RequestHeader("X-Acting-User") UUID actingUser,
@@ -91,6 +152,18 @@ public class MediaController {
         return ResponseEntity.accepted().body(AsyncOperation.accepted(mediaId, "/api/v2/operations/" + mediaId));
     }
 
+    /**
+     * {@code POST /api/v2/trees/{treeId}/media/{mediaId}/scan}.
+     * <p>
+     * Kích hoạt scanner và promote media nếu sạch.
+     *
+     * @param actingUser      UUID người thực hiện.
+     * @param treeId          UUID cây.
+     * @param mediaId         UUID media.
+     * @param expectedVersion phiên bản kỳ vọng.
+     * @param expectedTreeRevision revision kỳ vọng của cây.
+     * @return ResponseEntity với AsyncOperation.
+     */
     @PostMapping("/{mediaId}/scan")
     @Transactional
     public ResponseEntity<AsyncOperation> scan(@RequestHeader("X-Acting-User") UUID actingUser,
@@ -107,6 +180,19 @@ public class MediaController {
         return ResponseEntity.accepted().body(AsyncOperation.accepted(mediaId, "/api/v2/operations/" + mediaId));
     }
 
+    /**
+     * {@code POST /api/v2/trees/{treeId}/media/{mediaId}/associate}.
+     * <p>
+     * Gắn media đã READY vào một target (member hoặc event).
+     *
+     * @param actingUser      UUID người thực hiện.
+     * @param treeId          UUID cây.
+     * @param mediaId         UUID media.
+     * @param expectedVersion phiên bản kỳ vọng.
+     * @param expectedTreeRevision revision kỳ vọng của cây.
+     * @param req             payload chứa targetKind/targetId.
+     * @return ResponseEntity với AsyncOperation.
+     */
     @PostMapping("/{mediaId}/associate")
     @Transactional
     public ResponseEntity<AsyncOperation> associate(@RequestHeader("X-Acting-User") UUID actingUser,
@@ -124,6 +210,20 @@ public class MediaController {
         return ResponseEntity.accepted().body(AsyncOperation.accepted(mediaId, "/api/v2/operations/" + mediaId));
     }
 
+    /**
+     * {@code DELETE /api/v2/trees/{treeId}/media/{mediaId}}.
+     * <p>
+     * Tombstone media (xóa mềm). Có thể truyền {@code retentionHoldUntil} (epoch ms)
+     * để thiết lập retention hold theo yêu cầu pháp lý.
+     *
+     * @param actingUser         UUID người thực hiện.
+     * @param treeId             UUID cây.
+     * @param mediaId            UUID media.
+     * @param expectedVersion    phiên bản kỳ vọng.
+     * @param expectedTreeRevision revision kỳ vọng của cây.
+     * @param retentionEpochMs   epoch ms đến khi được phép xóa vĩnh viễn (tùy chọn).
+     * @return ResponseEntity với AsyncOperation.
+     */
     @DeleteMapping("/{mediaId}")
     @Transactional
     public ResponseEntity<AsyncOperation> tombstone(@RequestHeader("X-Acting-User") UUID actingUser,
@@ -142,6 +242,17 @@ public class MediaController {
         return ResponseEntity.accepted().body(AsyncOperation.accepted(mediaId, "/api/v2/operations/" + mediaId));
     }
 
+    /**
+     * {@code POST /api/v2/trees/{treeId}/media/albums}.
+     * <p>
+     * Tạo album mới trong cây.
+     *
+     * @param actingUser          UUID người thực hiện.
+     * @param treeId              UUID cây.
+     * @param expectedTreeRevision revision kỳ vọng của cây.
+     * @param req                 payload tạo album.
+     * @return ResponseEntity với AsyncOperation và header Location.
+     */
     @PostMapping("/albums")
     @Transactional
     public ResponseEntity<AsyncOperation> createAlbum(@RequestHeader("X-Acting-User") UUID actingUser,

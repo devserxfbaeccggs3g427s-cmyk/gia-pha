@@ -1,3 +1,11 @@
+/**
+ * Adapter JDBC cho port {@link com.familya.auditops.application.port.out.OperationLifecycleProjection}.
+ *
+ * <p>Bảng {@code operation_lifecycle_projection} là nơi lưu trữ
+ * projection vòng đời operation cho operator UI và replay. Mỗi row
+ * tương ứng với một operation; việc cập nhật dùng {@code INSERT ...
+ * ON DUPLICATE KEY UPDATE} để vừa chèn vừa cập nhật một cách nguyên tử.</p>
+ */
 package com.familya.auditops.adapter.out.persistence;
 
 import com.familya.auditops.application.port.out.OperationLifecycleProjection;
@@ -13,15 +21,43 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Triển khai {@link OperationLifecycleProjection} bằng JdbcTemplate.
+ *
+ * <p>Cấu trúc bảng:</p>
+ * <ul>
+ *   <li>{@code operation_id} (UUID, primary key).</li>
+ *   <li>Các cột mô tả service sở hữu, loại Saga, trạng thái, version,
+ *       mã lỗi, routing.</li>
+ *   <li>Các cột thời gian: {@code started_at}, {@code updated_at}, {@code finalized_at}.</li>
+ *   <li>{@code last_event_id} để hỗ trợ debug và replay.</li>
+ * </ul>
+ */
 @Repository
 public class JdbcOperationLifecycleProjection implements OperationLifecycleProjection {
 
+    /** JDBC template. */
     private final JdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo projection.
+     *
+     * @param jdbc JDBC template
+     */
     public JdbcOperationLifecycleProjection(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Chèn hoặc cập nhật row khi nhận sự kiện {@code OperationStarted}.
+     *
+     * <p>Khi row đã tồn tại, chỉ ghi đè các trường phù hợp với sự kiện
+     * bắt đầu. {@code finalized_at} được bảo toàn bằng {@code COALESCE}
+     * để không đè lên dấu thời gian kết thúc thực tế.</p>
+     *
+     * @param row         dữ liệu vòng đời mới
+     * @param lastEventId id của sự kiện Kafka gốc
+     */
     @Override
     public void upsertStarted(OperationLifecycleRow row, String lastEventId) {
         jdbc.update("""
@@ -62,6 +98,18 @@ state, target_version, target_epoch, failure_code, failure_message, failure_rout
                 lastEventId);
     }
 
+    /**
+     * Cập nhật row khi nhận sự kiện thay đổi trạng thái.
+     *
+     * <p>Khác với {@link #upsertStarted}, phương thức này không ghi đè
+     * các trường "started" để bảo toàn thời điểm bắt đầu. Nếu
+     * {@code finalizedAt} được cung cấp và row chưa có finalized_at,
+     * sẽ được set.</p>
+     *
+     * @param row         dữ liệu vòng đời mới
+     * @param finalizedAt thời điểm kết thúc (hoặc null)
+     * @param lastEventId id sự kiện
+     */
     @Override
     public void applyStateChange(OperationLifecycleRow row, Instant finalizedAt,
                                  String lastEventId) {
@@ -97,6 +145,12 @@ state, target_version, target_epoch, failure_code, failure_message, failure_rout
                 lastEventId);
     }
 
+    /**
+     * Tìm projection của một operation theo id.
+     *
+     * @param operationId id operation
+     * @return {@link Optional} chứa {@link OperationLifecycleRow} nếu tồn tại
+     */
     @Override
     public Optional<OperationLifecycleRow> find(UUID operationId) {
         var rows = jdbc.query("SELECT * FROM operation_lifecycle_projection WHERE operation_id = ?",
@@ -104,6 +158,7 @@ state, target_version, target_epoch, failure_code, failure_message, failure_rout
         return rows.stream().findFirst();
     }
 
+    /** {@link RowMapper} dùng chung cho {@link OperationLifecycleRow}. */
     private static final RowMapper<OperationLifecycleRow> MAPPER = (ResultSet rs, int n) -> new OperationLifecycleRow(
             UUID.fromString(rs.getString("operation_id")),
             rs.getString("owner_service"),

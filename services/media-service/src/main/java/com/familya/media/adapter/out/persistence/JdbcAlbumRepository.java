@@ -15,15 +15,36 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Adapter đầu ra (outbound) — repository JDBC cho {@link com.familya.media.domain.model.Album}.
+ * <p>
+ * Áp dụng các quy ước:
+ * <ul>
+ *   <li>Thao tác ghi dùng {@link Propagation#MANDATORY} — bắt buộc có transaction
+ *       ngoài (do use case quản lý) để đảm bảo atomic với outbox/domain changes.</li>
+ *   <li>Thao tác đọc dùng {@code readOnly = true}.</li>
+ *   <li>Tombstone dùng optimistic locking: {@code UPDATE ... WHERE id = :id AND version = :v}.</li>
+ * </ul>
+ */
 @Component
 public class JdbcAlbumRepository implements AlbumRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo repository.
+     *
+     * @param jdbc JDBC template.
+     */
     public JdbcAlbumRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Chèn một album mới. Phải chạy trong transaction của caller (MANDATORY).
+     *
+     * @param a album cần chèn.
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void insert(Album a) {
@@ -34,6 +55,12 @@ public class JdbcAlbumRepository implements AlbumRepository {
                 params(a));
     }
 
+    /**
+     * Tra cứu album theo id.
+     *
+     * @param id UUID album.
+     * @return Optional chứa album nếu tồn tại.
+     */
     @Override
     @Transactional(readOnly = true)
     public Optional<Album> findById(UUID id) {
@@ -43,6 +70,15 @@ public class JdbcAlbumRepository implements AlbumRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(fromRow(rows.get(0)));
     }
 
+    /**
+     * Liệt kê album của một cây, có thể bao gồm cả các album đã tombstone.
+     * <p>
+     * Sắp xếp theo {@code updated_at DESC} — album cập nhật gần nhất trước.
+     *
+     * @param treeId            UUID cây.
+     * @param includeTombstoned nếu true bao gồm cả album đã tombstone.
+     * @return danh sách album.
+     */
     @Override
     @Transactional(readOnly = true)
     public List<Album> listByTree(UUID treeId, boolean includeTombstoned) {
@@ -53,6 +89,11 @@ public class JdbcAlbumRepository implements AlbumRepository {
         return rows.stream().map(this::fromRow).toList();
     }
 
+    /**
+     * Cập nhật một album (caller đã tăng version). Phải chạy trong transaction của caller.
+     *
+     * @param a album với version mới.
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void update(Album a) {
@@ -62,6 +103,7 @@ public class JdbcAlbumRepository implements AlbumRepository {
                 params(a));
     }
 
+    /** Helper chuyển {@link Album} sang MapSqlParameterSource. */
     private MapSqlParameterSource params(Album a) {
         return new MapSqlParameterSource()
                 .addValue("id", a.id().toString())
@@ -75,9 +117,20 @@ public class JdbcAlbumRepository implements AlbumRepository {
                 .addValue("tomb", a.tombstonedAt() == null ? null : Timestamp.from(a.tombstonedAt()));
     }
 
+    /**
+     * Tombstone album với optimistic locking.
+     * <p>
+     * SQL: {@code UPDATE ... WHERE id = :id AND version = :v}. Nếu version không
+     * khớp, số dòng affected = 0 và use case sẽ ném {@code OptimisticLockException}.
+     *
+     * @param id              UUID album.
+     * @param at              thời điểm tombstone.
+     * @param expectedVersion version kỳ vọng.
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void tombstone(UUID id, Instant at, long expectedVersion) {
+        // Optimistic lock: chỉ update khi version còn khớp.
         jdbc.update(
                 "UPDATE album SET tombstoned_at = :t, updated_at = :u, version = version + 1 "
                         + "WHERE id = :id AND version = :v",
@@ -88,6 +141,7 @@ public class JdbcAlbumRepository implements AlbumRepository {
                         .addValue("v", expectedVersion));
     }
 
+    /** Helper chuyển row SQL sang {@link Album}. */
     private Album fromRow(Map<String, Object> r) {
         return new Album(
                 UUID.fromString((String) r.get("id")),

@@ -19,16 +19,54 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Triển khai {@link EventRepository} bằng JDBC — thao tác trực tiếp với
+ * cơ sở dữ liệu MySQL thông qua {@link NamedParameterJdbcTemplate}.
+ *
+ * <h2>Bảng dữ liệu</h2>
+ * <ul>
+ *   <li>{@code domain_event}: bảng chính lưu trữ aggregate.</li>
+ *   <li>{@code saga_compensation_snapshot}: lưu snapshot bù cho Saga.</li>
+ * </ul>
+ *
+ * <h2>Serialize phức tạp</h2>
+ * <p>Các trường phức tạp được serialize thành JSON:
+ * <ul>
+ *   <li>{@code recurrence_json}: lưu {@link RecurrenceRule} dạng JSON.</li>
+ *   <li>{@code additional_member_ids}, {@code media_refs}: danh sách UUID
+ *       dạng JSON.</li>
+ * </ul>
+ *
+ * <h2>Quản lý transaction</h2>
+ * <p>Tất cả phương thức ghi sử dụng {@link Propagation#MANDATORY} — yêu
+ * cầu caller đã mở transaction; đảm bảo tính atomic giữa aggregate và
+ * outbox (xem {@link com.familya.event.adapter.out.events.OutboxEventChangePublisher}).
+ *
+ * @author gia-pha platform
+ */
 @Component
 public class JdbcEventRepository implements EventRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final ObjectMapper mapper = new ObjectMapper();
 
+    /**
+     * Khởi tạo adapter.
+     *
+     * @param jdbc JDBC template.
+     */
     public JdbcEventRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Lưu ý: sử dụng {@code MANDATORY} propagation — chỉ chạy trong
+     * transaction của caller; lý do: đảm bảo consistency với outbox.
+     *
+     * @throws org.springframework.dao.DuplicateKeyException nếu trùng khóa chính.
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void insert(DomainEvent ev) {
@@ -41,6 +79,11 @@ public class JdbcEventRepository implements EventRepository {
                 params(ev));
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Thực hiện trong transaction read-only để tối ưu hóa tài nguyên.
+     */
     @Override
     @Transactional(readOnly = true)
     public Optional<DomainEvent> findById(UUID id) {
@@ -53,6 +96,12 @@ public class JdbcEventRepository implements EventRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(fromRow(rows.get(0)));
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Có hai nhánh SQL — một có {@code tombstoned_at IS NULL}, một
+     * không — dựa trên {@code includeTombstoned}.
+     */
     @Override
     @Transactional(readOnly = true)
     public List<DomainEvent> listByTree(UUID treeId, boolean includeTombstoned) {
@@ -63,6 +112,13 @@ public class JdbcEventRepository implements EventRepository {
         return rows.stream().map(this::fromRow).toList();
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Sử dụng MySQL {@code JSON_CONTAINS} để tìm các sự kiện có
+     * {@code memberId} trong {@code additional_member_ids} (mảng JSON)
+     * <i>hoặc</i> trùng {@code primary_member_id}.
+     */
     @Override
     @Transactional(readOnly = true)
     public List<DomainEvent> listReferencingMember(UUID treeId, UUID memberId) {
@@ -78,6 +134,12 @@ public class JdbcEventRepository implements EventRepository {
         return rows.stream().map(this::fromRow).toList();
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Sử dụng {@code ON DUPLICATE KEY UPDATE} để đảm bảo idempotent —
+     * viết lại snapshot nếu đã tồn tại cho cùng {@code operationId}.
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void saveCompensationSnapshot(UUID operationId, String snapshotJson) {
@@ -91,6 +153,9 @@ public class JdbcEventRepository implements EventRepository {
                         .addValue("ts", Timestamp.from(java.time.Instant.now())));
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     @Transactional(readOnly = true)
     public String loadCompensationSnapshot(UUID operationId) {
@@ -100,6 +165,9 @@ public class JdbcEventRepository implements EventRepository {
         return rows.isEmpty() ? null : (String) rows.get(0).get("snapshot_json");
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void update(DomainEvent ev) {
@@ -112,6 +180,22 @@ public class JdbcEventRepository implements EventRepository {
                 params(ev));
     }
 
+    /**
+     * Tập hợp các tham số từ aggregate cho câu INSERT/UPDATE.
+     *
+     * <p>Lưu ý về serialize:
+     * <ul>
+     *   <li>{@code start}, {@code end}: chuyển LocalDate → {@link Date}
+     *       (kiểu ngày của JDBC).</li>
+     *   <li>{@code created}, {@code updated}, {@code tomb}: chuyển
+     *       {@link java.time.Instant} → {@link Timestamp}.</li>
+     *   <li>{@code recur}, {@code additional}, {@code media}: serialize
+     *       thành JSON.</li>
+     * </ul>
+     *
+     * @param ev aggregate nguồn.
+     * @return {@link MapSqlParameterSource} đã gắn giá trị.
+     */
     private MapSqlParameterSource params(DomainEvent ev) {
         return new MapSqlParameterSource()
                 .addValue("id", ev.id().toString())
@@ -133,6 +217,15 @@ public class JdbcEventRepository implements EventRepository {
                 .addValue("v", ev.version());
     }
 
+    /**
+     * Serialize {@link RecurrenceRule} thành JSON.
+     *
+     * <p>Định dạng: {@code {"frequency":"YEARLY","interval":1,"termination":{"count":5}}}.
+     * Hai biến thể termination được biểu diễn bằng object khác nhau.
+     *
+     * @param r quy tắc lặp lại hoặc {@code null}.
+     * @return chuỗi JSON hoặc {@code null}.
+     */
     private String serializeRecurrence(RecurrenceRule r) {
         if (r == null) return null;
         try {
@@ -145,11 +238,31 @@ public class JdbcEventRepository implements EventRepository {
         } catch (Exception e) { throw new IllegalStateException(e); }
     }
 
+    /**
+     * Serialize danh sách UUID thành mảng JSON các chuỗi.
+     *
+     * @param ids danh sách UUID hoặc {@code null}.
+     * @return chuỗi JSON hoặc {@code null}.
+     */
     private String serializeIds(List<UUID> ids) {
         try { return ids == null ? null : mapper.writeValueAsString(ids.stream().map(UUID::toString).toList()); }
         catch (Exception e) { throw new IllegalStateException(e); }
     }
 
+    /**
+     * Tái dựng aggregate từ một dòng kết quả JDBC.
+     *
+     * <p>Lưu ý về deserialize:
+     * <ul>
+     *   <li>JDBC trả về {@link Date} cho ngày — chuyển sang
+     *       {@link LocalDate} qua {@code toLocalDate()}.</li>
+     *   <li>Các cột JSON được parse qua {@link ObjectMapper}.</li>
+     *   <li>Cột có thể {@code null} được kiểm tra trước khi ép kiểu.</li>
+     * </ul>
+     *
+     * @param r dòng kết quả.
+     * @return aggregate đã khôi phục.
+     */
     private DomainEvent fromRow(java.util.Map<String, Object> r) {
         return new DomainEvent(
                 UUID.fromString((String) r.get("id")),
@@ -171,6 +284,13 @@ public class JdbcEventRepository implements EventRepository {
                 ((Number) r.get("version")).longValue());
     }
 
+    /**
+     * Parse chuỗi JSON thành {@link RecurrenceRule}. Ánh xạ termination
+     * dựa trên sự tồn tại của khóa {@code count} hoặc {@code until}.
+     *
+     * @param json chuỗi JSON hoặc {@code null}.
+     * @return {@link RecurrenceRule} hoặc {@code null}.
+     */
     private RecurrenceRule parseRecurrence(String json) {
         if (json == null) return null;
         try {
@@ -185,6 +305,13 @@ public class JdbcEventRepository implements EventRepository {
         } catch (Exception e) { throw new IllegalStateException("Cannot parse recurrence: " + json, e); }
     }
 
+    /**
+     * Parse chuỗi JSON thành {@link List} UUID. Trả về danh sách rỗng
+     * nếu chuỗi là {@code null}.
+     *
+     * @param json chuỗi JSON hoặc {@code null}.
+     * @return danh sách UUID.
+     */
     private List<UUID> parseIds(String json) {
         if (json == null) return List.of();
         try {

@@ -28,11 +28,26 @@ public class CreateTreeUseCase {
 
     private static final Logger LOG = LoggerFactory.getLogger(CreateTreeUseCase.class);
 
+    /** Kho lưu trữ cây. */
     private final TreeRepository repo;
+
+    /** Bộ publish sự kiện. */
     private final TreeEventPublisher publisher;
+
+    /** Metric giám sát. */
     private final PlatformMetrics metrics;
+
+    /** Đồng hồ tiêm được. */
     private final Clock clock;
 
+    /**
+     * Khởi tạo use-case.
+     *
+     * @param repo      kho lưu trữ
+     * @param publisher bộ publish sự kiện
+     * @param metrics   metric giám sát
+     * @param clock     đồng hồ
+     */
     public CreateTreeUseCase(TreeRepository repo, TreeEventPublisher publisher,
                              PlatformMetrics metrics, Clock clock) {
         this.repo = repo;
@@ -41,6 +56,13 @@ public class CreateTreeUseCase {
         this.clock = clock;
     }
 
+    /**
+     * Tạo cây mới và cấp projection ADMIN cho chủ sở hữu. Thao tác này phát
+     * đồng thời sự kiện {@link TreeCreated} để các service khác cập nhật.
+     *
+     * @param cmd lệnh tạo cây (chứa ownerUserId, name)
+     * @return mã cây vừa tạo
+     */
     @Transactional
     public UUID execute(CreateTreeCommand cmd) {
         metrics.mutationAcceptedCounter("tree-access-service", "createTree").increment();
@@ -52,6 +74,7 @@ public class CreateTreeUseCase {
                 UUID.randomUUID(), treeId, cmd.ownerUserId(), TreeMembership.Role.ADMIN,
                 cmd.ownerUserId(), now, null, null, null);
         repo.insertTree(tree, owner);
+        // Cấp projection ADMIN ngay cho owner để tra cứu phân quyền trả về ADMIN mà không cần đợi event.
         repo.upsertProjection(new AuthorizationProjection(
                 treeId, cmd.ownerUserId(), TreeMembership.Role.ADMIN,
                 tree.revision(), tree.epoch(), now, false, null, now));
@@ -61,5 +84,6 @@ public class CreateTreeUseCase {
         return treeId;
     }
 
+    /** Interface đồng hồ cho use-case. */
     public interface Clock { Instant now(); }
 }

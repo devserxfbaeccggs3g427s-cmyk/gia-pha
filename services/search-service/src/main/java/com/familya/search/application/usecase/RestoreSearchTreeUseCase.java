@@ -10,10 +10,12 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 
 /**
- * Restores search projections after a delete-tree Saga failure. The
- * projections themselves are read-only views that get re-populated by the
- * domain consumers on the next event; this use case simply reverses the
- * watermark advance so reads will not silently hide tree-scoped documents.
+ * Khôi phục projection của search service sau khi Saga xoá cây thất bại.
+ *
+ * <p>Bản thân các bảng chiếu là dạng chỉ-đọc, sẽ được tái dựng bởi các
+ * consumer domain khi sự kiện tiếp theo đến. Use case này chỉ đảo ngược
+ * việc nâng watermark để các lần đọc không âm thầm che đi tài liệu của
+ * cây.</p>
  */
 @Service
 public class RestoreSearchTreeUseCase {
@@ -22,10 +24,21 @@ public class RestoreSearchTreeUseCase {
 
     private final SearchWatermarkRepository watermarks;
 
+    /**
+     * Khởi tạo use case với cổng watermark.
+     *
+     * @param watermarks cổng đọc/ghi watermark của search service.
+     */
     public RestoreSearchTreeUseCase(SearchWatermarkRepository watermarks) {
         this.watermarks = watermarks;
     }
 
+    /**
+     * Thực thi khôi phục.
+     *
+     * @param cmd lệnh chứa {@code operationId} và {@code treeId}.
+     * @return kết quả (hiện không có tác động đếm được, các trường mặc định {@code 0}).
+     */
     @Transactional
     public Result execute(RestoreSearchTreeCommand cmd) {
         // We do not retain a per-operation snapshot, so the safest revert is
@@ -37,5 +50,13 @@ public class RestoreSearchTreeUseCase {
         return new Result(0, 0L, 0L);
     }
 
+    /**
+     * Kết quả trả về của use case.
+     *
+     * @param affectedCount          số bản ghi "ảnh hưởng" (luôn {@code 0} vì use case
+     *                               chỉ làm mới watermark).
+     * @param appliedAggregateVersion phiên bản aggregate đã áp dụng ({@code 0}).
+     * @param appliedEpoch            epoch đã áp dụng ({@code 0}).
+     */
     public record Result(int affectedCount, long appliedAggregateVersion, long appliedEpoch) { }
 }

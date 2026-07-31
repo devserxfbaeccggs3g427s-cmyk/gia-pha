@@ -17,15 +17,34 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Triển khai JDBC của {@link MemberRepository}. Cung cấp các thao tác CRUD cho bảng
+ * {@code member}, bảng {@code member_canonical_key} và projection ủy quyền
+ * {@code authorization_projection}.
+ *
+ * <p>Bean {@code @Component} thuộc tầng adapter-out/persistence trong kiến trúc Hexagonal.
+ * Các phương thức ghi sử dụng {@link Propagation#MANDATORY} để bắt buộc caller phải
+ * đã mở transaction; phương thức đọc dùng {@code readOnly = true} để tối ưu JDBC driver.
+ */
 @Component
 public class JdbcMemberRepository implements MemberRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo repository với {@link NamedParameterJdbcTemplate}.
+     *
+     * @param jdbc template JDBC đã được cấu hình bởi platform
+     */
     public JdbcMemberRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Chèn một thành viên mới. Yêu cầu caller phải đang trong transaction.
+     *
+     * @param m thành viên cần chèn
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void insert(Member m) {
@@ -39,6 +58,12 @@ public class JdbcMemberRepository implements MemberRepository {
                 params(m));
     }
 
+    /**
+     * Tra cứu thành viên theo mã id.
+     *
+     * @param id mã thành viên
+     * @return {@link Member} hoặc {@link Optional#empty()}
+     */
     @Override
     @Transactional(readOnly = true)
     public Optional<Member> findById(UUID id) {
@@ -51,6 +76,13 @@ public class JdbcMemberRepository implements MemberRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(fromRow(rows.get(0)));
     }
 
+    /**
+     * Liệt kê thành viên của một cây. Có thể bao gồm hoặc loại bỏ các thành viên đã tombstone.
+     *
+     * @param treeId            mã cây
+     * @param includeTombstoned {@code true} để bao gồm cả thành viên đã tombstone
+     * @return danh sách thành viên sắp xếp theo {@code created_at}
+     */
     @Override
     @Transactional(readOnly = true)
     public List<Member> listByTree(UUID treeId, boolean includeTombstoned) {
@@ -61,6 +93,11 @@ public class JdbcMemberRepository implements MemberRepository {
         return rows.stream().map(this::fromRow).toList();
     }
 
+    /**
+     * Cập nhật thông tin thành viên. Yêu cầu caller đang trong transaction.
+     *
+     * @param m thành viên với các trường đã được cập nhật
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void update(Member m) {
@@ -73,6 +110,12 @@ public class JdbcMemberRepository implements MemberRepository {
                 params(m));
     }
 
+    /**
+     * Tìm mã thành viên theo khóa canonical. Trả về {@link Optional#empty()} nếu không có.
+     *
+     * @param k khóa canonical
+     * @return mã thành viên trùng khóa hoặc rỗng
+     */
     @Override
     @Transactional(readOnly = true)
     public Optional<UUID> findByCanonicalKey(CanonicalKey k) {
@@ -88,6 +131,12 @@ public class JdbcMemberRepository implements MemberRepository {
         return rows.isEmpty() ? Optional.empty() : Optional.of(UUID.fromString((String) rows.get(0).get("member_id")));
     }
 
+    /**
+     * Chèn một bản ghi khóa canonical cho thành viên.
+     *
+     * @param k        khóa canonical
+     * @param memberId mã thành viên
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void insertCanonicalKey(CanonicalKey k, UUID memberId) {
@@ -102,6 +151,12 @@ public class JdbcMemberRepository implements MemberRepository {
                         .addValue("m", memberId.toString()));
     }
 
+    /**
+     * Xóa khóa canonical của một thành viên (ví dụ: sau khi gộp hoặc tombstone).
+     *
+     * @param memberId mã thành viên
+     * @param k        khóa canonical cần xóa
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void removeCanonicalKey(UUID memberId, CanonicalKey k) {
@@ -116,6 +171,13 @@ public class JdbcMemberRepository implements MemberRepository {
                         .addValue("m", memberId.toString()));
     }
 
+    /**
+     * Tra cứu projection ủy quyền cho một cặp (cây, người dùng).
+     *
+     * @param treeId mã cây
+     * @param userId mã người dùng
+     * @return dòng ủy quyền hoặc {@link Optional#empty()}
+     */
     @Override
     @Transactional(readOnly = true)
     public Optional<MemberAuthRow> findAuth(UUID treeId, UUID userId) {
@@ -127,6 +189,11 @@ public class JdbcMemberRepository implements MemberRepository {
         return Optional.of(authFromRow(rows.get(0)));
     }
 
+    /**
+     * Upsert projection ủy quyền dựa trên {@link MemberAuthRow}.
+     *
+     * @param r dòng ủy quyền cần lưu
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void upsertAuth(MemberAuthRow r) {
@@ -140,6 +207,19 @@ public class JdbcMemberRepository implements MemberRepository {
                 authParams(r));
     }
 
+    /**
+     * Cập nhật vai trò/trạng thái thu hồi của một dòng ủy quyền — dùng bởi consumer projection.
+     *
+     * @param treeId        mã cây
+     * @param userId        mã người dùng
+     * @param role          vai trò (có thể null khi thu hồi)
+     * @param revoked       cờ thu hồi
+     * @param revision      phiên bản aggregate
+     * @param epoch         epoch
+     * @param grantedAt     thời điểm cấp quyền
+     * @param sourceEventId mã sự kiện nguồn
+     * @param now           thời điểm cập nhật
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void updateAuthRole(UUID treeId, UUID userId, String role, boolean revoked,
@@ -164,6 +244,12 @@ public class JdbcMemberRepository implements MemberRepository {
                         .addValue("upd", Timestamp.from(now)));
     }
 
+    /**
+     * Tạo {@link MapSqlParameterSource} cho câu lệnh insert/update thành viên.
+     *
+     * @param m thành viên cần bind
+     * @return tham số đã sẵn sàng cho NamedParameterJdbcTemplate
+     */
     private MapSqlParameterSource params(Member m) {
         return new MapSqlParameterSource()
                 .addValue("id", m.id().toString())
@@ -187,6 +273,12 @@ public class JdbcMemberRepository implements MemberRepository {
                 .addValue("v", m.version());
     }
 
+    /**
+     * Tạo {@link MapSqlParameterSource} cho bảng authorization_projection.
+     *
+     * @param r dòng ủy quyền
+     * @return tham số đã bind
+     */
     private MapSqlParameterSource authParams(MemberAuthRow r) {
         return new MapSqlParameterSource()
                 .addValue("t", r.treeId().toString())
@@ -200,6 +292,12 @@ public class JdbcMemberRepository implements MemberRepository {
                 .addValue("upd", Timestamp.from(r.lastUpdatedAt()));
     }
 
+    /**
+     * Ánh xạ một dòng {@code queryForList} thành {@link Member}, xử lý các kiểu null một cách an toàn.
+     *
+     * @param r dòng kết quả từ CSDL
+     * @return thành viên tương ứng
+     */
     private Member fromRow(java.util.Map<String, Object> r) {
         LocalDate birth = r.get("birth_date") == null ? null : ((Date) r.get("birth_date")).toLocalDate();
         LocalDate death = r.get("death_date") == null ? null : ((Date) r.get("death_date")).toLocalDate();
@@ -224,6 +322,12 @@ public class JdbcMemberRepository implements MemberRepository {
                 ((Number) r.get("version")).longValue());
     }
 
+    /**
+     * Ánh xạ một dòng authorization_projection thành {@link MemberAuthRow}.
+     *
+     * @param r dòng kết quả
+     * @return dòng ủy quyền tương ứng
+     */
     private MemberAuthRow authFromRow(java.util.Map<String, Object> r) {
         return new MemberAuthRow(
                 UUID.fromString((String) r.get("tree_id")),

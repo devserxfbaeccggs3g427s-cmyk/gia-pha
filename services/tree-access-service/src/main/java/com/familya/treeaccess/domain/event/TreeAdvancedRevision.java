@@ -11,6 +11,14 @@ public final class TreeAdvancedRevision extends TreeEvent {
     private final String reason;
     private final Instant occurredAt;
 
+    /**
+     * @param treeId      mã cây
+     * @param revision    revision sau khi tăng
+     * @param epoch       epoch sau khi tăng
+     * @param advancedBy  UUID người/thực thể yêu cầu tăng (orchestrator)
+     * @param reason      lý do tăng revision
+     * @param occurredAt  thời điểm phát sinh
+     */
     public TreeAdvancedRevision(UUID treeId, long revision, long epoch, UUID advancedBy,
                                  String reason, Instant occurredAt) {
         this.treeId = treeId;
@@ -28,6 +36,12 @@ public final class TreeAdvancedRevision extends TreeEvent {
     @Override public int eventVersion() { return 1; }
     @Override public Instant occurredAt() { return occurredAt; }
 
+    /**
+     * @return UUID thực thể đã yêu cầu tăng revision
+     */
     public UUID advancedBy() { return advancedBy; }
+    /**
+     * @return lý do tăng revision
+     */
     public String reason() { return reason; }
 }

@@ -12,18 +12,41 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Adapter đầu ra (outbound) — repository ghi nhận lịch sử replicate binary media
+ * (chuyển vùng lưu trữ giữa các region).
+ * <p>
+ * Mỗi lần replicate sinh một row mới (append-only) để phục vụ audit và replay;
+ * không có optimistic locking vì mỗi lần chạy là một sự kiện độc lập.
+ */
 @Component
 public class JdbcMediaBinaryReplicationRepository implements MediaBinaryReplicationRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo repository.
+     *
+     * @param jdbc JDBC template.
+     */
     public JdbcMediaBinaryReplicationRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Ghi nhận một lần replicate binary.
+     *
+     * @param mediaId      UUID media.
+     * @param sourceRegion vùng nguồn.
+     * @param targetRegion vùng đích.
+     * @param sha256       hash của tệp.
+     * @param status       trạng thái (PENDING/SUCCESS/FAILED...).
+     * @param at           thời điểm thực hiện.
+     */
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void record(UUID mediaId, String sourceRegion, String targetRegion, String sha256, String status, Instant at) {
+        // Insert một row mới với id ngẫu nhiên (append-only, không có ràng buộc unique).
         jdbc.update(
                 "INSERT INTO media_binary_replication (id, media_id, source_region, target_region, sha256, status, last_attempt_at) "
                         + "VALUES (:id, :m, :s, :t, :h, :st, :at)",
@@ -37,6 +60,12 @@ public class JdbcMediaBinaryReplicationRepository implements MediaBinaryReplicat
                         .addValue("at", Timestamp.from(at)));
     }
 
+    /**
+     * Liệt kê lịch sử replicate của một media.
+     *
+     * @param mediaId UUID media.
+     * @return danh sách {@link ReplicationRow}.
+     */
     @Override
     @Transactional(readOnly = true)
     public List<ReplicationRow> listForMedia(UUID mediaId) {

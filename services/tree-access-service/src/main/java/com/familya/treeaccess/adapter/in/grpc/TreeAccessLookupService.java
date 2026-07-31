@@ -30,19 +30,47 @@ import java.util.UUID;
 @GrpcService
 public class TreeAccessLookupService extends TreeAccessProtoGrpc.TreeAccessLookupImplBase {
 
+    /** Logger SLF4J để ghi log cho các tình huống debug (ví dụ: tra cứu stale). */
     private static final Logger LOG = LoggerFactory.getLogger(TreeAccessLookupService.class);
 
+    /** Kho lưu trữ để đọc thực thể {@link Tree} và hàng {@link AuthorizationProjection}. */
     private final TreeRepository repo;
+
+    /** Bộ thu thập số liệu phục vụ giám sát, dùng để đánh dấu cuộc gọi RPC đã được tiếp nhận. */
     private final PlatformMetrics metrics;
 
+    /**
+     * Khởi tạo dịch vụ gRPC tra cứu phân quyền khẩn cấp.
+     *
+     * @param repo    kho lưu trữ cây và projection phân quyền
+     * @param metrics bộ thu thập số liệu giám sát của nền tảng
+     */
     public TreeAccessLookupService(TreeRepository repo, PlatformMetrics metrics) {
         this.repo = repo;
         this.metrics = metrics;
     }
 
+    /**
+     * Xử lý yêu cầu phân quyền gRPC với ràng buộc thời gian (deadline-bound).
+     * Đây là "vanilla fallback" khi service khác thiếu projection địa phương.
+     *
+     * <p>Các bước xử lý:</p>
+     * <ol>
+     *   <li>Ghi nhận số liệu cuộc gọi qua {@link PlatformMetrics#mutationAccepted}.</li>
+     *   <li>Chuyển UUID dạng chuỗi sang {@link UUID}, lỗi sẽ được bắt và trả về {@code UNKNOWN}.</li>
+     *   <li>Nếu không tìm thấy cây → trả {@code NOT_FOUND}.</li>
+     *   <li>Luật bất biến: chủ cây (owner) luôn có quyền ADMIN, kể cả khi không có hàng projection.</li>
+     *   <li>Với người dùng thường: kiểm tra projection. Nếu đã thu hồi → DENIED; nếu revision cũ hơn dự kiến → STALE; ngược lại AUTHORIZED.</li>
+     *   <li>Bắt {@link StaleProjectionException} và {@link IllegalArgumentException} để tránh làm sập RPC.</li>
+     * </ol>
+     *
+     * @param request          yêu cầu phân quyền từ caller, chứa treeId, userId và expectedRevision
+     * @param responseObserver luồng phản hồi gRPC, dùng để gửi về một kết quả duy nhất rồi đóng
+     */
     @Override
     public void authorize(TreeAccessProto.AuthorizeRequest request,
                           StreamObserver<TreeAccessProto.AuthorizeResponse> responseObserver) {
+        // Ghi nhận đã nhận yêu cầu phân quyền khẩn cấp để phục vụ metric/alerting.
         metrics.mutationAccepted("tree-access-service", "emergency_authorize");
         TreeAccessProto.AuthorizeResponse.Builder b = TreeAccessProto.AuthorizeResponse.newBuilder();
         try {
@@ -50,6 +78,7 @@ public class TreeAccessLookupService extends TreeAccessProtoGrpc.TreeAccessLooku
             UUID userId = UUID.fromString(request.getUserId());
             long expectedRevision = request.getExpectedRevision();
 
+            // Bước 1: tìm bản ghi cây — nếu cây không tồn tại thì trả NOT_FOUND luôn.
             Optional<Tree> treeOpt = repo.findTree(treeId);
             if (treeOpt.isEmpty()) {
                 b.setOutcome(TreeAccessProto.AuthorizeResponse.Outcome.NOT_FOUND);
@@ -60,6 +89,7 @@ public class TreeAccessLookupService extends TreeAccessProtoGrpc.TreeAccessLooku
             Tree tree = treeOpt.get();
             b.setRevision(tree.revision()).setEpoch(tree.epoch());
 
+            // Bước 2: luật bất biến chủ sở hữu — owner luôn là ADMIN, không phụ thuộc hàng projection.
             if (tree.ownerUserId().equals(userId)) {
                 b.setOutcome(TreeAccessProto.AuthorizeResponse.Outcome.AUTHORIZED)
                  .setRole("ADMIN").setCanEdit(true).setCanView(true);
@@ -68,17 +98,22 @@ public class TreeAccessLookupService extends TreeAccessProtoGrpc.TreeAccessLooku
                 return;
             }
 
+            // Bước 3: với người dùng thường, dựa vào projection: thiếu → NOT_FOUND;
+            // đã thu hồi → DENIED; revision cũ → STALE; bằng hoặc mới hơn → AUTHORIZED.
             Optional<AuthorizationProjection> proj = repo.findProjection(treeId, userId);
             if (proj.isEmpty()) {
                 b.setOutcome(TreeAccessProto.AuthorizeResponse.Outcome.NOT_FOUND);
             } else {
                 AuthorizationProjection p = proj.get();
                 if (p.revoked()) {
+                    // Quyền đã bị thu hồi — từ chối truy cập ngay cả khi revision khớp.
                     b.setOutcome(TreeAccessProto.AuthorizeResponse.Outcome.DENIED);
                 } else if (p.revision() < expectedRevision) {
+                    // Projection cũ hơn revision mà caller mong đợi — stale, caller nên chờ tái tạo.
                     b.setOutcome(TreeAccessProto.AuthorizeResponse.Outcome.STALE)
                      .setRole(p.role() == null ? "" : p.role().name());
                 } else {
+                    // Projection đủ mới — cấp quyền theo vai trò và quyền hạn của role.
                     b.setOutcome(TreeAccessProto.AuthorizeResponse.Outcome.AUTHORIZED)
                      .setRole(p.role() == null ? "" : p.role().name())
                      .setCanEdit(p.canEdit())
@@ -86,15 +121,24 @@ public class TreeAccessLookupService extends TreeAccessProtoGrpc.TreeAccessLooku
                 }
             }
         } catch (StaleProjectionException spe) {
+            // Lỗi do projection stale từ tầng dưới — suy ra STALE và ghi log mức debug.
             LOG.debug("Emergency lookup stale tree={} user={}", request.getTreeId(), request.getUserId());
             b.setOutcome(TreeAccessProto.AuthorizeResponse.Outcome.STALE);
         } catch (IllegalArgumentException iae) {
+            // UUID không hợp lệ, dữ liệu không xác định — trả UNKNOWN để caller quyết định.
             b.setOutcome(TreeAccessProto.AuthorizeResponse.Outcome.UNKNOWN);
         }
         responseObserver.onNext(b.build());
         responseObserver.onCompleted();
     }
 
+    /**
+     * Trả về revision/epoch/state hiện tại của một cây. Dùng cho các dịch vụ
+     * khác cần xác minh cây có tồn tại và đang ở trạng thái nào trước khi tham gia Saga.
+     *
+     * @param request          yêu cầu chứa treeId cần truy vấn
+     * @param responseObserver luồng phản hồi gRPC, sẽ được đóng sau khi trả về kết quả
+     */
     @Override
     public void getTreeRevision(TreeAccessProto.GetTreeRevisionRequest request,
                                 StreamObserver<TreeAccessProto.GetTreeRevisionResponse> responseObserver) {
@@ -103,14 +147,17 @@ public class TreeAccessLookupService extends TreeAccessProtoGrpc.TreeAccessLooku
             UUID treeId = UUID.fromString(request.getTreeId());
             Optional<Tree> tree = repo.findTree(treeId);
             if (tree.isPresent()) {
+                // Có cây — trả kèm revision/epoch/state. Dùng state.name() để gửi chuỗi ổn định.
                 b.setFound(true)
                  .setRevision(tree.get().revision())
                  .setEpoch(tree.get().epoch())
                  .setState(tree.get().state().name());
             } else {
+                // Không tìm thấy cây — đánh dấu found=false để caller biết tiếp tục hay dừng.
                 b.setFound(false);
             }
         } catch (IllegalArgumentException iae) {
+            // UUID không hợp lệ — trả found=false, không ném lỗi ra ngoài RPC.
             b.setFound(false);
         }
         responseObserver.onNext(b.build());

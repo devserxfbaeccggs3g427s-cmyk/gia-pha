@@ -30,6 +30,9 @@ public class UpdateMemberUseCase {
     private final PlatformMetrics metrics;
     private final Clock clock;
 
+    /**
+     * Khởi tạo use case cập nhật thành viên.
+     */
     public UpdateMemberUseCase(MemberRepository repo, MemberEventPublisher publisher,
                                 AuthorizationProjection authz, PlatformMetrics metrics, Clock clock) {
         this.repo = repo;
@@ -39,14 +42,25 @@ public class UpdateMemberUseCase {
         this.clock = clock;
     }
 
+    /**
+     * Cập nhật thông tin một thành viên: hỗ trợ cập nhật một phần (displayName, profile, v.v.).
+     *
+     * @param cmd lệnh cập nhật
+     * @throws MemberNotFoundException    nếu thành viên không tồn tại
+     * @throws MemberTombstonedException  nếu thành viên đã tombstone
+     * @throws ForbiddenException         nếu người dùng không có quyền
+     */
     @Transactional
     public void execute(UpdateMemberCommand cmd) {
         metrics.mutationAccepted("member-service", "updateMember");
+        // Tra cứu thành viên, báo lỗi nếu không tồn tại
         Member m = repo.findById(cmd.memberId())
                 .orElseThrow(() -> new MemberNotFoundException("Member " + cmd.memberId() + " not found"));
+        // Không cho phép cập nhật thành viên đã tombstone
         if (m.isTombstoned()) {
             throw new MemberTombstonedException("Member " + cmd.memberId() + " is tombstoned");
         }
+        // Kiểm tra quyền trên cây
         AuthorizationProjection.Decision<MemberAuthRow> decision =
                 authz.authorize(m.treeId(), cmd.actingUser(), cmd.expectedTreeRevision(), MemberAuthRow.class);
         if (!decision.isAllowed()) {
@@ -55,14 +69,18 @@ public class UpdateMemberUseCase {
                             + " (decision=" + decision.state() + ")");
         }
         Instant now = clock.now();
+        // Cập nhật một phần: rename nếu displayName được cung cấp, ngược lại bỏ qua
         if (cmd.displayName() != null) m.rename(cmd.displayName(), cmd.expectedVersion(), now);
+        // Cập nhật các trường profile
         m.updateProfile(cmd.givenName(), cmd.surname(), cmd.birthDate(), cmd.deathDate(),
                 cmd.gender(), cmd.generation(), cmd.notes(), cmd.expectedVersion(), now);
         repo.update(m);
+        // Phát sự kiện MemberCreated (mặc dù là update, đây là mẫu sự kiện của hệ thống)
         publisher.publish(new MemberCreated(m.treeId(), m.id(), m.userId(), m.displayName(),
                 m.gender(), m.status(), m.version(), 1L, now));
         LOG.info("Updated member id={} version={} actingUser={}", m.id(), m.version(), cmd.actingUser());
     }
 
+    /** Đồng hồ tiêm được cho use case. */
     public interface Clock { Instant now(); }
 }

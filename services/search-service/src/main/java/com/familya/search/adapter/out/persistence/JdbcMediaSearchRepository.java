@@ -11,15 +11,30 @@ import java.sql.Timestamp;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Triển khai JDBC của {@link MediaSearchRepository}, đọc từ bảng
+ * {@code search_media_doc}.
+ */
 @Component
 public class JdbcMediaSearchRepository implements MediaSearchRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
 
+    /**
+     * Khởi tạo repository với JDBC template dùng chung.
+     *
+     * @param jdbc JDBC template dùng để truy vấn/xoá.
+     */
     public JdbcMediaSearchRepository(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Xoá toàn bộ tài liệu media thuộc một cây.
+     *
+     * @param treeId định danh cây gia phả.
+     * @return số bản ghi đã xoá.
+     */
     @Override
     public long deleteByTree(UUID treeId) {
         return jdbc.update(
@@ -27,6 +42,15 @@ public class JdbcMediaSearchRepository implements MediaSearchRepository {
                 new MapSqlParameterSource("t", treeId.toString()));
     }
 
+    /**
+     * Tìm kiếm tài liệu media theo chuỗi đã chuẩn hoá và bộ lọc.
+     *
+     * @param filter          bộ lọc (kind, tombstoned) hoặc {@code null}.
+     * @param normalizedQuery chuỗi truy vấn đã chuẩn hoá; rỗng/blank thì bỏ qua LIKE.
+     * @param treeId          định danh cây gia phả.
+     * @param limit           số kết quả tối đa.
+     * @return danh sách tài liệu khớp.
+     */
     @Override
     public List<MediaSearchDocument> search(SearchMediaCommand.MediaFilter filter,
                                             String normalizedQuery, UUID treeId, int limit) {
@@ -55,6 +79,12 @@ public class JdbcMediaSearchRepository implements MediaSearchRepository {
         return rows.stream().map(this::fromRow).toList();
     }
 
+    /**
+     * Ánh xạ một dòng kết quả thành {@link MediaSearchDocument}.
+     *
+     * @param r dòng kết quả từ JDBC.
+     * @return tài liệu media tương ứng.
+     */
     private MediaSearchDocument fromRow(java.util.Map<String, Object> r) {
         return new MediaSearchDocument(
                 UUID.fromString((String) r.get("tree_id")),

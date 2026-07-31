@@ -11,27 +11,61 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Adapter {@link DeleteTreeSagaGateway}: dùng outbox để stage các lệnh Saga
+ * delete-tree. Mọi bản tin gửi đi sẽ chứa causationId = operationId để có thể
+ * tái dựng chuỗi causality khi truy vết.
+ */
 @Component
 public class OutboxDeleteTreeSagaGateway implements DeleteTreeSagaGateway {
 
+    /** Bộ stage sự kiện vòng đời Saga. */
     private final OperationLifecycleOutboxStager lifecycle;
+
+    /** ObjectMapper — chỉ dùng để ép serialize kiểm tra trước khi ghi outbox. */
     private final ObjectMapper json;
 
+    /**
+     * Khởi tạo gateway.
+     *
+     * @param lifecycle bộ stage vòng đời Saga
+     * @param json      bộ mapper JSON
+     */
     public OutboxDeleteTreeSagaGateway(OperationLifecycleOutboxStager lifecycle, ObjectMapper json) {
         this.lifecycle = lifecycle;
         this.json = json;
     }
 
+    /**
+     * Stage lệnh đầu tiên của Saga tới participant tương ứng. Đây là lệnh forward
+     * (không phải compensation).
+     *
+     * @param state trạng thái Saga hiện tại
+     * @param step  bước cần được gửi đi
+     */
     @Override
     public void stageFirstStep(DeleteTreeSagaState state, DeleteTreeSagaStep step) {
         stageCommand(state, step.stepCode(), step.sequenceNo(), false);
     }
 
+    /**
+     * Stage lệnh compensation cho bước đã ACK trước đó. Mã bước compensation
+     * được sinh từ {@link #compensationStepCode(String)}.
+     *
+     * @param state trạng thái Saga hiện tại
+     * @param step  bước gốc cần bù
+     */
     @Override
     public void stageCompensation(DeleteTreeSagaState state, DeleteTreeSagaStep step) {
         stageCommand(state, compensationStepCode(step.stepCode()), step.sequenceNo(), true);
     }
 
+    /**
+     * Stage sự kiện {@code OperationStarted} lên topic {@code operations.events.v1}.
+     * Sự kiện này đánh dấu thời điểm Saga bắt đầu, dùng cho giao diện theo dõi.
+     *
+     * @param state trạng thái Saga khi vừa initiate
+     */
     @Override
     public void stageOperationStarted(DeleteTreeSagaState state) {
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -48,11 +82,23 @@ public class OutboxDeleteTreeSagaGateway implements DeleteTreeSagaGateway {
         lifecycle.stage(payload, "operations.events.v1", "OperationStarted");
     }
 
+    /**
+     * Stage sự kiện thay đổi trạng thái Saga mà không kèm routing lỗi.
+     *
+     * @param state trạng thái Saga hiện tại
+     */
     @Override
     public void stageOperationStateChanged(DeleteTreeSagaState state) {
         stageOperationStateChanged(state, null);
     }
 
+    /**
+     * Stage sự kiện {@code OperationStateChanged} kèm thông tin định tuyến lỗi
+     * (ví dụ {@code MANUAL_REVIEW} hoặc {@code COMPENSATING}).
+     *
+     * @param state          trạng thái Saga
+     * @param failureRouting mã định tuyến lỗi hoặc {@code null}
+     */
     @Override
     public void stageOperationStateChanged(DeleteTreeSagaState state, String failureRouting) {
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -71,7 +117,18 @@ public class OutboxDeleteTreeSagaGateway implements DeleteTreeSagaGateway {
         lifecycle.stage(payload, "operations.events.v1", "OperationStateChanged");
     }
 
+    /**
+     * Stage một lệnh Saga lên outbox. Lệnh có thể là forward hoặc compensation
+     * tuỳ tham số {@code compensation}. Trước khi ghi, payload được serialize
+     * thử để phát hiện sớm lỗi JSON.
+     *
+     * @param state        trạng thái Saga hiện tại
+     * @param stepCode     mã bước (đã được map sang forward hoặc compensation)
+     * @param sequenceNo   số thứ tự bước
+     * @param compensation {@code true} nếu lệnh là compensation, ngược lại là forward
+     */
     private void stageCommand(DeleteTreeSagaState state, String stepCode, int sequenceNo, boolean compensation) {
+        // Tạo bản tin Saga chuẩn theo schema v1.
         Map<String, Object> env = new LinkedHashMap<>();
         env.put("eventId", UUID.randomUUID().toString());
         env.put("correlationId", state.correlationId().toString());
@@ -86,13 +143,22 @@ public class OutboxDeleteTreeSagaGateway implements DeleteTreeSagaGateway {
         env.put("isCompensation", compensation);
         env.put("stepCode", stepCode);
         env.put("sequenceNo", sequenceNo);
+        // Thử serialize để chắc chắn payload hợp lệ trước khi xuất bản.
         try { json.writeValueAsString(env); } catch (Exception e) {
             throw new IllegalStateException("Failed to serialize Saga envelope", e);
         }
+        // Topic lệnh Saga là "tree.commands.v1"; eventType phân biệt command/compensation.
         lifecycle.stage(env, "tree.commands.v1",
                 compensation ? "DeleteTreeSagaCompensation" : "DeleteTreeSagaCommand");
     }
 
+    /**
+     * Map mã bước forward sang mã bước compensation tương ứng. Với các mã không
+     * có ánh xạ cụ thể, mặc định tiền tố {@code RESTORE_}.
+     *
+     * @param forwardCode mã bước forward
+     * @return mã bước compensation tương ứng
+     */
     private static String compensationStepCode(String forwardCode) {
         return switch (forwardCode) {
             case "PURGE_MEMBER_TREE"         -> "RESTORE_MEMBER_TREE";
