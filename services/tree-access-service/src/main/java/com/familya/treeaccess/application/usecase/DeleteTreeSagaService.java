@@ -1,5 +1,7 @@
 package com.familya.treeaccess.application.usecase;
 
+import com.familya.treeaccess.adapter.out.events.DeleteTreeSagaCommandContext;
+import com.familya.treeaccess.adapter.out.persistence.JdbcOperationAuditWriter;
 import com.familya.treeaccess.application.port.in.InitiateDeleteTreeCommand;
 import com.familya.treeaccess.application.port.out.DeleteTreeSagaGateway;
 import com.familya.treeaccess.application.port.out.DeleteTreeSagaRepository;
@@ -12,8 +14,11 @@ import com.familya.treeaccess.domain.model.DeleteTreeSagaState;
 import com.familya.treeaccess.domain.model.DeleteTreeSagaStep;
 import com.familya.treeaccess.domain.model.Tree;
 import com.familya.treeaccess.domain.model.AuthorizationProjection;
+import com.familya.platform.api.AsyncOperation;
 import com.familya.platform.error.ForbiddenException;
 import com.familya.platform.error.OptimisticConcurrencyException;
+import com.familya.platform.idempotency.IdempotencyStore;
+import com.familya.platform.idempotency.SagaIdempotency;
 import com.familya.platform.telemetry.PlatformMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -52,29 +58,31 @@ public class DeleteTreeSagaService {
     private final PlatformMetrics metrics;
     /** Đồng hồ tiêm được. */
     private final Clock clock;
+    /** Kho idempotency (cùng transaction). */
+    private final IdempotencyStore idempotency;
+    /** Writer cho {@code operation_audit} cục bộ. */
+    private final JdbcOperationAuditWriter operationAudit;
+    /** Context causation/traceparent Saga. */
+    private final DeleteTreeSagaCommandContext commandContext;
 
-    /**
-     * Khởi tạo service điều phối Saga.
-     *
-     * @param sagaRepo  kho lưu trữ Saga
-     * @param gateway   gateway outbox
-     * @param treeRepo  kho lưu trữ cây
-     * @param publisher bộ publish sự kiện
-     * @param metrics   metric giám sát
-     * @param clock     đồng hồ
-     */
     public DeleteTreeSagaService(DeleteTreeSagaRepository sagaRepo,
                                  DeleteTreeSagaGateway gateway,
                                  TreeRepository treeRepo,
                                  TreeEventPublisher publisher,
                                  PlatformMetrics metrics,
-                                 Clock clock) {
+                                 Clock clock,
+                                 IdempotencyStore idempotency,
+                                 JdbcOperationAuditWriter operationAudit,
+                                 DeleteTreeSagaCommandContext commandContext) {
         this.sagaRepo = sagaRepo;
         this.gateway = gateway;
         this.treeRepo = treeRepo;
         this.publisher = publisher;
         this.metrics = metrics;
         this.clock = clock;
+        this.idempotency = idempotency;
+        this.operationAudit = operationAudit;
+        this.commandContext = commandContext;
     }
 
     /**
@@ -94,8 +102,19 @@ public class DeleteTreeSagaService {
      * @return mã thao tác Saga bền vững
      */
     @Transactional
-    public UUID initiate(InitiateDeleteTreeCommand cmd) {
+    public AsyncOperation initiate(InitiateDeleteTreeCommand cmd) {
         metrics.mutationAccepted("tree-access-service", "deleteTree");
+
+        String idempotencyKey = cmd.idempotencyKey();
+        String payloadHash = SagaIdempotency.canonicalHash(
+                "delete-tree", cmd.actingUser(), cmd.treeId().toString(),
+                cmd.expectedTreeVersion() + "|" + cmd.expectedTreeEpoch() + "|" + cmd.placeRetentionHolds());
+        Optional<AsyncOperation> existing = SagaIdempotency.reserve(idempotency, idempotencyKey);
+        if (existing.isPresent()) {
+            metrics.mutationAcceptedCounter("tree-access-service", "delete_tree_idempotent").increment();
+            return existing.get();
+        }
+
         Tree tree = treeRepo.findTree(cmd.treeId())
                 .orElseThrow(() -> new TreeNotFoundException("Tree " + cmd.treeId() + " not found"));
 
@@ -108,7 +127,6 @@ public class DeleteTreeSagaService {
         UUID operationId = UUID.randomUUID();
         UUID correlationId = UUID.randomUUID();
 
-        // Barrier: phải đạt được revision/epoch này trước khi finalize.
         long targetRevision = tree.revision() + 1;
         long targetEpoch = tree.epoch() + 1;
 
@@ -118,8 +136,6 @@ public class DeleteTreeSagaService {
                 targetRevision, targetEpoch,
                 now.plus(DEFAULT_DEADLINE), now, null, now, null, null, null);
 
-        // Thứ tự bước: đóng băng/tombstone cục bộ (1,2) → fan-out tới tham gia viên (3-8) → finalize cục bộ (9).
-        // Bước 1/2/9 thuộc owner nên chạy nội bộ, không cần gửi Kafka.
         List<DeleteTreeSagaStep> steps = List.of(
                 step(operationId, 1,  "FREEZE_TREE",              "tree-access-service", true,  true),
                 step(operationId, 2,  "TOMBSTONE_TREE",           "tree-access-service", true,  true),
@@ -134,8 +150,6 @@ public class DeleteTreeSagaService {
         sagaRepo.saveState(state);
         sagaRepo.saveSteps(steps);
 
-        // Bước 1 (FREEZE_TREE) là owner-local: ACTIVE → FROZEN để chặn ghi ngay lập tức.
-        // Tombstone được hoãn tới Bước 9 (FINALIZE_TREE_DELETION) để rollback có thể "phục hồi" trước rào chắn không thể đảo ngược.
         tree.freeze(cmd.expectedTreeVersion());
         treeRepo.updateTree(tree);
         DeleteTreeSagaStep freezeStep = steps.get(0);
@@ -152,6 +166,12 @@ public class DeleteTreeSagaService {
                 tree.id(), tree.revision(), tree.epoch(),
                 operationId, "delete-tree-saga:freeze", now));
 
+        operationAudit.recordInitiated(operationId, correlationId, cmd.treeId(),
+                cmd.actingUser(), cmd.treeId(), "delete-tree",
+                targetRevision, targetEpoch, now);
+
+        commandContext.startSaga(cmd.traceparent());
+
         gateway.stageOperationStarted(state);
         dispatchFirstParticipant(state, steps.get(2), now); // bước participant đầu tiên
         state.transitionTo(DeleteTreeSagaState.State.FREEZING, now);
@@ -159,8 +179,11 @@ public class DeleteTreeSagaService {
         state.transitionTo(DeleteTreeSagaState.State.PURGING, now);
         sagaRepo.saveState(state);
 
+        AsyncOperation envelope = AsyncOperation.accepted(operationId, "/api/v2/operations/" + operationId);
+        SagaIdempotency.commit(idempotency, idempotencyKey, payloadHash, envelope);
+
         LOG.info("Initiated delete-tree Saga operationId={} treeId={}", operationId, tree.id());
-        return operationId;
+        return envelope;
     }
 
     /**

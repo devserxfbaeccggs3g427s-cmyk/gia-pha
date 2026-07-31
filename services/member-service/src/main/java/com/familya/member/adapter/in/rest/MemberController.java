@@ -128,15 +128,17 @@ public class MemberController {
                                                      @PathVariable UUID memberId,
                                                      @RequestHeader(value = "If-Match", required = false) Long expectedVersion,
                                                      @RequestHeader(value = "X-Tree-Revision", required = false) Long expectedTreeRevision,
-                                                     @RequestHeader(value = "X-Tree-Epoch", required = false) Long expectedTreeEpoch) {
+                                                     @RequestHeader(value = "X-Tree-Epoch", required = false) Long expectedTreeEpoch,
+                                                     @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+                                                     @RequestHeader(value = "traceparent", required = false) String traceparent) {
         long ev = expectedVersion == null ? 0L : expectedVersion;
         long er = expectedTreeRevision == null ? 0L : expectedTreeRevision;
         long ee = expectedTreeEpoch == null ? 0L : expectedTreeEpoch;
-        UUID operationId = deleteMemberSaga.initiate(new InitiateDeleteMemberCommand(
-                treeId, memberId, actingUser, ev, er, ee));
+        AsyncOperation envelope = deleteMemberSaga.initiate(new InitiateDeleteMemberCommand(
+                treeId, memberId, actingUser, ev, er, ee, idempotencyKey, traceparent));
         return ResponseEntity.accepted()
-                .header("Location", "/api/v2/operations/" + operationId)
-                .body(AsyncOperation.accepted(operationId, "/api/v2/operations/" + operationId));
+                .header("Location", "/api/v2/operations/" + envelope.operationId())
+                .body(envelope);
     }
 
     /**

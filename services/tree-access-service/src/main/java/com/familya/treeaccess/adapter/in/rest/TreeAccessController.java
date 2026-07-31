@@ -198,14 +198,16 @@ public class TreeAccessController {
                                                       @PathVariable UUID treeId,
                                                       @RequestHeader(value = "If-Match", required = false) Long expectedVersion,
                                                       @RequestHeader(value = "X-Tree-Epoch", required = false) Long expectedEpoch,
-                                                      @RequestParam(value = "placeRetentionHolds", required = false, defaultValue = "true") boolean placeRetentionHolds) {
+                                                      @RequestParam(value = "placeRetentionHolds", required = false, defaultValue = "true") boolean placeRetentionHolds,
+                                                      @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+                                                      @RequestHeader(value = "traceparent", required = false) String traceparent) {
         long ev = expectedVersion == null ? 0L : expectedVersion;
         long ee = expectedEpoch == null ? 0L : expectedEpoch;
-        UUID operationId = deleteTreeSaga.initiate(new InitiateDeleteTreeCommand(
-                treeId, actingUser, ev, ee, placeRetentionHolds));
+        AsyncOperation envelope = deleteTreeSaga.initiate(new InitiateDeleteTreeCommand(
+                treeId, actingUser, ev, ee, placeRetentionHolds, idempotencyKey, traceparent));
         return ResponseEntity.accepted()
-                .header("Location", "/api/v2/operations/" + operationId)
-                .body(AsyncOperation.accepted(operationId, "/api/v2/operations/" + operationId));
+                .header("Location", "/api/v2/operations/" + envelope.operationId())
+                .body(envelope);
     }
 
     /**

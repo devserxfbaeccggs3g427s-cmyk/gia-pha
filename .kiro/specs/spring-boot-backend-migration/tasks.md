@@ -126,9 +126,9 @@ All tasks are intentionally unchecked. Execute in dependency order. No task in t
   - _Requirements: 2.6, 7.6, 8.6, 10.7_
 
 - [ ] 13. Implement Saga and Operations foundation
-  - [ ] 13.1 Implement operation API, durable state machines, transition guards, idempotency, and authorized operator actions
-  - [ ] 13.2 Implement correlation/causation propagation, participant acknowledgements, deadlines, retries, DLQ, compensation, and manual review
-  - [ ] 13.3 Build Audit & Operations projections without using them as business or authorization authority
+  - [x] 13.1 Implement operation API, durable state machines, transition guards, idempotency, and authorized operator actions
+  - [x] 13.2 Implement correlation/causation propagation, participant acknowledgements, deadlines, retries, DLQ, compensation, and manual review
+  - [x] 13.3 Build Audit & Operations projections without using them as business or authorization authority
   - [x] 13.4 Implement delete-member and delete-tree Sagas
     - [x] Owner-side Saga persistence (state, step, compensation snapshot) for both Member and Tree Access.
     - [x] Deterministic participant sequence with barrier (target aggregate version + epoch).

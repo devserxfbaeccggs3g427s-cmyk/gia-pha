@@ -1,5 +1,7 @@
 package com.familya.member.application.usecase;
 
+import com.familya.member.adapter.out.events.DeleteMemberSagaCommandContext;
+import com.familya.member.adapter.out.persistence.JdbcOperationAuditWriter;
 import com.familya.member.application.port.in.InitiateDeleteMemberCommand;
 import com.familya.member.application.port.out.DeleteMemberSagaGateway;
 import com.familya.member.application.port.out.DeleteMemberSagaRepository;
@@ -10,8 +12,11 @@ import com.familya.member.domain.exception.MemberNotFoundException;
 import com.familya.member.domain.model.DeleteMemberSagaState;
 import com.familya.member.domain.model.DeleteMemberSagaStep;
 import com.familya.member.domain.model.Member;
+import com.familya.platform.api.AsyncOperation;
 import com.familya.platform.error.ForbiddenException;
 import com.familya.platform.error.OptimisticConcurrencyException;
+import com.familya.platform.idempotency.IdempotencyStore;
+import com.familya.platform.idempotency.SagaIdempotency;
 import com.familya.platform.projection.AuthorizationProjection;
 import com.familya.platform.telemetry.PlatformMetrics;
 import org.slf4j.Logger;
@@ -22,18 +27,19 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
  * Dịch vụ khởi tạo Saga xóa thành viên. Thực hiện:
  * <ol>
+ *   <li>Reserve-or-replay idempotency (theo owner + command + principal + Idempotency-Key).</li>
  *   <li>Kiểm tra quyền và trạng thái thành viên.</li>
  *   <li>Tombstone thành viên cục bộ (bước 1, owner-local).</li>
- *   <li>Khởi tạo state Saga và năm bước Saga (1 owner-local + 4 participant).</li>
+ *   <li>Khởi tạo state Saga, ghi {@code operation_audit} (cùng transaction).</li>
  *   <li>Stage OperationStarted, dispatch bước participant đầu tiên, stage OperationStateChanged.</li>
+ *   <li>Commit idempotency record.</li>
  * </ol>
- *
- * <p>Đây là bean {@code @Service} thuộc tầng application/usecase trong kiến trúc Hexagonal.
  */
 @Service
 public class DeleteMemberSagaService {
@@ -52,25 +58,20 @@ public class DeleteMemberSagaService {
     private final AuthorizationProjection authz;
     private final PlatformMetrics metrics;
     private final Clock clock;
+    private final IdempotencyStore idempotency;
+    private final JdbcOperationAuditWriter operationAudit;
+    private final DeleteMemberSagaCommandContext commandContext;
 
-    /**
-     * Khởi tạo dịch vụ Saga với các phụ thuộc cần thiết.
-     *
-     * @param sagaRepo         kho Saga
-     * @param gateway          gateway phát lệnh Saga
-     * @param memberRepo       kho thành viên
-     * @param memberPublisher  cổng phát sự kiện thành viên
-     * @param authz            projection ủy quyền
-     * @param metrics          bộ metric
-     * @param clock            đồng hồ tiêm được
-     */
     public DeleteMemberSagaService(DeleteMemberSagaRepository sagaRepo,
                                    DeleteMemberSagaGateway gateway,
                                    MemberRepository memberRepo,
                                    MemberEventPublisher memberPublisher,
                                    AuthorizationProjection authz,
                                    PlatformMetrics metrics,
-                                   Clock clock) {
+                                   Clock clock,
+                                   IdempotencyStore idempotency,
+                                   JdbcOperationAuditWriter operationAudit,
+                                   DeleteMemberSagaCommandContext commandContext) {
         this.sagaRepo = sagaRepo;
         this.gateway = gateway;
         this.memberRepo = memberRepo;
@@ -78,36 +79,40 @@ public class DeleteMemberSagaService {
         this.authz = authz;
         this.metrics = metrics;
         this.clock = clock;
+        this.idempotency = idempotency;
+        this.operationAudit = operationAudit;
+        this.commandContext = commandContext;
     }
 
     /**
      * Khởi tạo Saga xóa thành viên, trả về {@code operationId} để client theo dõi.
-     *
-     * @param cmd lệnh khởi tạo
-     * @return mã operationId bền vững của Saga
-     * @throws MemberNotFoundException       nếu thành viên không tồn tại
-     * @throws IllegalArgumentException      nếu thành viên không thuộc cây đã cho
-     * @throws OptimisticConcurrencyException nếu thành viên đã được tombstone
-     * @throws ForbiddenException            nếu người dùng không có quyền
      */
     @Transactional
-    public UUID initiate(InitiateDeleteMemberCommand cmd) {
+    public AsyncOperation initiate(InitiateDeleteMemberCommand cmd) {
         metrics.mutationAccepted("member-service", "deleteMember");
+
+        String idempotencyKey = cmd.idempotencyKey();
+        String payloadHash = SagaIdempotency.canonicalHash(
+                "delete-member", cmd.actingUser(), cmd.treeId().toString(),
+                cmd.memberId() + "|" + cmd.expectedTreeRevision() + "|" + cmd.expectedTreeEpoch());
+        Optional<AsyncOperation> existing = SagaIdempotency.reserve(idempotency, idempotencyKey);
+        if (existing.isPresent()) {
+            metrics.mutationAcceptedCounter("member-service", "delete_member_idempotent").increment();
+            return existing.get();
+        }
+
         // Tra cứu thành viên, báo lỗi nếu không tồn tại
         Member m = memberRepo.findById(cmd.memberId())
                 .orElseThrow(() -> new MemberNotFoundException(
                         "Member " + cmd.memberId() + " not found"));
-        // Đảm bảo thành viên thuộc đúng cây được yêu cầu
         if (!m.treeId().equals(cmd.treeId())) {
             throw new IllegalArgumentException(
                     "Member " + cmd.memberId() + " does not belong to tree " + cmd.treeId());
         }
-        // Báo lỗi nếu thành viên đã tombstone (tránh xóa trùng)
         if (m.isTombstoned()) {
             throw new OptimisticConcurrencyException(
                     "Member " + cmd.memberId() + " is already tombstoned");
         }
-        // Kiểm tra quyền: người dùng phải có khả năng chỉnh sửa cây
         AuthorizationProjection.Decision<com.familya.member.domain.model.MemberAuthRow> decision =
                 authz.authorize(m.treeId(), cmd.actingUser(), cmd.expectedTreeRevision(),
                         com.familya.member.domain.model.MemberAuthRow.class);
@@ -123,8 +128,6 @@ public class DeleteMemberSagaService {
         long targetRevision = cmd.expectedTreeRevision() + 1;
         long targetEpoch = cmd.expectedTreeEpoch() + 1;
 
-        // Bước 1 là owner-local: tombstone thành viên và phát domain event trong cùng
-        // transaction để participant không bao giờ quan sát thấy thành viên còn "sống".
         m.tombstone(cmd.expectedMemberVersion(), now);
         memberRepo.update(m);
         memberPublisher.publish(new MemberTombstoned(
@@ -137,7 +140,6 @@ public class DeleteMemberSagaService {
                 targetRevision, targetEpoch,
                 now.plus(DEFAULT_DEADLINE), now, null, now, null, null, null);
 
-        // Bước 1 là owner-local (compensatable=false, không cần Kafka). Bước 2..5 là participant.
         List<DeleteMemberSagaStep> steps = List.of(
                 step(operationId, 1, "TOMBSTONE_MEMBER",          "member-service",        true, false, m.version(), targetEpoch),
                 step(operationId, 2, "DISABLE_RELATIONSHIPS",     "relationship-service",  true, true,  null, null),
@@ -148,21 +150,31 @@ public class DeleteMemberSagaService {
         sagaRepo.saveState(state);
         sagaRepo.saveSteps(steps);
 
-        // Bước 1 đã hoàn tất (owner-local). Đánh dấu ACK để bộ đếm attempt bắt đầu từ 1
-        // cho participant đầu tiên.
         DeleteMemberSagaStep first = steps.get(0);
         first.dispatch(now);
         first.ack(now, m.version(), targetEpoch);
         sagaRepo.updateStep(first);
 
-        // Phát OperationStarted, dispatch participant đầu tiên, phát OperationStateChanged
+        // Ghi operation_audit trong cùng transaction để OperationProjectionAdapter
+        // có thể trả envelope ngay khi client poll.
+        operationAudit.recordInitiated(operationId, correlationId, cmd.treeId(),
+                cmd.actingUser(), cmd.memberId(), "delete-member",
+                targetRevision, targetEpoch, now);
+
+        // Set context cho causation/traceparent chain; clear khi Saga kết thúc
+        // (lifecycle xử lý ở các lớp sâu hơn).
+        commandContext.startSaga(cmd.traceparent());
+
         gateway.stageOperationStarted(state);
         dispatchFirstParticipant(state, steps.get(1), now);
         gateway.stageOperationStateChanged(state);
 
+        AsyncOperation envelope = AsyncOperation.accepted(operationId, "/api/v2/operations/" + operationId);
+        SagaIdempotency.commit(idempotency, idempotencyKey, payloadHash, envelope);
+
         LOG.info("Initiated delete-member Saga operationId={} memberId={} treeId={}",
                 operationId, cmd.memberId(), cmd.treeId());
-        return operationId;
+        return envelope;
     }
 
     /**

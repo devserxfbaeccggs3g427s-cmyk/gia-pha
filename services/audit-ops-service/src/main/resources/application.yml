@@ -17,14 +17,9 @@ familya:
       interval-ms: 500
   grpc:
     server:
-      enabled: true
-      port: 9090
+      enabled: false
   kafka: { partitions: 12, replication-factor: 3 }
   auditops:
-    saga:
-      max-attempts: 5
-      retry-base-ms: 500
-      retry-max-ms: 30000
     operator:
       admin-roles: AUDIT_OPERATOR,PLATFORM
 

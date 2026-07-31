@@ -10,11 +10,15 @@ import java.util.UUID;
  * @param expectedTreeVersion phiên bản cây kỳ vọng
  * @param expectedTreeEpoch   epoch cây kỳ vọng
  * @param placeRetentionHolds có đặt retention hold hay không
+ * @param idempotencyKey      client-generated key cho reserve-or-replay
+ * @param traceparent         W3C trace context (optional)
  */
 public record InitiateDeleteTreeCommand(
         UUID treeId,
         UUID actingUser,
         long expectedTreeVersion,
         long expectedTreeEpoch,
-        boolean placeRetentionHolds) {
+        boolean placeRetentionHolds,
+        String idempotencyKey,
+        String traceparent) {
 }

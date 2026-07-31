@@ -32,16 +32,21 @@ public class OutboxDeleteMemberSagaGateway implements DeleteMemberSagaGateway {
 
     private final OperationLifecycleOutboxStager lifecycle;
     private final ObjectMapper json;
+    private final DeleteMemberSagaCommandContext commandContext;
 
     /**
      * Khởi tạo gateway với stager vòng đời và mapper JSON.
      *
      * @param lifecycle stager vòng đời operation
      * @param json      mapper JSON (hiện chỉ dùng để xác thực khả năng serialize của envelope)
+     * @param commandContext bộ nhớ context tạm cho envelope Saga gần nhất (causationId)
      */
-    public OutboxDeleteMemberSagaGateway(OperationLifecycleOutboxStager lifecycle, ObjectMapper json) {
+    public OutboxDeleteMemberSagaGateway(OperationLifecycleOutboxStager lifecycle,
+                                        ObjectMapper json,
+                                        DeleteMemberSagaCommandContext commandContext) {
         this.lifecycle = lifecycle;
         this.json = json;
+        this.commandContext = commandContext;
     }
 
     /**
@@ -159,21 +164,27 @@ public class OutboxDeleteMemberSagaGateway implements DeleteMemberSagaGateway {
      */
     private Map<String, Object> buildEnvelope(DeleteMemberSagaState state, String stepCode, int sequenceNo, boolean compensation) {
         Map<String, Object> env = new LinkedHashMap<>();
-        env.put("eventId", UUID.randomUUID().toString());
+        String eventId = UUID.randomUUID().toString();
+        env.put("eventId", eventId);
         env.put("correlationId", state.correlationId().toString());
-        env.put("causationId", state.operationId().toString());
+        // CausationId is the immediately preceding message id (not operationId) per
+        // saga_common.proto. For the first forward command it falls back to the
+        // operationId (which the relay will see as the originating event of the Saga).
+        String previousEventId = commandContext.lastEventId().orElse(state.operationId().toString());
+        env.put("causationId", previousEventId);
         env.put("operationId", state.operationId().toString());
         env.put("treeId", state.treeId().toString());
         env.put("initiatingUserId", state.initiatingUserId().toString());
         env.put("schemaVersion", "v1");
         env.put("occurredAtEpochMs", Instant.now().toEpochMilli());
-        env.put("traceparent", "");
+        env.put("traceparent", commandContext.traceparent().orElse(""));
         env.put("targetAggregateVersion", state.targetAggregateVersion());
         env.put("targetEpoch", state.targetEpoch());
         env.put("isCompensation", compensation);
         env.put("stepCode", stepCode);
         env.put("sequenceNo", sequenceNo);
         env.put("memberId", state.memberId().toString());
+        commandContext.recordEvent(eventId);
         try {
             json.writeValueAsString(env);
         } catch (JsonProcessingException e) {

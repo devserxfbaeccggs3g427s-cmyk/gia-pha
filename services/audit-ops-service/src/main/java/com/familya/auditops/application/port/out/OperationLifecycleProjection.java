@@ -1,9 +1,8 @@
 /**
- * Port truy vấn và cập nhật projection vòng đời operation.
- *
- * <p>Projection này được dùng cho operator UI và replay lịch sử; nó
- * không phải nguồn dữ liệu nghiệp vụ. Mỗi row tương ứng với một
- * operation đang được các bounded context khác sở hữu.</p>
+ * Port ghi/đọc cho projection vòng đời operation. Implementation nằm trong
+ * {@code JdbcOperationLifecycleProjection}. Bounded context sở hữu Saga vẫn
+ * là nguồn dữ liệu sự thật; projection này chỉ phục vụ operator UI và
+ * truy vết theo ADR-003.
  */
 package com.familya.auditops.application.port.out;
 
@@ -13,36 +12,25 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Interface cung cấp các thao tác CRUD đơn giản trên projection vòng đời.
- *
- * <p>Các phương thức {@code upsertStarted} và {@code applyStateChange}
- * nhận thêm {@code lastEventId} để hỗ trợ debug và replay.</p>
- */
 public interface OperationLifecycleProjection {
 
-    /**
-     * Chèn hoặc cập nhật row khi nhận sự kiện {@code OperationStarted}.
-     *
-     * @param row         dữ liệu vòng đời
-     * @param lastEventId id sự kiện Kafka nguồn
-     */
     void upsertStarted(OperationLifecycleRow row, String lastEventId);
 
-    /**
-     * Cập nhật row khi nhận sự kiện thay đổi trạng thái.
-     *
-     * @param row         dữ liệu vòng đời
-     * @param finalizedAt thời điểm kết thúc (nếu có)
-     * @param lastEventId id sự kiện Kafka nguồn
-     */
     void applyStateChange(OperationLifecycleRow row, Instant finalizedAt, String lastEventId);
 
-    /**
-     * Tìm row theo id operation.
-     *
-     * @param operationId id operation
-     * @return {@link Optional} chứa row nếu tồn tại
-     */
     Optional<OperationLifecycleRow> find(UUID operationId);
+
+    java.util.List<OperationLifecycleRow> findByState(String state, int limit);
+
+    java.util.List<OperationLifecycleRow> findByOwnerService(String ownerService, int limit);
+
+    long countByState(String state);
+
+    long countByOwnerServiceAndState(String ownerService, String state);
+
+    java.util.List<OperationLifecycleRow> findStale(Instant olderThan, int limit);
+
+    java.util.List<Watermark> listWatermarks();
+
+    record Watermark(String topic, long lastOffset, Instant lastSeenAt) { }
 }

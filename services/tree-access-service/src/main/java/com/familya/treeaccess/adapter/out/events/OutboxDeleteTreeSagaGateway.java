@@ -25,15 +25,22 @@ public class OutboxDeleteTreeSagaGateway implements DeleteTreeSagaGateway {
     /** ObjectMapper — chỉ dùng để ép serialize kiểm tra trước khi ghi outbox. */
     private final ObjectMapper json;
 
+    /** Bộ nhớ context tạm cho envelope Saga gần nhất (causationId / traceparent). */
+    private final DeleteTreeSagaCommandContext commandContext;
+
     /**
      * Khởi tạo gateway.
      *
      * @param lifecycle bộ stage vòng đời Saga
      * @param json      bộ mapper JSON
+     * @param commandContext bộ nhớ context tạm
      */
-    public OutboxDeleteTreeSagaGateway(OperationLifecycleOutboxStager lifecycle, ObjectMapper json) {
+    public OutboxDeleteTreeSagaGateway(OperationLifecycleOutboxStager lifecycle,
+                                       ObjectMapper json,
+                                       DeleteTreeSagaCommandContext commandContext) {
         this.lifecycle = lifecycle;
         this.json = json;
+        this.commandContext = commandContext;
     }
 
     /**
@@ -130,19 +137,25 @@ public class OutboxDeleteTreeSagaGateway implements DeleteTreeSagaGateway {
     private void stageCommand(DeleteTreeSagaState state, String stepCode, int sequenceNo, boolean compensation) {
         // Tạo bản tin Saga chuẩn theo schema v1.
         Map<String, Object> env = new LinkedHashMap<>();
-        env.put("eventId", UUID.randomUUID().toString());
+        String eventId = UUID.randomUUID().toString();
+        env.put("eventId", eventId);
         env.put("correlationId", state.correlationId().toString());
-        env.put("causationId", state.operationId().toString());
+        // CausationId is the immediately preceding message id (saga_common.proto)
+        // not operationId; fall back to operationId only for the first forward command.
+        String previousEventId = commandContext.lastEventId().orElse(state.operationId().toString());
+        env.put("causationId", previousEventId);
         env.put("operationId", state.operationId().toString());
         env.put("treeId", state.treeId().toString());
         env.put("initiatingUserId", state.initiatingUserId().toString());
         env.put("schemaVersion", "v1");
         env.put("occurredAtEpochMs", Instant.now().toEpochMilli());
+        env.put("traceparent", commandContext.traceparent().orElse(""));
         env.put("targetAggregateVersion", state.targetAggregateVersion());
         env.put("targetEpoch", state.targetEpoch());
         env.put("isCompensation", compensation);
         env.put("stepCode", stepCode);
         env.put("sequenceNo", sequenceNo);
+        commandContext.recordEvent(eventId);
         // Thử serialize để chắc chắn payload hợp lệ trước khi xuất bản.
         try { json.writeValueAsString(env); } catch (Exception e) {
             throw new IllegalStateException("Failed to serialize Saga envelope", e);

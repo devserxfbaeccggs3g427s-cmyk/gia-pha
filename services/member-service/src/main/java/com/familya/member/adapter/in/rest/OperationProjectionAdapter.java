@@ -1,7 +1,6 @@
 package com.familya.member.adapter.in.rest;
 
 import com.familya.platform.api.AsyncOperation;
-import com.familya.platform.api.OperationQuery;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -14,41 +13,45 @@ import java.util.UUID;
  * Member Service. Triển khai {@link com.familya.platform.api.OperationQuery} bằng cách tra cứu
  * bảng {@code operation_audit}.
  *
- * <p>Bean {@code @Component} thuộc tầng adapter-in trong kiến trúc Hexagonal.
+ * <p>Bean {@code @Component} thuộc tầng adapter-in trong kiến trúc Hexagonal.</p>
  */
 @Component
-public class OperationProjectionAdapter implements OperationQuery {
+public class OperationProjectionAdapter implements com.familya.platform.api.OperationQuery {
 
     private final NamedParameterJdbcTemplate jdbc;
 
-    /**
-     * Khởi tạo adapter với JDBC template.
-     *
-     * @param jdbc template JDBC dùng để truy vấn bảng operation_audit
-     */
     public OperationProjectionAdapter(NamedParameterJdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
-    /**
-     * Tra cứu trạng thái operation theo mã operationId.
-     *
-     * @param operationId mã operation cần tra cứu
-     * @return {@link AsyncOperation} nếu tìm thấy, {@link Optional#empty()} nếu không
-     */
     @Override
     public Optional<AsyncOperation> findById(UUID operationId) {
-        // Truy vấn nhanh chỉ lấy id và status để giảm chi phí I/O
         var rows = jdbc.queryForList(
-                "SELECT id, status FROM operation_audit WHERE id = :id",
+                "SELECT id, status, started_at, updated_at, finished_at FROM operation_audit WHERE id = :id",
                 new MapSqlParameterSource("id", operationId.toString()));
         if (rows.isEmpty()) return Optional.empty();
-        String status = (String) rows.get(0).get("status");
-        AsyncOperation.Status s;
-        // Ánh xạ status từ CSDL sang enum; nếu không hợp lệ thì mặc định là PENDING
-        try { s = AsyncOperation.Status.valueOf(status); }
-        catch (IllegalArgumentException e) { s = AsyncOperation.Status.PENDING; }
+        var r = rows.get(0);
+        String status = (String) r.get("status");
+        AsyncOperation.Status s = mapStatus(status);
+        java.time.Instant updatedAt = r.get("updated_at") == null
+                ? java.time.Instant.now()
+                : ((java.sql.Timestamp) r.get("updated_at")).toInstant();
         return Optional.of(new AsyncOperation(operationId, s,
-                "/api/v2/operations/" + operationId, null, null, null, java.time.Instant.now()));
+                "/api/v2/operations/" + operationId, null, null, null, updatedAt));
+    }
+
+    /**
+     * Map Saga-internal status ({@code DISPATCHED}) sang public
+     * {@link AsyncOperation.Status} value {@code RUNNING} theo
+     * ADR-007 / Task 13.1. Unknown values fall back to {@code PENDING}.
+     */
+    private static AsyncOperation.Status mapStatus(String raw) {
+        if (raw == null) return AsyncOperation.Status.PENDING;
+        try {
+            return AsyncOperation.Status.valueOf(raw);
+        } catch (IllegalArgumentException e) {
+            if ("DISPATCHED".equals(raw)) return AsyncOperation.Status.RUNNING;
+            return AsyncOperation.Status.PENDING;
+        }
     }
 }
